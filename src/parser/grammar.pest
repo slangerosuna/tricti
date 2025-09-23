@@ -32,7 +32,7 @@ op_or         = { "or" | "xor" }
 or            = { and ~ (op_or ~ and )* }
 op_and        = { "and" }
 and           = { comparison ~ (op_and ~ comparison )* }
-op_cmp        = { "==" | "~=" | ">" | "<" | "<=" | ">=" }
+op_cmp        = { "==" | "~=" | "<=" | ">=" | ">" | "<" }
 comparison    = { addition ~ (op_cmp ~ addition )* }
 op_add        = { "+" | "-" }
 addition      = { multiplication ~ (op_add ~ multiplication )* }
@@ -41,9 +41,9 @@ multiplication= { with_range ~ (op_mul ~ with_range)* }
 with_range = { unary ~ (":" ~ unary ~ (":" ~ unary)?)? }
 op_unary      = { "-" | "~" | "*" | "&" | "&mut" | "!" }
 unary         = { op_unary? ~ post_fix }
-post_fix = { primary ~ (call_suffix | static_path_suffix | field_suffix | "?" | "!" | ("[" ~ (expression ~ ","?)+ ~ "]"))* }
 static_path_suffix = { "::" ~ identifier }
 field_suffix = { "." ~ identifier }
+post_fix = { primary ~ (call_suffix | static_path_suffix | field_suffix | "?" | "!" | ("[" ~ (expression ~ ","?)+ ~ "]"))* }
 primary       = { number | loop | conditional | match | function | literal | block | matrix | shader | identifier | "(" ~ expression ~ ")" }
 
 call_suffix = { "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
@@ -72,6 +72,10 @@ shader   = { ("vert" | "frag" | "comp") ~ "{" ~ (const_decl | shader_field)* ~ "
 shader_field = { identifier ~ ":" ~ type ~ ","? }
 
 type = { struct | enum | trait_type | pointer | optional | result | matrix_type | function_type | "none" | identifier }
+trait_type = { "trait" ~ "{" ~ trait_items ~ "}" }
+trait_items = _{ (trait_assoc | trait_method)* }
+trait_assoc = { identifier ~ ":" ~ "type" ~ ","? }
+trait_method = { identifier ~ ":" ~ function_type ~ ","? }
 
 pointer = { "&mut " ~ type | "&" ~ type | "*" ~ type }
 optional = { "?" ~ type }
@@ -85,8 +89,3 @@ enum_variants = _{ (identifier ~ (":" ~ type)? ~ ","?)* }
 
 struct   = { "{" ~ struct_fields ~ "}" }
 struct_fields = _{ (identifier ~ ":" ~ type ~ ","?)* }
-
-trait_type = { "trait" ~ "{" ~ trait_items ~ "}" }
-trait_items = _{ (trait_assoc | trait_method)* }
-trait_assoc = { identifier ~ ":" ~ "type" ~ ","? }
-trait_method = { identifier ~ ":" ~ function_type ~ ","? }

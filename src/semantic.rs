@@ -224,6 +224,12 @@ fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> 
             match value {
                 ConstValue::Type(type_def) => {
                     context.types.insert(name.clone(), type_def.clone());
+                    // Also expose enum variants as constants: Type_Variant : i64
+                    if let Type::Enum { variants, .. } = type_def {
+                        for vname in variants.keys() {
+                            context.define_variable(format!("{}_{}", name, vname), Type::Identifier("i64".to_string()));
+                        }
+                    }
                     // If this is a trait type definition, register trait info too
                     if let Type::Trait { associated_types, methods } = type_def {
                         let ti = TraitInfo { associated_types: associated_types.clone(), methods: methods.clone() };
@@ -344,11 +350,20 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
             let value_type = infer_expression_type(value, context)?;
             
             let final_type = if let Some(annotation) = type_annotation {
-                if !types_compatible(annotation, &value_type) {
-                    return Err(SemanticError::TypeMismatch {
-                        expected: annotation.clone(),
-                        found: value_type,
-                    });
+                // Allow assigning i64 to enum-typed variables (repr i64)
+                let enum_i64_ok = match (annotation, &value_type) {
+                    (Type::Identifier(tn), Type::Identifier(vn)) if vn == "i64" => {
+                        if let Some(Type::Enum { .. }) = context.types.get(tn) { true } else { false }
+                    }
+                    _ => false,
+                };
+                if !enum_i64_ok {
+                    if !types_compatible(annotation, &value_type) {
+                        return Err(SemanticError::TypeMismatch {
+                            expected: annotation.clone(),
+                            found: value_type,
+                        });
+                    }
                 }
                 annotation.clone()
             } else {
@@ -362,11 +377,20 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
             let target_type = infer_expression_type(target, context)?;
             let value_type = infer_expression_type(value, context)?;
             
-            if !types_compatible(&target_type, &value_type) {
-                return Err(SemanticError::TypeMismatch {
-                    expected: target_type,
-                    found: value_type,
-                });
+            // Allow assigning i64 to enum-typed variables (repr i64)
+            let enum_i64_ok = match (&target_type, &value_type) {
+                (Type::Identifier(tn), Type::Identifier(vn)) if vn == "i64" => {
+                    if let Some(Type::Enum { .. }) = context.types.get(tn) { true } else { false }
+                }
+                _ => false,
+            };
+            if !enum_i64_ok {
+                if !types_compatible(&target_type, &value_type) {
+                    return Err(SemanticError::TypeMismatch {
+                        expected: target_type,
+                        found: value_type,
+                    });
+                }
             }
         }
         
@@ -546,6 +570,15 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
             } else if let Some(sig) = context.get_function_signature(name) {
                 Ok(Type::Function { parameters: sig.parameters.clone(), return_type: Box::new(sig.return_type.clone()) })
             } else {
+                // Heuristic: enum variant static path lowered by parser as Identifier("Type_Variant").
+                // If it matches a known enum type and existing variant name, treat as i64 tag literal.
+                if let Some((tname, vname)) = name.split_once('_') {
+                    if let Some(Type::Enum { variants, .. }) = context.types.get(tname) {
+                        if variants.contains_key(vname) {
+                            return Ok(Type::Identifier("i64".to_string()));
+                        }
+                    }
+                }
                 Err(SemanticError::UndefinedVariable(name.clone()))
             }
         }
@@ -565,6 +598,31 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
         Expression::Call { function, arguments } => {
             match function.as_ref() {
                 Expression::Identifier(name) => {
+                    // Enum variant constructor: Type::Variant(args...) lowered to Identifier("Type_Variant")
+                    if let Some((tname, vname)) = name.split_once('_') {
+                        if let Some(Type::Enum { variants, .. }) = context.types.get(tname) {
+                            if let Some(payload_opt) = variants.get(vname) {
+                                match payload_opt {
+                                    Some(payload_ty) => {
+                                        if arguments.len() != 1 {
+                                            return Err(SemanticError::ArgumentCountMismatch { expected: 1, found: arguments.len() });
+                                        }
+                                        let arg_ty = infer_expression_type(&arguments[0].value, context)?;
+                                        if !types_compatible(payload_ty, &arg_ty) {
+                                            return Err(SemanticError::TypeMismatch { expected: payload_ty.clone(), found: arg_ty });
+                                        }
+                                    }
+                                    None => {
+                                        if !arguments.is_empty() {
+                                            return Err(SemanticError::ArgumentCountMismatch { expected: 0, found: arguments.len() });
+                                        }
+                                    }
+                                }
+                                // Constructors evaluate to i64 tag for now
+                                return Ok(Type::Identifier("i64".to_string()));
+                            }
+                        }
+                    }
                     if name == "println" {
                         // Special handling for println - it's variadic, but still analyze args
                         for arg in arguments { let _ = infer_expression_type(&arg.value, context)?; }
@@ -686,6 +744,20 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
                     Ok(Type::None)
                 }
             }
+        }
+        
+        Expression::Match { value, arms } => {
+            let _ = infer_expression_type(value, context)?;
+            for arm in arms {
+                // Allow wildcard pattern '_'
+                let is_wildcard = matches!(arm.pattern, Expression::Identifier(ref s) if s == "_");
+                if !is_wildcard {
+                    let _ = infer_expression_type(&arm.pattern, context)?;
+                }
+                let _ = infer_expression_type(&arm.body, context)?;
+            }
+            // For now matches yield i64 (we lower branches to i64 and phi them)
+            Ok(Type::Identifier("i64".to_string()))
         }
         
     Expression::FieldAccess { object, field } => {
@@ -903,6 +975,10 @@ fn infer_unary_op_type(operator: &UnaryOperator, operand: &Type) -> Result<Type,
 
 fn types_compatible(expected: &Type, found: &Type) -> bool {
     match (expected, found) {
+        // Treat enums as i64-compatible for now (repr i64)
+    (Type::Identifier(e), Type::Enum { .. }) | (Type::Enum { .. }, Type::Identifier(e)) => {
+            e == "i64"
+        }
         // Allow implicit address-of: passing T where &T is expected
         (
             Type::Pointer { pointee: exp_pointee, .. },
@@ -924,7 +1000,7 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             false
         }
         (Type::None, _) | (_, Type::None) => true,
-        _ => expected == found,
+    _ => expected == found,
     }
 }
 

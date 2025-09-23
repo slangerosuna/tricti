@@ -236,7 +236,8 @@ pub enum Type {
         fields: HashMap<String, Type>,
     },
     Enum {
-        variants: HashMap<String, Option<Type>>,
+        variants: HashMap<String, Option<Type>>,    
+        order: Vec<String>,
     },
     Trait {
         associated_types: Vec<String>,

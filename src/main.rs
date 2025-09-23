@@ -9,8 +9,18 @@ use std::path::PathBuf;
 use crate::ast::*;
 
 fn main() {
-    let file_content = std::fs::read_to_string("src.pn").expect("Failed to read source file");
-    
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 {
+        if args[1] == "--help" || args[1] == "-h"{
+            println!("Usage: peano [source_file]");
+            println!("If no source_file is provided, defaults to 'src.pn'.");
+            return;
+        }
+    }
+    let path = if args.len() > 1 { &args[1] } else { "src.pn" };
+    println!("Using source file: {}", path);
+    let file_content = std::fs::read_to_string(path).expect("Failed to read source file");
+
     // Parse the program
     println!("Parsing...");
     let mut program = parser::parse(file_content);
