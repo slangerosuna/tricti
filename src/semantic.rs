@@ -132,14 +132,15 @@ fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> 
                     }
                 }
                 ConstValue::Expression(expr) => {
-                    // If expression is a function, pre-declare its signature in the function table
+                    // If expression is a function, pre-declare its signature in the function table and as a variable value of function type
                     if let Expression::Function { parameters, return_type, .. } = expr {
                         let sig = FunctionSignature {
                             parameters: parameters.iter().map(|p| p.param_type.clone().unwrap_or(Type::Identifier("i64".to_string()))).collect(),
                             return_type: return_type.clone().unwrap_or(Type::Identifier("i64".to_string())),
                             is_async: false,
                         };
-                        context.define_function(name.clone(), sig);
+                        context.define_function(name.clone(), sig.clone());
+                        context.define_variable(name.clone(), Type::Function { parameters: sig.parameters.clone(), return_type: Box::new(sig.return_type.clone()) });
                     } else {
                         // For other expression constants, infer the type during analysis
                         let expr_type = infer_expression_type(expr, context)?;
@@ -167,8 +168,14 @@ fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> 
                 if let Statement::ConstDecl { name: mname, value, .. } = m {
                     match value {
                         ConstValue::Expression(Expression::Function { parameters, return_type, .. }) => {
+                            // Prepend implicit receiver parameter of type &type_name for inherent methods
+                            let mut params: Vec<Type> = Vec::new();
+                            if trait_name.is_none() {
+                                params.push(Type::Pointer { is_mutable: false, pointee: Box::new(Type::Identifier(type_name.clone())) });
+                            }
+                            params.extend(parameters.iter().map(|p| p.param_type.clone().unwrap_or(Type::Identifier("i64".to_string()))));
                             let sig = FunctionSignature {
-                                parameters: parameters.iter().map(|p| p.param_type.clone().unwrap_or(Type::Identifier("i64".to_string()))).collect(),
+                                parameters: params,
                                 return_type: return_type.clone().unwrap_or(Type::Identifier("i64".to_string())),
                                 is_async: false,
                             };
@@ -420,9 +427,14 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
         }
         
         Expression::Identifier(name) => {
-            context.get_variable_type(name)
-                .cloned()
-                .ok_or_else(|| SemanticError::UndefinedVariable(name.clone()))
+            // Prefer variables; if not found, allow referencing functions as first-class values
+            if let Some(v) = context.get_variable_type(name) {
+                Ok(v.clone())
+            } else if let Some(sig) = context.get_function_signature(name) {
+                Ok(Type::Function { parameters: sig.parameters.clone(), return_type: Box::new(sig.return_type.clone()) })
+            } else {
+                Err(SemanticError::UndefinedVariable(name.clone()))
+            }
         }
         
         Expression::BinaryOp { left, operator, right } => {
@@ -500,6 +512,15 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
                 Expression::FieldAccess { object, field } => {
                     // Method call: expr.method(args...) → resolve inherent first, otherwise trait for the base type
                     let recv_expr_ty = infer_expression_type(object, context)?;
+                    // Special-case: function.bind(...) for partial application
+                    if let Type::Function { parameters, return_type } = recv_expr_ty.clone() {
+                        if field == "bind" {
+                            // Binding N arguments yields a function expecting the remaining parameters (best-effort typing)
+                            let bound_n = arguments.len();
+                            let remaining = if bound_n >= parameters.len() { Vec::new() } else { parameters[bound_n..].to_vec() };
+                            return Ok(Type::Function { parameters: remaining, return_type });
+                        }
+                    }
                     let base_ty_name = peel_to_identifier_name(&recv_expr_ty);
                     if let Some(type_name) = base_ty_name {
                         // Inherent impl first
@@ -574,9 +595,16 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
         }
         
         Expression::Index { object, indices: _ } => {
-            let _object_type = infer_expression_type(object, context)?;
-            // For now, return a placeholder
-            Ok(Type::None)
+            let object_type = infer_expression_type(object, context)?;
+            match object_type {
+                Type::Matrix { element_type, dimensions: _ } => {
+                    // If full indexing provided (indices length equals dimensions), return element type
+                    // Also allow 1D indexing into 1D matrix (vector)
+                    // For now, we don't validate index types rigorously
+                    Ok((*element_type).clone())
+                }
+                _ => Ok(Type::None),
+            }
         }
         
         Expression::If { condition, then_branch: _, else_branch: _ } => {
@@ -619,6 +647,25 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
                 }
             }
             Ok(Type::Identifier("i64".to_string()))
+        }
+        Expression::Matrix { rows } => {
+            // Determine dimensions and element type (numeric best-effort)
+            let row_count = rows.len();
+            let col_count = if row_count > 0 { rows[0].len() } else { 0 };
+            // validate equal columns
+            for r in rows { if r.len() != col_count { /* ignore mismatch for now */ } }
+            // infer element type by scanning; prefer f64 if any float present, else i64
+            let mut has_float = false;
+            for r in rows {
+                for e in r {
+                    if let Ok(t) = infer_expression_type(e, context) {
+                        if matches!(t, Type::Identifier(ref s) if s == "f32" || s == "f64") { has_float = true; }
+                    }
+                }
+            }
+            let elem = if has_float { Type::Identifier("f64".to_string()) } else { Type::Identifier("i64".to_string()) };
+            let dims = if row_count <= 1 { vec![col_count] } else { vec![row_count, col_count] };
+            Ok(Type::Matrix { element_type: Box::new(elem), dimensions: dims })
         }
         _ => {
             // For other expression types, return none for now
@@ -755,12 +802,13 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
         }
         (Type::Identifier(a), Type::Identifier(b)) => {
             if a == b { return true; }
-            // Heuristic: allow i64 to match i32 expected (widening downcast during codegen is handled via trunc/extend as needed)
-            match (a.as_str(), b.as_str()) {
-                ("i32", "i64") => true,
-                ("i64", "i32") => true,
-                _ => false,
-            }
+            // Allow any pair of numeric scalar types to be used together; codegen will unify bit-widths.
+            let na = a.as_str();
+            let nb = b.as_str();
+            let is_num_a = matches!(na, "i32"|"i64"|"u16"|"u32"|"u64"|"f32"|"f64");
+            let is_num_b = matches!(nb, "i32"|"i64"|"u16"|"u32"|"u64"|"f32"|"f64");
+            if is_num_a && is_num_b { return true; }
+            false
         }
         (Type::None, _) | (_, Type::None) => true,
         _ => expected == found,
@@ -770,7 +818,7 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
 fn is_numeric_type(t: &Type) -> bool {
     match t {
         Type::Identifier(name) => {
-            matches!(name.as_str(), "i32" | "i64" | "f32" | "f64" | "u32" | "u64")
+            matches!(name.as_str(), "i32" | "i64" | "f32" | "f64" | "u16" | "u32" | "u64")
         }
         _ => false,
     }

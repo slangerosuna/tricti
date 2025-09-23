@@ -7,7 +7,7 @@ use inkwell::context::Context;
 use std::process::Command;
 
 fn main() {
-    let file_content = std::fs::read_to_string("src.bp").expect("Failed to read source file");
+    let file_content = std::fs::read_to_string("src.pn").expect("Failed to read source file");
     
     // Parse the program
     println!("Parsing...");

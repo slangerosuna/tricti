@@ -288,6 +288,16 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
                 let name = it2.next().unwrap().as_str().to_string();
                 expr = Expression::FieldAccess { object: Box::new(expr), field: name };
             }
+            _ if suffix_pair.as_str().starts_with("[") => {
+                // Indexing suffix: "[ expr (, expr)* ]" possibly repeated; grammar emits it as part of post_fix
+                // We'll parse indices from this suffix explicitly by iterating its inner expressions
+                let mut indices: Vec<Expression> = Vec::new();
+                for idx in suffix_pair.into_inner() {
+                    // inner pairs are expressions
+                    indices.push(parse_expression(idx));
+                }
+                expr = Expression::Index { object: Box::new(expr), indices };
+            }
             _ => {}
         }
     }
@@ -301,8 +311,25 @@ fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::block => Expression::Block { statements: parse_block(inner_pair) },
         Rule::function => parse_function(inner_pair),
     Rule::conditional => parse_if_expression(inner_pair),
+        Rule::matrix => parse_matrix(inner_pair),
         _ => parse_expression(inner_pair),
     }
+}
+
+fn parse_matrix(pair: pest::iterators::Pair<Rule>) -> Expression {
+    // matrix = "[" ~ (row ~ ";")* ~ row ~ ";"? ~ "]"
+    let mut rows: Vec<Vec<Expression>> = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::row {
+            let mut row_vals: Vec<Expression> = Vec::new();
+            for cell in inner.into_inner() {
+                // cells are expressions
+                row_vals.push(parse_expression(cell));
+            }
+            rows.push(row_vals);
+        }
+    }
+    Expression::Matrix { rows }
 }
 
 fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Expression {
