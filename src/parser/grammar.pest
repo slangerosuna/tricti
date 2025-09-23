@@ -1,0 +1,90 @@
+WHITESPACE   = _{ " " | "\t" | "\n" | "\r" }
+COMMENT      = _{ "#" ~ (!"\n" ~ ANY)* | "/*" ~ (!"*/" ~ ANY)* ~ "*/"}
+
+identifier   = @{ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
+integer      = @{ ASCII_DIGIT+ }
+float        = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+number       = { float | integer }
+string       = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+boolean      = @{ "true" | "false" }
+
+program      = { SOI ~ statement* ~ EOI }
+statement    = { variable_decl | assignment | const_decl | impl_block | for_loop | expression | return_statement | break_statement | use_statement }
+
+use_statement = { "use" ~ identifier ~ ("::" ~ (identifier | "*"))* }
+
+return_statement = { "ret" ~ expression? }
+break_statement = { "break" ~ expression? }
+
+impl_block    = { "impl" ~ identifier ~ ("for" ~ identifier)? ~ "{" ~ impl_methods ~ "}" }
+impl_methods  = _{ (const_decl ~ ","?)* }
+block = { "{" ~ statement* ~ "}" }
+
+for_loop          = { "for" ~ identifier ~ (":" ~ type)? ~ "in" ~ expression ~ block }
+loop = { "loop" ~ block }
+conditional   = { "if" ~ expression ~ block ~ ("else" ~ block)? }
+
+expression    = { or }
+
+op_or         = { "or" | "xor" }
+or            = { and ~ (op_or ~ and )* }
+op_and        = { "and" }
+and           = { comparison ~ (op_and ~ comparison )* }
+op_cmp        = { "==" | "~=" | ">" | "<" | "<=" | ">=" }
+comparison    = { addition ~ (op_cmp ~ addition )* }
+op_add        = { "+" | "-" }
+addition      = { multiplication ~ (op_add ~ multiplication )* }
+op_mul        = { "*" | ".*" | "/" | "./" | "\\" | "%" | ".%" }
+multiplication= { with_range ~ (op_mul ~ with_range)* }
+with_range = { unary ~ (":" ~ unary ~ (":" ~ unary)?)? }
+op_unary      = { "-" | "~" | "*" | "&" | "&mut" | "!" }
+unary         = { op_unary? ~ post_fix }
+post_fix = { primary ~ (call_suffix | static_path_suffix | field_suffix | "?" | "!" | ("[" ~ (expression ~ ","?)+ ~ "]"))* }
+static_path_suffix = { "::" ~ identifier }
+field_suffix = { "." ~ identifier }
+primary       = { number | loop | conditional | match | function | literal | block | matrix | shader | identifier | "(" ~ expression ~ ")" }
+
+call_suffix = { "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
+argument = { (identifier ~ ":")? ~ expression }
+literal       = { integer | float | string | boolean | struct_literal }
+
+struct_literal = { "{" ~ (identifier ~ ":" ~ expression ~ ","?)* ~ "}" }
+
+match = { "match" ~ expression ~ "{" ~ (expression ~ "=>" ~ expression ~ ","?)+ ~ "}"}
+
+matrix        = { "[" ~ (row ~ ";")* ~ row ~ ";"? ~ "]" }
+row           = { (expression ~ ","?)+ }
+
+function = { "async"? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
+function_params = { (function_param | ("self" | "&self" | "&mut self" | "*self")) ~ ("," ~ function_param)* ~ ","? }
+function_param = { identifier ~ (":" ~ type)? ~ ("=" ~ expression)? }
+return_type   = { "->" ~ type}
+function_body = { expression | "{" ~ statement* ~ "}" }
+
+assignment_op = { "=" | "*=" | "/=" | "+=" | "-=" | ".*=" | "./=" | "\\=" }
+assignment    = { expression ~ assignment_op ~ expression }
+variable_decl  = { identifier ~ (":" ~ type)? ~ ":=" ~ expression }
+const_decl    = { identifier ~ (":" ~ type)? ~ "::" ~ (type | expression) }
+
+shader   = { ("vert" | "frag" | "comp") ~ "{" ~ (const_decl | shader_field)* ~ "}" }
+shader_field = { identifier ~ ":" ~ type ~ ","? }
+
+type = { struct | enum | trait_type | pointer | optional | result | matrix_type | function_type | "none" | identifier }
+
+pointer = { "&mut " ~ type | "&" ~ type | "*" ~ type }
+optional = { "?" ~ type }
+result = { "!" ~ type }
+
+matrix_type = { "[" ~ type ~ ";" ~ (integer | identifier ~ ","?)* ~ "]" }
+function_type = { "(" ~ type? ~ ("," ~ type)* ~ ","? ~ ")" ~ return_type ~ !"=>" }
+
+enum = { "enum" ~ "{" ~ enum_variants ~ "}" }
+enum_variants = _{ (identifier ~ (":" ~ type)? ~ ","?)* }
+
+struct   = { "{" ~ struct_fields ~ "}" }
+struct_fields = _{ (identifier ~ ":" ~ type ~ ","?)* }
+
+trait_type = { "trait" ~ "{" ~ trait_items ~ "}" }
+trait_items = _{ (trait_assoc | trait_method)* }
+trait_assoc = { identifier ~ ":" ~ "type" ~ ","? }
+trait_method = { identifier ~ ":" ~ function_type ~ ","? }

@@ -1,0 +1,105 @@
+main :: () => {
+    hello := "Hello, world!"
+    println(hello)
+
+    x: i32 := 1 # explicit type annotation
+    y := 2 # type inference
+    z: i32 := x + y
+
+    println(z)
+
+    println(add(1, 2))
+
+    if a == 2 { # if statements don't require parentheses
+        println("a is 2")
+    } else {
+        println("a is not 2")
+    }
+
+	if a { # if statements can take any expression that has a type that implements `truthy`. In this case, a is an i32, which is truthy if it is not 0
+	 	println("a is truthy")
+	}
+	# if foo := div(1, 0)? { # an assignment with error propagation propagates to a falsy value if an error is returned rather than returning the error
+	# 	 println("div(1, 0) didn't return an error")
+    #     println("Foo is {}", foo) # the value can be accessed in the branch where it was truthy
+    #   # can also be done like
+    #   # foo := div(1, 0)? else { println("can't divide by 0") ret }
+	# } else {
+	#	 println("div(1, 0) returned an error")
+	# } 
+
+    for i in 0:10 { # range syntax (inclusive)
+        println(i)
+    }
+
+    arr := [1, 2, 3] # slices are a thing, can also be written as 1:3, 1:1:3, or [1 2 3] like in MATLAB
+    add_one := add.bind(y: 1) # bind
+    println(arr.map(add_one)) # map is a thing
+    println(arr.filter((x) => (x % 2 == 0))) # filter is a thing
+
+	matrix := [1 0 0;
+			   0 1 0; # default matrix syntax puts them on separate lines, but they can be on one line as whitespace is whitespace. The semicolon is used to separate rows
+			   0 0 1] # matrix syntax, can also be written as [1, 0, 0; 0, 1, 0; 0, 0, 1] or identity(3)
+
+    matrix *= [0 1 0; # you can do `*=`, `+=`, etc.
+               1 0 1;
+               0 1 0]
+
+    c := 1
+	println(arr.reduce((acc, x) => acc + x + c)) # reduce is a thing, and anonymous functions are closures
+
+    for i in arr { # iterating over a slice
+        println(i)
+    }
+
+    short: u16 := 1
+    normal: u32 := 1
+    long: u64 := 1
+
+    test: u64 := long + normal + short # when adding different integer types, the result is the largest type, which is the only form of implicit casting
+
+    println(test)
+
+    to_be_shadowed: i32 := 1
+    to_be_shadowed = 1 # this mutates the value of `to_be_shadowed`
+    to_be_shadowed: i32 := 2 # this shadows the previous declaration
+
+    println(to_be_shadowed) # technically, this implicitly returns (), but when you have a function that returns (), and there would be an implicit return that wouldn't return (), it's ignored
+}
+
+add :: (x: i32, y: i32) => x + y # return types can be inferred, although this is only really supposed to be used for closures and/or inline functions
+
+div :: (x: i32, y: i32) -> !i32 => { # `!` indicates that the function may return an error
+    if y == 0 {
+        ret !"Cannot divide by zero"
+    }
+    x / y # implicit return, as the scope of the function is an expression
+}
+
+fib :: (n: i32) -> i32 => match n {
+    0 => 0,
+    1 => 1, 
+    n => fib(n - 1) + fib(n - 2), # trailing commas allowed
+}
+
+default_args :: (a: i32 = 17) => {} # accepts default_args(), default_args(5), default_args(a: 5)
+
+my_struct :: {
+    a: ?i32, # optional i32
+    b: ?&i32, # optional shared reference to an i32, in Rust, you would need a lifetime parameter here, but that's not a thing in BPlang, as lifetimes are inferred
+    c: &mut i32, # mutable reference to an i32
+    d: ?*my_struct, # types can contain references to themselves if and only if they're optional (if it's in an enum, it's considered optional if there's more than one variant)
+                    # pointer syntax here just means that the reference is owned (equivalent to rust Box), things like pointer arithmetic require an unsafe block and work for both references and owned pointers
+}
+
+impl my_struct {
+    foo :: (&self) -> ?i32 => self.a? + *self.b?
+}
+
+my_enum :: enum {
+    a: my_struct,
+    b: {
+        a: ?i32,
+        b: ?i32,
+    },
+}
