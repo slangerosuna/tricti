@@ -39,6 +39,11 @@ pub enum Statement {
         iterable: Expression,
         body: Vec<Statement>,
     },
+    // Rust-style module declaration: `mod name;` or `mod name { .. }`
+    ModuleDecl {
+        name: String,
+        items: Option<Vec<Statement>>, // None => external file module to be loaded by driver
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

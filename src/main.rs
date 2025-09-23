@@ -5,13 +5,17 @@ pub mod codegen;
 
 use inkwell::context::Context;
 use std::process::Command;
+use std::path::PathBuf;
+use crate::ast::*;
 
 fn main() {
     let file_content = std::fs::read_to_string("src.pn").expect("Failed to read source file");
     
     // Parse the program
     println!("Parsing...");
-    let program = parser::parse(file_content);
+    let mut program = parser::parse(file_content);
+    // Expand external modules declared as `mod name;` by reading name.pn
+    program = expand_modules(program, &std::env::current_dir().unwrap());
     println!("AST: {:#?}", program);
     
     // Perform semantic analysis
@@ -85,4 +89,61 @@ fn main() {
         }
         Err(e) => eprintln!("Failed to run clang: {}", e),
     }
+}
+
+fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
+    // Collect new statements to append when we inline modules
+    let mut expanded: Vec<Statement> = Vec::new();
+    for stmt in program.statements.into_iter() {
+        match &stmt {
+            Statement::ModuleDecl { name, items } if items.is_none() => {
+                // Try base_dir/name.pn then base_dir/src/name.pn
+                let mut tried: Vec<PathBuf> = Vec::new();
+                let p1 = base_dir.join(format!("{}.pn", name));
+                tried.push(p1.clone());
+                let p2 = base_dir.join("src").join(format!("{}.pn", name));
+                tried.push(p2.clone());
+                let content_opt = tried.into_iter().find_map(|p| std::fs::read_to_string(&p).ok());
+                if let Some(content) = content_opt {
+                    let mut sub = parser::parse(content);
+                    // Recursively expand submodules relative to same base_dir
+                    sub = expand_modules(sub, base_dir);
+                    // Splice submodule items at top-level for now
+                    expanded.extend(sub.statements);
+                } else {
+                    eprintln!("warning: module '{}' not found on disk", name);
+                }
+            }
+            Statement::Use { path } => {
+                // Simple import: try to load a module file named by the first path segment or joined path
+                if !path.is_empty() {
+                    let joined = path.join("/");
+                    let name = &path[0];
+                    let mut tried: Vec<PathBuf> = Vec::new();
+                    // Try exact joined path under base, src, stdlib
+                    tried.push(base_dir.join(format!("{}.pn", joined)));
+                    tried.push(base_dir.join("src").join(format!("{}.pn", joined)));
+                    tried.push(base_dir.join("stdlib").join(format!("{}.pn", joined)));
+                    // Try single-segment name fallback
+                    tried.push(base_dir.join(format!("{}.pn", name)));
+                    tried.push(base_dir.join("src").join(format!("{}.pn", name)));
+                    tried.push(base_dir.join("stdlib").join(format!("{}.pn", name)));
+                    let content_opt = tried.into_iter().find_map(|p| std::fs::read_to_string(&p).ok());
+                    if let Some(content) = content_opt {
+                        let mut sub = parser::parse(content);
+                        sub = expand_modules(sub, base_dir);
+                        expanded.extend(sub.statements);
+                    } else {
+                        eprintln!("warning: use {:?} not found on disk", path);
+                    }
+                }
+            }
+            Statement::ModuleDecl { name: _, items: Some(items) } => {
+                // Inline module: just keep items at top-level for now
+                for s in items { expanded.push(s.clone()); }
+            }
+            _ => expanded.push(stmt.clone()),
+        }
+    }
+    Program { statements: expanded }
 }

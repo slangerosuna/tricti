@@ -9,9 +9,11 @@ string       = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 boolean      = @{ "true" | "false" }
 
 program      = { SOI ~ statement* ~ EOI }
-statement    = { variable_decl | assignment | const_decl | impl_block | for_loop | expression | return_statement | break_statement | use_statement }
+statement    = { use_statement | mod_decl | variable_decl | assignment | const_decl | impl_block | for_loop | return_statement | break_statement | expression }
 
-use_statement = { "use" ~ identifier ~ ("::" ~ (identifier | "*"))* }
+use_statement = { "use" ~ identifier ~ ("::" ~ (identifier | "*"))* ~ ";"? }
+
+mod_decl = { "mod" ~ identifier ~ (";" | ("{" ~ statement* ~ "}")) }
 
 return_statement = { "ret" ~ expression? }
 break_statement = { "break" ~ expression? }

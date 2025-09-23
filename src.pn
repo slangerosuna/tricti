@@ -1,3 +1,6 @@
+use prelude
+use rt
+
 main :: () => {
     hello := "Hello, world!"
     println(hello)
@@ -46,6 +49,8 @@ main :: () => {
     matrix *= [0 1 0; # you can do `*=`, `+=`, etc.
                1 0 1;
                0 1 0]
+
+    println(matrix) # should print [0 1 0; 1 0 1; 0 1 0]
 
     c := 1
 	println(arr.reduce((acc, x) => acc + x + c)) # reduce is a thing, and anonymous functions are closures

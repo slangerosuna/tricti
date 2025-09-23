@@ -1,0 +1,14 @@
+# Peano Prelude (very early draft)
+# Re-export core functions/types that user code may `use` later.
+
+# println is a builtin, but we expose a convenient alias
+print :: (x) => { println(x) }
+
+# Basic memory helpers (compiler maps to malloc/free for now)
+alloc :: (n: i64) -> *i8 => { 0 }
+dealloc :: (p: *i8) -> none => { }
+
+# Vector utilities (stubs)
+# Placeholder utility
+id :: (x: i64) -> i64 => x
+

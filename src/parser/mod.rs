@@ -42,6 +42,7 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
     Rule::break_statement => parse_break_statement(inner_pair),
     Rule::for_loop => parse_for_loop(inner_pair),
     Rule::use_statement => parse_use_statement(inner_pair),
+    Rule::mod_decl => parse_mod_decl(inner_pair),
     Rule::impl_block => parse_impl_block(inner_pair),
         Rule::expression => Statement::Expression(parse_expression(inner_pair)),
         _ => panic!("Unexpected statement rule: {:?}", inner_pair.as_rule()),
@@ -523,8 +524,10 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
         Type::Trait { associated_types, methods }
     }
 
-    let inner_pair = pair.into_inner().next().unwrap();
-    match inner_pair.as_rule() {
+    let src_text = pair.as_str().to_string();
+    let mut it = pair.into_inner();
+    if let Some(inner_pair) = it.next() {
+        match inner_pair.as_rule() {
         Rule::identifier => Type::Identifier(inner_pair.as_str().to_string()),
         Rule::r#struct => parse_struct(inner_pair),
         Rule::r#enum => parse_enum(inner_pair),
@@ -534,8 +537,11 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
         Rule::matrix_type => parse_matrix_type(inner_pair),
     Rule::function_type => parse_function_type(inner_pair),
     Rule::trait_type => parse_trait_type(inner_pair),
-        _ if inner_pair.as_str() == "none" => Type::None,
-        _ => panic!("Unexpected type rule: {:?}", inner_pair.as_rule()),
+            _ => panic!("Unexpected type rule: {:?}", inner_pair.as_rule()),
+        }
+    } else {
+        // No inner: check for literal `none`
+        if src_text == "none" { Type::None } else { panic!("Unexpected empty type pair: {:?}", src_text) }
     }
 }
 
@@ -675,6 +681,23 @@ fn parse_use_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
         }
     }
     Statement::Use { path }
+}
+
+fn parse_mod_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
+    let mut it = pair.into_inner();
+    let name = it.next().unwrap().as_str().to_string();
+    // If there is a block, we will see statement items here, otherwise nothing
+    let mut items: Vec<Statement> = Vec::new();
+    for inner in it {
+        if inner.as_rule() == Rule::statement {
+            items.push(parse_statement(inner));
+        }
+    }
+    if items.is_empty() {
+        Statement::ModuleDecl { name, items: None }
+    } else {
+        Statement::ModuleDecl { name, items: Some(items) }
+    }
 }
 
 fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {

@@ -65,6 +65,21 @@ impl SemanticContext {
             return_type: Type::None,
             is_async: false,
         });
+        // len: string length in bytes
+        context.functions.insert("len".to_string(), FunctionSignature {
+            parameters: vec![Type::Identifier("string".to_string())],
+            return_type: Type::Identifier("i64".to_string()),
+            is_async: false,
+        });
+        // streq: string equality (byte-wise)
+        context.functions.insert("streq".to_string(), FunctionSignature {
+            parameters: vec![
+                Type::Identifier("string".to_string()),
+                Type::Identifier("string".to_string()),
+            ],
+            return_type: Type::Identifier("bool".to_string()),
+            is_async: false,
+        });
         
         // Add built-in types
         context.types.insert("i32".to_string(), Type::Identifier("i32".to_string()));
@@ -121,6 +136,11 @@ pub fn analyze_program(program: &Program) -> Result<SemanticContext, SemanticErr
 
 fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> Result<(), SemanticError> {
     match statement {
+        Statement::ModuleDecl { name: _, items } => {
+            if let Some(stmts) = items {
+                for s in stmts { collect_definitions(s, context)?; }
+            }
+        }
         Statement::ConstDecl { name, value, .. } => {
             match value {
                 ConstValue::Type(type_def) => {
@@ -197,6 +217,9 @@ fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> 
 
 fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Result<(), SemanticError> {
     match statement {
+        Statement::ModuleDecl { name: _, items } => {
+            if let Some(stmts) = items { for s in stmts { analyze_statement(s, context)?; } }
+        }
         Statement::ConstDecl { name: _, type_annotation: _, value } => {
             if let ConstValue::Expression(Expression::Function { parameters, return_type, body, .. }) = value {
                 // Analyze function body with parameter bindings and expected return type
