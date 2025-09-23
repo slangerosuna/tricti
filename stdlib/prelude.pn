@@ -12,3 +12,11 @@ dealloc :: (p: *i8) -> none => { }
 # Placeholder utility
 id :: (x: i64) -> i64 => x
 
+
+# Slices (prototype): minimal constructor for i64 slices
+# Given a pointer to i64 (e.g., an array decays to &i64) and a length, build a slice_i64 value.
+# For now, accept a fixed-size array [i64; 5]; future iterations will generalize.
+slice_i64_from :: (arr: [i64; 5], len: i64) -> slice_i64 => {
+	{ ptr: arr, len: len }
+}
+

@@ -123,7 +123,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                 "f64" => Some(self.context.f64_type().into()),
                 "bool" => Some(self.context.bool_type().into()),
                 "string" | "String" | "str" => Some(self.context.ptr_type(AddressSpace::default()).into()),
-                _ => None,
+                _ => {
+                    // Fallback: if identifier names a known struct, return its LLVM struct type
+                    if let Some((st, _order)) = self.struct_types.get(name) {
+                        Some((*st).into())
+                    } else {
+                        None
+                    }
+                },
             },
             AstType::Pointer { .. } | AstType::RawPointer { .. } => Some(self.context.ptr_type(AddressSpace::default()).into()),
             AstType::Optional { .. } | AstType::Result { .. } => Some(self.context.i64_type().into()),
@@ -291,6 +298,125 @@ impl<'ctx> CodeGenerator<'ctx> {
         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
     if let Some(bb) = prev_bb { self.builder.position_at_end(bb); }
     self.functions.insert("streq".to_string(), streq_fn);
+
+    // strstr for substring search; wrap into contains(haystack: string, needle: string) -> bool
+    let strstr_ty = i8_ptr_type.fn_type(&[i8_ptr_type.into(), i8_ptr_type.into()], false);
+    let strstr_fn = self.module.add_function("strstr", strstr_ty, None);
+    let contains_ty = bool_ty.fn_type(&[i8_ptr_type.into(), i8_ptr_type.into()], false);
+    let contains_fn = self.module.add_function("contains", contains_ty, None);
+    let prev_bb2 = self.builder.get_insert_block();
+    let entry2 = self.context.append_basic_block(contains_fn, "entry");
+    self.builder.position_at_end(entry2);
+    let ha = contains_fn.get_nth_param(0).unwrap();
+    let ne = contains_fn.get_nth_param(1).unwrap();
+    let call2 = self.builder
+        .build_call(strstr_fn, &[ha.into(), ne.into()], "strstr_call")
+        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    // strstr returns null if not found
+    let rv2 = call2.try_as_basic_value().left().ok_or_else(|| CodegenError::CompilationError("strstr returned void?".to_string()))?.into_pointer_value();
+    let is_null = self.builder
+        .build_is_null(rv2, "isnull")
+        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    // contains = not is_null
+    let contains_val = self.builder
+        .build_not(is_null, "notnull")
+        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    self.builder
+        .build_return(Some(&contains_val))
+        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    if let Some(bb) = prev_bb2 { self.builder.position_at_end(bb); }
+    self.functions.insert("contains".to_string(), contains_fn);
+
+    // starts_with: strncmp(hay, pre, len(pre)) == 0
+    let size_t_ty = self.context.i64_type();
+    let strncmp_ty = i32_type.fn_type(&[i8_ptr_type.into(), i8_ptr_type.into(), size_t_ty.into()], false);
+    let strncmp_fn = self.module.add_function("strncmp", strncmp_ty, None);
+    let starts_ty = bool_ty.fn_type(&[i8_ptr_type.into(), i8_ptr_type.into()], false);
+    let starts_fn = self.module.add_function("starts_with", starts_ty, None);
+    let prev_bb3 = self.builder.get_insert_block();
+    let entry3 = self.context.append_basic_block(starts_fn, "entry");
+    self.builder.position_at_end(entry3);
+    let hay = starts_fn.get_nth_param(0).unwrap();
+    let pre = starts_fn.get_nth_param(1).unwrap();
+    // n = strlen(pre)
+    let call_len_pre = self.builder.build_call(*self.functions.get("len").unwrap(), &[pre.into()], "lenpre").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let n_val = call_len_pre.try_as_basic_value().left().ok_or_else(|| CodegenError::CompilationError("strlen returned void?".to_string()))?.into_int_value();
+    let cmp = self.builder.build_call(strncmp_fn, &[hay.into(), pre.into(), n_val.into()], "strncmp_call").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let rv_i32 = cmp.try_as_basic_value().left().ok_or_else(|| CodegenError::CompilationError("strncmp returned void?".to_string()))?.into_int_value();
+    let eqz2 = self.builder.build_int_compare(IntPredicate::EQ, rv_i32, i32_type.const_zero(), "eqz").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    self.builder.build_return(Some(&eqz2)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    if let Some(bb) = prev_bb3 { self.builder.position_at_end(bb); }
+    self.functions.insert("starts_with".to_string(), starts_fn);
+
+    // ends_with: compare suffix of hay with suf using lengths
+    let ends_ty = bool_ty.fn_type(&[i8_ptr_type.into(), i8_ptr_type.into()], false);
+    let ends_fn = self.module.add_function("ends_with", ends_ty, None);
+    let prev_bb4 = self.builder.get_insert_block();
+    let entry4 = self.context.append_basic_block(ends_fn, "entry");
+    self.builder.position_at_end(entry4);
+    let hay2 = ends_fn.get_nth_param(0).unwrap();
+    let suf = ends_fn.get_nth_param(1).unwrap();
+    // lh = strlen(hay); ls = strlen(suf)
+    let lh_call = self.builder.build_call(*self.functions.get("len").unwrap(), &[hay2.into()], "lenhay").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let ls_call = self.builder.build_call(*self.functions.get("len").unwrap(), &[suf.into()], "lensuf").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let lh = lh_call.try_as_basic_value().left().ok_or_else(|| CodegenError::CompilationError("strlen returned void?".to_string()))?.into_int_value();
+    let ls = ls_call.try_as_basic_value().left().ok_or_else(|| CodegenError::CompilationError("strlen returned void?".to_string()))?.into_int_value();
+    // if ls > lh: return false
+    let gt = self.builder.build_int_compare(IntPredicate::UGT, ls, lh, "ls_gt_lh").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    // Create blocks
+    let parent = ends_fn;
+    let then_bb = self.context.append_basic_block(parent, "then");
+    let cont_bb = self.context.append_basic_block(parent, "cont");
+    self.builder.build_conditional_branch(gt, then_bb, cont_bb).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    // then: return false
+    self.builder.position_at_end(then_bb);
+    let f = bool_ty.const_int(0, false);
+    self.builder.build_return(Some(&f)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    // cont: compare last ls bytes: strncmp(hay + (lh-ls), suf, ls) == 0
+    self.builder.position_at_end(cont_bb);
+    let diff = self.builder.build_int_sub(lh, ls, "lh_minus_ls").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let hay_ptr = hay2.into_pointer_value();
+    let i8_ty = self.context.i8_type();
+    let off = unsafe { self.builder.build_in_bounds_gep(i8_ty, hay_ptr, &[diff], "suffix_ptr") }.map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let cmp2 = self.builder.build_call(strncmp_fn, &[off.into(), suf.into(), ls.into()], "strncmp_suf").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let rv2 = cmp2.try_as_basic_value().left().ok_or_else(|| CodegenError::CompilationError("strncmp returned void?".to_string()))?.into_int_value();
+    let eqz3 = self.builder.build_int_compare(IntPredicate::EQ, rv2, i32_type.const_zero(), "eqz").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    self.builder.build_return(Some(&eqz3)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    if let Some(bb) = prev_bb4 { self.builder.position_at_end(bb); }
+    self.functions.insert("ends_with".to_string(), ends_fn);
+
+    // find: return index of first occurrence or -1 if not found
+    let find_ty = self.context.i64_type().fn_type(&[i8_ptr_type.into(), i8_ptr_type.into()], false);
+    let find_fn = self.module.add_function("find", find_ty, None);
+    let prev_bb5 = self.builder.get_insert_block();
+    let entry5 = self.context.append_basic_block(find_fn, "entry");
+    self.builder.position_at_end(entry5);
+    let hayf = find_fn.get_nth_param(0).unwrap();
+    let nef = find_fn.get_nth_param(1).unwrap();
+    let p = self.builder.build_call(strstr_fn, &[hayf.into(), nef.into()], "strstr_find").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let pv = p.try_as_basic_value().left().ok_or_else(|| CodegenError::CompilationError("strstr returned void?".to_string()))?.into_pointer_value();
+    // if null -> -1
+    let is_null2 = self.builder.build_is_null(pv, "isnull").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let parentf = find_fn;
+    let thenf = self.context.append_basic_block(parentf, "then");
+    let contf = self.context.append_basic_block(parentf, "cont");
+    self.builder.build_conditional_branch(is_null2, thenf, contf).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    // then: ret -1
+    self.builder.position_at_end(thenf);
+    let minus1 = self.context.i64_type().const_int(u64::MAX, true);
+    self.builder.build_return(Some(&minus1)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    // cont: ptrdiff = (pv - hayf) as i64
+    self.builder.position_at_end(contf);
+    let haypv = hayf.into_pointer_value();
+    // Compute difference by casting to intptr
+    let intptr = self.context.i64_type();
+    let pv_i = self.builder.build_ptr_to_int(pv, intptr, "pv_i").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let hay_i = self.builder.build_ptr_to_int(haypv, intptr, "hay_i").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let diff_i = self.builder.build_int_sub(pv_i, hay_i, "diff_i").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    let idx64 = self.builder.build_int_cast(diff_i, self.context.i64_type(), "idx64").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    self.builder.build_return(Some(&idx64)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+    if let Some(bb) = prev_bb5 { self.builder.position_at_end(bb); }
+    self.functions.insert("find".to_string(), find_fn);
         
         Ok(())
     }
@@ -418,6 +544,36 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn generate_statement(&mut self, statement: &Statement) -> Result<(), CodegenError> {
         
         match statement {
+            Statement::ConstDecl { name, type_annotation, value } => {
+                // Handle only non-function const expressions here; functions are handled in declare/define passes
+                if let ConstValue::Expression(expr) = value {
+                    if let Expression::Function { .. } = expr { return Ok(()); }
+                    // Struct literal special-case when annotated with a known struct type
+                    if let (Some(Type::Identifier(struct_name)), Expression::StructLiteral { fields }) = (type_annotation, expr) {
+                        let (st_copy, order_clone) = if let Some((st, order)) = self.struct_types.get(struct_name) {
+                            (*st, order.clone())
+                        } else { (self.context.opaque_struct_type("__missing"), Vec::new()) };
+                        if let Some((_st, _)) = self.struct_types.get(struct_name) {
+                            let sval = self.build_struct_literal_value(struct_name, fields, st_copy, &order_clone)?;
+                            let alloca = self.create_entry_block_alloca(name, st_copy.into())?;
+                            self.builder.build_store(alloca, sval)
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            self.variables.insert(name.clone(), (alloca, st_copy.into()));
+                            return Ok(());
+                        }
+                    }
+                    let mut value_result = self.generate_expression(expr)?;
+                    let target_ty = if let Some(ty) = type_annotation { self.map_ast_type(ty).unwrap_or(value_result.get_type()) }
+                        else if let Some(t) = self.semantic.get_variable_type(name) { self.map_ast_type(t).unwrap_or(value_result.get_type()) }
+                        else { value_result.get_type() };
+                    if value_result.get_type() != target_ty { value_result = self.cast_basic_to_type(value_result, target_ty)?; }
+                    let alloca = self.create_entry_block_alloca(name, target_ty)?;
+                    self.builder.build_store(alloca, value_result).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    self.variables.insert(name.clone(), (alloca, target_ty));
+                    return Ok(());
+                }
+                return Ok(());
+            }
             Statement::VariableDecl { name, type_annotation, value } => {
                 // Special-case: function.bind(...) assigned to a name -> synthesize a wrapper function with that name
                 if let Expression::Call { function, arguments: bind_args } = value {
@@ -744,6 +900,66 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 self.builder.position_at_end(end_bb);
                                 if let Some(prev_binding) = prev { self.variables.insert(variable.clone(), prev_binding); } else { self.variables.remove(variable); }
                                 return Ok(());
+                            }
+                        }
+                    } else if let Some(Type::Identifier(tn)) = self.semantic.get_variable_type(name) {
+                        // Support built-in slice_i64 iteration
+                        if tn == "slice_i64" {
+                            // Expect variable is a struct value with fields ptr: &i64, len: i64
+                            // Load the alloca for this variable and then GEP fields by layout in struct_types
+                            if let Some((alloca, var_bte)) = self.variables.get(name) {
+                                if let BasicTypeEnum::StructType(st) = var_bte {
+                                    // Find field order from registry for stable indices
+                                    if let Some((_st, order)) = self.struct_types.get("slice_i64") {
+                                        let ptr_idx = order.iter().position(|n| n == "ptr").unwrap_or(0) as u32;
+                                        let len_idx = order.iter().position(|n| n == "len").unwrap_or(1) as u32;
+                                        // Use the variable alloca directly; it points to the struct value
+                                        let ptr_gep = self.builder.build_struct_gep(*st, *alloca, ptr_idx, "slice.ptr").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        let len_gep = self.builder.build_struct_gep(*st, *alloca, len_idx, "slice.len").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        let ptr_bte = st.get_field_type_at_index(ptr_idx).ok_or_else(|| CodegenError::InvalidOperation("slice_i64.ptr type".to_string()))?;
+                                        let len_bte = st.get_field_type_at_index(len_idx).ok_or_else(|| CodegenError::InvalidOperation("slice_i64.len type".to_string()))?;
+                                        let base = self.builder.build_load(ptr_bte, ptr_gep, "slice.ptrv").map_err(|e| CodegenError::CompilationError(e.to_string()))?.into_pointer_value();
+                                        let lenv = self.builder.build_load(len_bte, len_gep, "slice.lenv").map_err(|e| CodegenError::CompilationError(e.to_string()))?.into_int_value();
+
+                                        // Standard i from 0..len loop body
+                                        let idx_allo = self.create_entry_block_alloca("idx", self.context.i64_type().into())?;
+                                        self.builder.build_store(idx_allo, self.context.i64_type().const_zero()).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        let elem_allo = self.create_entry_block_alloca(variable, self.context.i64_type().into())?;
+                                        let prev = self.variables.insert(variable.clone(), (elem_allo, self.context.i64_type().into()));
+
+                                        let current_fn = self.current_function.ok_or_else(|| CodegenError::CompilationError("No current function".to_string()))?;
+                                        let cond_bb = self.context.append_basic_block(current_fn, "for.cond");
+                                        let body_bb = self.context.append_basic_block(current_fn, "for.body");
+                                        let inc_bb = self.context.append_basic_block(current_fn, "for.inc");
+                                        let end_bb = self.context.append_basic_block(current_fn, "for.end");
+
+                                        self.builder.build_unconditional_branch(cond_bb).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        // cond
+                                        self.builder.position_at_end(cond_bb);
+                                        let i64_bte3: BasicTypeEnum<'ctx> = self.context.i64_type().into();
+                                        let idx_cur = self.builder.build_load(i64_bte3, idx_allo, "idx").map_err(|e| CodegenError::CompilationError(e.to_string()))?.into_int_value();
+                                        let cmp = self.builder.build_int_compare(IntPredicate::SLT, idx_cur, lenv, "forcmp").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        self.builder.build_conditional_branch(cmp, body_bb, end_bb).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        // body
+                                        self.builder.position_at_end(body_bb);
+                                        let elem_ptr = unsafe { self.builder.build_in_bounds_gep(self.context.i64_type(), base, &[idx_cur], "idx") }.map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        let loaded_elem = self.builder.build_load(self.context.i64_type(), elem_ptr, "elem").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        self.builder.build_store(elem_allo, loaded_elem).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        for s in body { let _ = self.generate_statement(s); }
+                                        if body_bb.get_terminator().is_none() { self.builder.build_unconditional_branch(inc_bb).map_err(|e| CodegenError::CompilationError(e.to_string()))?; }
+                                        // inc
+                                        self.builder.position_at_end(inc_bb);
+                                        let i64_bte4: BasicTypeEnum<'ctx> = self.context.i64_type().into();
+                                        let idx_cur2 = self.builder.build_load(i64_bte4, idx_allo, "idx").map_err(|e| CodegenError::CompilationError(e.to_string()))?.into_int_value();
+                                        let next = self.builder.build_int_add(idx_cur2, self.context.i64_type().const_int(1, false), "inc").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        self.builder.build_store(idx_allo, next).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        self.builder.build_unconditional_branch(cond_bb).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        // end
+                                        self.builder.position_at_end(end_bb);
+                                        if let Some(prev_binding) = prev { self.variables.insert(variable.clone(), prev_binding); } else { self.variables.remove(variable); }
+                                        return Ok(());
+                                    }
+                                }
                             }
                         }
                     } else if let Some(len) = self.vector_lengths.get(name).cloned() {
@@ -1425,6 +1641,111 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Identifier(func_name) => {
                 if func_name == "println" {
                     return self.generate_println_call(arguments);
+                }
+
+                // Built-in slice helpers: slice_len(s: slice_i64) -> i64; slice_is_empty(s) -> bool
+                if func_name == "slice_len" || func_name == "slice_is_empty" {
+                    // Expect one argument
+                    if let Some(first) = arguments.get(0) {
+                        // Resolve struct layout for slice_i64 without keeping an active borrow
+                        let (mut use_st, order_vec) = if let Some((st_ref, order)) = self.struct_types.get("slice_i64") {
+                            (*st_ref, order.clone())
+                        } else {
+                            // Fallbacks when layout missing
+                            return Ok(if func_name == "slice_len" { self.context.i64_type().const_zero().into() } else { self.context.bool_type().const_zero().into() });
+                        };
+                        // Try to use the variable alloca if arg is an identifier
+                        let sptr_opt: Option<PointerValue<'ctx>> = match &first.value {
+                            Expression::Identifier(var) => {
+                                if let Some((alloca, bte)) = self.variables.get(var) {
+                                    if let BasicTypeEnum::StructType(st_var) = bte {
+                                        use_st = *st_var;
+                                        Some(*alloca)
+                                    } else { None }
+                                } else { None }
+                            }
+                            _ => None,
+                        };
+                        let sptr: PointerValue<'ctx> = if let Some(p) = sptr_opt {
+                            p
+                        } else {
+                            // Evaluate value, store into a temp alloca of slice_i64 type
+                            let av = self.generate_expression(&first.value)?;
+                            let alloca = self.create_entry_block_alloca("sarg", use_st.into())?;
+                            self.builder.build_store(alloca, av).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            alloca
+                        };
+                        let len_idx = order_vec.iter().position(|n| n == "len").unwrap_or(0) as u32;
+                        let len_ty = use_st.get_field_type_at_index(len_idx).ok_or_else(|| CodegenError::InvalidOperation("slice_i64.len type".to_string()))?;
+                        let len_ptr = self.builder.build_struct_gep(use_st, sptr, len_idx, "slen").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        let len_val = self.builder.build_load(len_ty, len_ptr, "slenv").map_err(|e| CodegenError::CompilationError(e.to_string()))?.into_int_value();
+                        if func_name == "slice_len" {
+                            return Ok(len_val.into());
+                        } else {
+                            let is_empty = self.builder.build_int_compare(IntPredicate::EQ, len_val, self.context.i64_type().const_zero(), "isempty").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            return Ok(is_empty.into());
+                        }
+                    }
+                    // Fallbacks when argument missing
+                    return Ok(if func_name == "slice_len" { self.context.i64_type().const_zero().into() } else { self.context.bool_type().const_zero().into() });
+                }
+
+                // Built-in slice_get(s: slice_i64, idx: i64) -> i64
+                if func_name == "slice_get" {
+                    // Expect two args: slice and index
+                    if arguments.len() >= 2 {
+                        let first = &arguments[0];
+                        let second = &arguments[1];
+                        // Resolve struct layout for slice_i64
+                        let (mut use_st, order_vec) = if let Some((st_ref, order)) = self.struct_types.get("slice_i64") {
+                            (*st_ref, order.clone())
+                        } else {
+                            // Missing layout -> return 0
+                            return Ok(self.context.i64_type().const_zero().into());
+                        };
+                        // Obtain pointer to slice struct (alloca)
+                        let sptr_opt: Option<PointerValue<'ctx>> = match &first.value {
+                            Expression::Identifier(var) => {
+                                if let Some((alloca, bte)) = self.variables.get(var) {
+                                    if let BasicTypeEnum::StructType(st_var) = bte {
+                                        use_st = *st_var;
+                                        Some(*alloca)
+                                    } else { None }
+                                } else { None }
+                            }
+                            _ => None,
+                        };
+                        let sptr = if let Some(p) = sptr_opt {
+                            p
+                        } else {
+                            let av = self.generate_expression(&first.value)?;
+                            let alloca = self.create_entry_block_alloca("sarg", use_st.into())?;
+                            self.builder.build_store(alloca, av).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            alloca
+                        };
+                        // Load ptr and len fields
+                        let ptr_idx = order_vec.iter().position(|n| n == "ptr").unwrap_or(0) as u32;
+                        let len_idx = order_vec.iter().position(|n| n == "len").unwrap_or(1) as u32;
+                        let ptr_ty = use_st.get_field_type_at_index(ptr_idx).ok_or_else(|| CodegenError::InvalidOperation("slice_i64.ptr type".to_string()))?;
+                        let len_ty = use_st.get_field_type_at_index(len_idx).ok_or_else(|| CodegenError::InvalidOperation("slice_i64.len type".to_string()))?;
+                        let ptr_ptr = self.builder.build_struct_gep(use_st, sptr, ptr_idx, "s.ptr").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        let len_ptr = self.builder.build_struct_gep(use_st, sptr, len_idx, "s.len").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        let base_ptr = self.builder.build_load(ptr_ty, ptr_ptr, "base").map_err(|e| CodegenError::CompilationError(e.to_string()))?.into_pointer_value();
+                        let _lenv = self.builder.build_load(len_ty, len_ptr, "len").map_err(|e| CodegenError::CompilationError(e.to_string()))?.into_int_value();
+                        // Compute index value
+                        let idx_val_raw = self.generate_expression(&second.value)?;
+                        let idx_val = match idx_val_raw {
+                            BasicValueEnum::IntValue(iv) => iv,
+                            _ => self.cast_to_int(idx_val_raw, self.context.i64_type())?
+                        };
+                        // GEP to element and load i64
+                        let elem_ptr = unsafe { self.builder.build_in_bounds_gep(self.context.i64_type(), base_ptr, &[idx_val], "elt") }
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        let elem = self.builder.build_load(self.context.i64_type(), elem_ptr, "load")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        return Ok(elem);
+                    }
+                    return Ok(self.context.i64_type().const_zero().into());
                 }
 
                 // Deterministic: exact name, with support for trait static-path calls Trait_method(x, ...)
@@ -2338,6 +2659,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             BasicTypeEnum::IntType(it) => it.fn_type(&param_meta, false),
                             BasicTypeEnum::FloatType(ft) => ft.fn_type(&param_meta, false),
                             BasicTypeEnum::PointerType(pt) => pt.fn_type(&param_meta, false),
+                            BasicTypeEnum::StructType(st) => st.fn_type(&param_meta, false),
                             _ => self.context.i64_type().fn_type(&param_meta, false),
                         };
                         // In runtime mode, emit user main as `peano_main` symbol
@@ -2367,6 +2689,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     BasicTypeEnum::IntType(it) => it.fn_type(&param_meta, false),
                                     BasicTypeEnum::FloatType(ft) => ft.fn_type(&param_meta, false),
                                     BasicTypeEnum::PointerType(pt) => pt.fn_type(&param_meta, false),
+                                    BasicTypeEnum::StructType(st) => st.fn_type(&param_meta, false),
                                     _ => self.context.i64_type().fn_type(&param_meta, false),
                                 };
                                 let f = self.module.add_function(&mangled, fn_type, None);
@@ -2406,26 +2729,106 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                     match body {
                         FunctionBody::Expression(expr) => {
-                            let v = self.generate_expression(expr)?;
                             let ret_ty = return_type.as_ref().and_then(|t| self.map_ast_type(t)).unwrap_or(self.context.i64_type().into());
-                            let casted = self.cast_basic_to_type(v, ret_ty)?;
-                            self.builder.build_return(Some(&casted)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            // If returning a struct and the body is a struct literal or a block whose last expr is a struct literal, build using known struct layout
+                            if let BasicTypeEnum::StructType(st_ret) = ret_ty {
+                                // Direct struct literal
+                                if let Expression::StructLiteral { fields } = expr.as_ref() {
+                                    if let Some((struct_name, (st_known, order))) = self.struct_types.iter().find(|(_, (llvm_st, _))| *llvm_st == st_ret) {
+                                        let sname = struct_name.clone();
+                                        let st_copy = *st_known;
+                                        let order_clone = order.clone();
+                                        let sval = self.build_struct_literal_value(&sname, fields, st_copy, &order_clone)?;
+                                        self.builder.build_return(Some(&sval)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        // Early return from function body handler
+                                        // Restore state happens after match
+                                    } else {
+                                        // No known layout; fall through to generic expression path
+                                        let v = self.generate_expression(expr)?;
+                                        let casted = self.cast_basic_to_type(v, ret_ty)?;
+                                        self.builder.build_return(Some(&casted)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                    }
+                                } else if let Expression::Block { statements } = expr.as_ref() {
+                                    // If last statement is an expression struct literal, build it
+                                    if let Some((last, prefix)) = statements.split_last() {
+                                        for s in prefix { let _ = self.generate_statement(s); }
+                                        if let Statement::Expression(Expression::StructLiteral { fields }) = last {
+                                            if let Some((struct_name, (st_known, order))) = self.struct_types.iter().find(|(_, (llvm_st, _))| *llvm_st == st_ret) {
+                                                let sname = struct_name.clone();
+                                                let st_copy = *st_known;
+                                                let order_clone = order.clone();
+                                                let sval = self.build_struct_literal_value(&sname, fields, st_copy, &order_clone)?;
+                                                self.builder.build_return(Some(&sval)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                            } else {
+                                                // Fall back to evaluating the block as a value
+                                                let v = self.generate_expression(expr)?;
+                                                let casted = self.cast_basic_to_type(v, ret_ty)?;
+                                                self.builder.build_return(Some(&casted)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                            }
+                                        } else {
+                                            // No struct-literal tail; evaluate the block
+                                            let v = self.generate_expression(expr)?;
+                                            let casted = self.cast_basic_to_type(v, ret_ty)?;
+                                            self.builder.build_return(Some(&casted)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        }
+                                    } else {
+                                        // Empty block, return zero init for struct
+                                        if let Some((struct_name, (st_known, order))) = self.struct_types.iter().find(|(_, (llvm_st, _))| *llvm_st == st_ret) {
+                                            let empty_fields: std::collections::HashMap<String, Expression> = std::collections::HashMap::new();
+                                            let sname = struct_name.clone();
+                                            let st_copy = *st_known;
+                                            let order_clone = order.clone();
+                                            let sval = self.build_struct_literal_value(&sname, &empty_fields, st_copy, &order_clone)?;
+                                            self.builder.build_return(Some(&sval)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        } else {
+                                            self.builder.build_return(Some(&self.context.i64_type().const_zero().into())).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        }
+                                    }
+                                } else {
+                                    let v = self.generate_expression(expr)?;
+                                    let casted = self.cast_basic_to_type(v, ret_ty)?;
+                                    self.builder.build_return(Some(&casted)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                }
+                            } else {
+                                let v = self.generate_expression(expr)?;
+                                let casted = self.cast_basic_to_type(v, ret_ty)?;
+                                self.builder.build_return(Some(&casted)).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            }
                         }
                         FunctionBody::Block(stmts) => {
                             // Execute all statements; if the last is an expression, return its value
+                            let ret_ty = return_type.as_ref().and_then(|t| self.map_ast_type(t)).unwrap_or(self.context.i64_type().into());
                             let mut last_expr_value: Option<BasicValueEnum<'ctx>> = None;
                             let slice: &[Statement] = &stmts[..];
                             if let Some((last, prefix)) = slice.split_last() {
                                 for s in prefix { let _ = self.generate_statement(s); }
                                 match last {
                                     Statement::Expression(expr) => {
-                                        let v = self.generate_expression(expr)?;
-                                        last_expr_value = Some(v);
+                                        // If returning a struct and the last expr is a struct literal, build it using layout
+                                        if let BasicTypeEnum::StructType(st_ret) = ret_ty {
+                                            if let Expression::StructLiteral { fields } = expr {
+                                                if let Some((struct_name, (st_known, order))) = self.struct_types.iter().find(|(_, (llvm_st, _))| *llvm_st == st_ret) {
+                                                    let sname = struct_name.clone();
+                                                    let st_copy = *st_known;
+                                                    let order_clone = order.clone();
+                                                    let sval = self.build_struct_literal_value(&sname, fields, st_copy, &order_clone)?;
+                                                    last_expr_value = Some(sval);
+                                                } else {
+                                                    let v = self.generate_expression(expr)?;
+                                                    last_expr_value = Some(v);
+                                                }
+                                            } else {
+                                                let v = self.generate_expression(expr)?;
+                                                last_expr_value = Some(v);
+                                            }
+                                        } else {
+                                            let v = self.generate_expression(expr)?;
+                                            last_expr_value = Some(v);
+                                        }
                                     }
                                     other => { let _ = self.generate_statement(other); }
                                 }
                             }
-                            let ret_ty = return_type.as_ref().and_then(|t| self.map_ast_type(t)).unwrap_or(self.context.i64_type().into());
                             let ret_val: BasicValueEnum<'ctx> = if let Some(v) = last_expr_value {
                                 self.cast_basic_to_type(v, ret_ty)?
                             } else {
@@ -2433,6 +2836,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     BasicTypeEnum::IntType(it) => it.const_zero().into(),
                                     BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                                     BasicTypeEnum::PointerType(pt) => pt.const_zero().into(),
+                                    BasicTypeEnum::StructType(st_ret) => {
+                                        if let Some((struct_name, (st_known, order))) = self.struct_types.iter().find(|(_, (llvm_st, _))| *llvm_st == st_ret) {
+                                            let empty_fields: std::collections::HashMap<String, Expression> = std::collections::HashMap::new();
+                                            let sname = struct_name.clone();
+                                            let st_copy = *st_known;
+                                            let order_clone = order.clone();
+                                            self.build_struct_literal_value(&sname, &empty_fields, st_copy, &order_clone)?
+                                        } else { self.context.i64_type().const_zero().into() }
+                                    }
                                     _ => self.context.i64_type().const_zero().into(),
                                 }
                             };

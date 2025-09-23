@@ -3,7 +3,12 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct SemanticContext {
+    // Global (module-level) variables/constants
     pub variables: HashMap<String, Type>,
+    // Lexical scopes (innermost at the end). Only used during analysis
+    // to model block/loop scopes. Variables declared while a scope is
+    // active live here and are removed on exit.
+    pub var_scopes: Vec<HashMap<String, Type>>, 
     pub functions: HashMap<String, FunctionSignature>,
     pub types: HashMap<String, Type>,
     pub current_function_return_type: Option<Type>,
@@ -50,6 +55,7 @@ impl SemanticContext {
     pub fn new() -> Self {
         let mut context = SemanticContext {
             variables: HashMap::new(),
+            var_scopes: Vec::new(),
             functions: HashMap::new(),
             types: HashMap::new(),
             current_function_return_type: None,
@@ -80,6 +86,55 @@ impl SemanticContext {
             return_type: Type::Identifier("bool".to_string()),
             is_async: false,
         });
+        // contains: substring check (byte-wise)
+        context.functions.insert("contains".to_string(), FunctionSignature {
+            parameters: vec![
+                Type::Identifier("string".to_string()),
+                Type::Identifier("string".to_string()),
+            ],
+            return_type: Type::Identifier("bool".to_string()),
+            is_async: false,
+        });
+        // starts_with / ends_with: prefix/suffix checks (byte-wise)
+        for name in ["starts_with", "ends_with"] {
+            context.functions.insert(name.to_string(), FunctionSignature {
+                parameters: vec![
+                    Type::Identifier("string".to_string()),
+                    Type::Identifier("string".to_string()),
+                ],
+                return_type: Type::Identifier("bool".to_string()),
+                is_async: false,
+            });
+        }
+        // find: first index of needle in haystack, or -1 if missing (byte index)
+        context.functions.insert("find".to_string(), FunctionSignature {
+            parameters: vec![
+                Type::Identifier("string".to_string()),
+                Type::Identifier("string".to_string()),
+            ],
+            return_type: Type::Identifier("i64".to_string()),
+            is_async: false,
+        });
+        // slice helpers (prototype): slice_len(s: slice_i64) -> i64; slice_is_empty(s: slice_i64) -> bool
+        context.functions.insert("slice_len".to_string(), FunctionSignature {
+            parameters: vec![Type::Identifier("slice_i64".to_string())],
+            return_type: Type::Identifier("i64".to_string()),
+            is_async: false,
+        });
+        context.functions.insert("slice_is_empty".to_string(), FunctionSignature {
+            parameters: vec![Type::Identifier("slice_i64".to_string())],
+            return_type: Type::Identifier("bool".to_string()),
+            is_async: false,
+        });
+        // slice_get(s: slice_i64, idx: i64) -> i64
+        context.functions.insert("slice_get".to_string(), FunctionSignature {
+            parameters: vec![
+                Type::Identifier("slice_i64".to_string()),
+                Type::Identifier("i64".to_string()),
+            ],
+            return_type: Type::Identifier("i64".to_string()),
+            is_async: false,
+        });
         
         // Add built-in types
         context.types.insert("i32".to_string(), Type::Identifier("i32".to_string()));
@@ -88,24 +143,48 @@ impl SemanticContext {
         context.types.insert("f64".to_string(), Type::Identifier("f64".to_string()));
         context.types.insert("bool".to_string(), Type::Identifier("bool".to_string()));
         context.types.insert("string".to_string(), Type::Identifier("string".to_string()));
+        // Minimal built-in slice for i64: { ptr: &i64, len: i64 }
+        context.types.insert(
+            "slice_i64".to_string(),
+            Type::Struct {
+                fields: {
+                    let mut m = HashMap::new();
+                    m.insert(
+                        "ptr".to_string(),
+                        Type::Pointer { is_mutable: false, pointee: Box::new(Type::Identifier("i64".to_string())) },
+                    );
+                    m.insert("len".to_string(), Type::Identifier("i64".to_string()));
+                    m
+                },
+            },
+        );
         
         context
     }
     
     pub fn enter_scope(&mut self) {
-        // For now, we'll use a simple approach without proper scoping
-        // In a full implementation, you'd want to maintain a scope stack
+        // Push a new lexical scope for variables declared within blocks/loops
+        self.var_scopes.push(HashMap::new());
     }
     
     pub fn exit_scope(&mut self) {
-        // For now, we'll use a simple approach without proper scoping
+        // Pop the most recent lexical scope. If none exists, it's a no-op.
+        let _ = self.var_scopes.pop();
     }
     
     pub fn define_variable(&mut self, name: String, var_type: Type) {
-        self.variables.insert(name, var_type);
+        if let Some(scope) = self.var_scopes.last_mut() {
+            scope.insert(name, var_type);
+        } else {
+            self.variables.insert(name, var_type);
+        }
     }
     
     pub fn get_variable_type(&self, name: &str) -> Option<&Type> {
+        // Look from innermost scope outward, then fall back to globals
+        for scope in self.var_scopes.iter().rev() {
+            if let Some(t) = scope.get(name) { return Some(t); }
+        }
         self.variables.get(name)
     }
     
@@ -220,34 +299,45 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
         Statement::ModuleDecl { name: _, items } => {
             if let Some(stmts) = items { for s in stmts { analyze_statement(s, context)?; } }
         }
-        Statement::ConstDecl { name: _, type_annotation: _, value } => {
-            if let ConstValue::Expression(Expression::Function { parameters, return_type, body, .. }) = value {
-                // Analyze function body with parameter bindings and expected return type
-                let prev_vars = context.variables.clone();
-                let prev_ret = context.current_function_return_type.clone();
-                // Bind parameters
-                for p in parameters {
-                    let ty = p.param_type.clone().unwrap_or(Type::Identifier("i64".into()));
-                    context.define_variable(p.name.clone(), ty);
-                }
-                // Set expected return
-                context.current_function_return_type = Some(return_type.clone().unwrap_or(Type::None));
-                match body {
-                    FunctionBody::Block(stmts) => {
-                        for s in stmts { analyze_statement(s, context)?; }
+        Statement::ConstDecl { name, type_annotation, value } => {
+            match value {
+                ConstValue::Expression(Expression::Function { parameters, return_type, body, .. }) => {
+                    // Analyze function body with parameter bindings and expected return type
+                    let prev_vars = context.variables.clone();
+                    let prev_ret = context.current_function_return_type.clone();
+                    // Bind parameters
+                    for p in parameters {
+                        let ty = p.param_type.clone().unwrap_or(Type::Identifier("i64".into()));
+                        context.define_variable(p.name.clone(), ty);
                     }
-                    FunctionBody::Expression(expr) => {
-                        // If body is a block expression, descend into its statements to analyze side-effects and calls
-                        if let Expression::Block { statements } = expr.as_ref() {
-                            for s in statements { analyze_statement(s, context)?; }
-                        } else {
-                            let _ = infer_expression_type(expr, context)?;
+                    // Set expected return
+                    context.current_function_return_type = Some(return_type.clone().unwrap_or(Type::None));
+                    match body {
+                        FunctionBody::Block(stmts) => {
+                            for s in stmts { analyze_statement(s, context)?; }
+                        }
+                        FunctionBody::Expression(expr) => {
+                            // If body is a block expression, descend into its statements to analyze side-effects and calls
+                            if let Expression::Block { statements } = expr.as_ref() {
+                                for s in statements { analyze_statement(s, context)?; }
+                            } else {
+                                let _ = infer_expression_type(expr, context)?;
+                            }
                         }
                     }
+                    // Restore
+                    context.variables = prev_vars;
+                    context.current_function_return_type = prev_ret;
                 }
-                // Restore
-                context.variables = prev_vars;
-                context.current_function_return_type = prev_ret;
+                ConstValue::Expression(other_expr) => {
+                    // Non-function const expression: define it as a (module-level) variable with its type
+                    let inferred = infer_expression_type(other_expr, context)?;
+                    let final_type = if let Some(ann) = type_annotation { ann.clone() } else { inferred };
+                    context.define_variable(name.clone(), final_type);
+                }
+                ConstValue::Type(_) => {
+                    // Type aliases/constants are handled during collection; nothing to analyze here
+                }
             }
         }
         Statement::VariableDecl { name, type_annotation, value } => {
