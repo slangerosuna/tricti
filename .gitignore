@@ -3,5 +3,3 @@ Cargo.lock
 *.o
 *.out
 .env
-/.windsurf
-*.py
