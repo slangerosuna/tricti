@@ -11,6 +11,8 @@ pub struct SemanticContext {
     pub var_scopes: Vec<HashMap<String, Type>>,
     pub functions: HashMap<String, FunctionSignature>,
     pub types: HashMap<String, Type>,
+    pub function_generics: HashMap<String, Vec<String>>,
+    pub type_generics: HashMap<String, Vec<String>>,
     pub current_function_return_type: Option<Type>,
     pub in_loop: bool,
     // Traits and impls
@@ -71,6 +73,8 @@ impl SemanticContext {
             var_scopes: Vec::new(),
             functions: HashMap::new(),
             types: HashMap::new(),
+            function_generics: HashMap::new(),
+            type_generics: HashMap::new(),
             current_function_return_type: None,
             in_loop: false,
             traits: HashMap::new(),
@@ -341,10 +345,18 @@ fn collect_definitions(
                 }
             }
         }
-        Statement::ConstDecl { name, value, .. } => {
+        Statement::ConstDecl {
+            name,
+            type_params,
+            value,
+            ..
+        } => {
             match value {
                 ConstValue::Type(type_def) => {
                     context.types.insert(name.clone(), type_def.clone());
+                    context
+                        .type_generics
+                        .insert(name.clone(), type_params.clone());
                     // If this is a trait type definition, register trait info too
                     if let Type::Trait {
                         associated_types,
@@ -363,6 +375,7 @@ fn collect_definitions(
                     if let Expression::Function {
                         parameters,
                         return_type,
+                        type_params: fn_generics,
                         ..
                     } = expr
                     {
@@ -381,6 +394,16 @@ fn collect_definitions(
                             is_async: false,
                         };
                         context.define_function(name.clone(), sig.clone());
+                        let generics = if !fn_generics.is_empty() {
+                            fn_generics.clone()
+                        } else {
+                            type_params.clone()
+                        };
+                        if !generics.is_empty() {
+                            context
+                                .function_generics
+                                .insert(name.clone(), generics);
+                        }
                         context.define_variable(
                             name.clone(),
                             Type::Function {

@@ -8,5 +8,8 @@ if [[ -f ".env" ]]; then
   set +a
 fi
 
+# Always clean temporary test artifacts on exit
+trap 'echo "[tools] cleaning tmp artifacts"; rm -f tests/tmp_*.o tests/tmp_*.out || true' EXIT
+
 echo "[tools] cargo test -- --nocapture $*"
 cargo test -- --nocapture "$@"

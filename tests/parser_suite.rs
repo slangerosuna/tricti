@@ -2,6 +2,61 @@ use peano::ast::*;
 use peano::parser;
 
 #[test]
+fn parse_struct_field_and_static_path() {
+    let src = r#"
+        Vec2 :: { x: i64, y: i64 }
+        len :: (v: Vec2) -> i64 => { 0 }
+        main :: () -> i64 => {
+            println(Vec2::new)
+            0
+        }
+    "#
+    .to_string();
+
+    let _ = parser::parse(src);
+}
+
+#[test]
+fn parses_char_literal() {
+    use peano::ast::{Expression, Literal, Program, Statement};
+    let source = "'a'";
+    let program = parser::parse(source.to_string());
+    assert_eq!(
+        program,
+        Program {
+            statements: vec![Statement::Expression(Expression::Literal(Literal::Char('a')))],
+        }
+    );
+}
+
+#[test]
+fn parses_tuple_literal_and_pattern() {
+    let src = r#"
+        main :: () => {
+            pair := (40, 2)
+            value := match pair { (a, b) => a + b }
+        }
+    "#;
+
+    let program = parser::parse(src.to_string());
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn parse_struct_and_method_syntax() {
+    let src = r#"
+        point :: { x: i64, y: i64 }
+        impl point {
+            sum :: (self: &mut point) -> i64 => { self.x + self.y }
+        }
+        main :: () -> i64 => { 0 }
+    "#
+    .to_string();
+
+    let _program = parser::parse(src);
+}
+
+#[test]
 fn parse_trait_type_and_impl_for() {
     let src = r#"
         my_iterator :: trait {
@@ -50,4 +105,17 @@ fn parse_trait_type_and_impl_for() {
         }
         other => panic!("expected ImplBlock, got {:?}", other),
     }
+}
+
+#[test]
+fn debug_enum_ast_prints() {
+    let src = r#"
+        Color :: enum { Red, Green, Blue }
+        main :: () => {
+            c: Color := 2
+            println(c)
+        }
+    "#;
+    let program = parser::parse(src.to_string());
+    println!("AST: {:#?}", program);
 }
