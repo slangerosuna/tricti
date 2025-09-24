@@ -5,4 +5,7 @@
 Runtime := { }
 
 # Expose start as a normal function for now; the Rust host will map it to _start when runtime mode is enabled
-start :: () -> i32 => { main(); 0 }
+start :: () -> i32 => {
+    main()
+    ret 0i32 
+}

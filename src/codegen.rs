@@ -1,6 +1,6 @@
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::Module;
+use inkwell::module::{Linkage, Module};
 use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{BasicTypeEnum, FloatType, IntType, StructType};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue, BasicMetadataValueEnum, StructValue, IntValue, BasicValue};
@@ -430,7 +430,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         // Process exit (libc)
         let exit_ty = self.context.void_type().fn_type(&[i32_type.into()], false);
-        let exit_fn = self.module.add_function("exit", exit_ty, None);
+        let exit_fn = self.module.add_function("exit", exit_ty, Some(Linkage::External));
         self.functions.insert("exit".to_string(), exit_fn);
 
         // strlen for string length (bytes); expose as `len`
@@ -1309,6 +1309,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 body,
                 ..
             } => {
+                const KNOWN_SLICE_TYPES: [&str; 2] = ["slice_i64", "slice_bool"];
                 // Support: for i in N and for i in start:end[:step]; also iterate elements for 1D matrices (vectors)
                 // Try vector element iteration first
                 if let Expression::Matrix { rows } = iterable {

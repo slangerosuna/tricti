@@ -1295,17 +1295,29 @@ fn infer_expression_type(
             }
             // infer element type by scanning; prefer f64 if any float present, else i64
             let mut has_float = false;
+            let mut has_bool = false;
+            let mut has_non_bool = false;
             for r in rows {
                 for e in r {
                     if let Ok(t) = infer_expression_type(e, context) {
-                        if matches!(t, Type::Identifier(ref s) if s == "f32" || s == "f64") {
-                            has_float = true;
+                        match t {
+                            Type::Identifier(ref s) if s == "f32" || s == "f64" => {
+                                has_float = true;
+                            }
+                            Type::Identifier(ref s) if s == "bool" => {
+                                has_bool = true;
+                            }
+                            _ => {
+                                has_non_bool = true;
+                            }
                         }
                     }
                 }
             }
             let elem = if has_float {
                 Type::Identifier("f64".to_string())
+            } else if has_bool && !has_non_bool {
+                Type::Identifier("bool".to_string())
             } else {
                 Type::Identifier("i64".to_string())
             };

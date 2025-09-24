@@ -6,6 +6,29 @@ use std::process::Command;
 
 fn clang_available() -> bool { Command::new("clang").arg("--version").output().is_ok() }
 
+#[test]
+fn user_defined_slice_bool_iteration() {
+    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    let src = r#"
+        SliceBool := {
+            ptr: &bool,
+            len: i64,
+        }
+
+        v: [bool; 4] := [true, false, true, true]
+        s: SliceBool :: { ptr: v, len: 4 }
+        acc := 0
+        for b in s {
+            if b { acc = acc + 1 }
+        }
+        println(acc)
+        println(s.len)
+    "#;
+
+    let stdout = compile_and_run(src, "tests/tmp_slice_bool_user.o", "tests/tmp_slice_bool_user.out");
+    assert_eq!(stdout, "3\n4\n");
+}
+
 fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
     let program = parser::parse(src.to_string());
     let sem = semantic::analyze_program(&program).expect("semantic analysis");
