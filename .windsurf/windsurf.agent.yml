@@ -1,6 +1,0 @@
-execution:
-  auto_continue: true
-  pause_on_completion: true
-  max_idle_cycles: 0
-logging:
-  level: info

@@ -1,9 +1,0 @@
-tasks:
-  - id: roadmap_tdd
-    description: "Follow next_steps.md sequentially with strict TDD and documentation updates."
-    references:
-      - next_steps.md
-      - requirements.md
-    notes:
-      - "Use helper scripts in scripts/ for builds, tests, and formatting."
-      - "Update plans/ documents after each actionable bullet."
