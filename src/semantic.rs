@@ -430,6 +430,7 @@ fn analyze_statement(
         }
         Statement::ConstDecl {
             name,
+            type_params,
             type_annotation,
             value,
             extern_linkage: _extern_linkage,
@@ -842,6 +843,14 @@ fn infer_expression_type(
             Literal::Char(_) => Type::Identifier("char".to_string()),
         }),
 
+        Expression::Tuple(elements) => {
+            let mut elem_types = Vec::with_capacity(elements.len());
+            for elem in elements {
+                elem_types.push(infer_expression_type(elem, context)?);
+            }
+            Ok(Type::Tuple(elem_types))
+        }
+
         Expression::Identifier(name) => {
             // Heuristic: enum variant static path lowered by parser as Identifier("Type_Variant").
             // If it matches a known enum type and existing variant name, treat as i64 tag.
@@ -885,6 +894,7 @@ fn infer_expression_type(
 
         Expression::Call {
             function,
+            type_args,
             arguments,
         } => {
             match function.as_ref() {
@@ -1397,6 +1407,15 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             }
             false
         }
+        (Type::Tuple(exp_elems), Type::Tuple(found_elems)) => {
+            if exp_elems.len() != found_elems.len() {
+                return false;
+            }
+            exp_elems
+                .iter()
+                .zip(found_elems.iter())
+                .all(|(e, f)| types_compatible(e, f))
+        }
         (Type::None, _) | (_, Type::None) => true,
         _ => expected == found,
     }
@@ -1410,26 +1429,29 @@ fn analyze_pattern(
     match pattern {
         Expression::Identifier(name) if name == "_" => Ok(()),
         Expression::Identifier(name) => {
-            // Enum variant: Color_Red
+            // Enum variant path encoded as "Type_Variant"
             if let Some((_tname, vname)) = name.split_once('_') {
                 if let Type::Enum { variants, .. } = scrutinee_type {
                     if variants.contains_key(vname) {
-                        Ok(())
+                        return Ok(());
                     } else {
-                        Err(SemanticError::UndefinedVariable(name.clone()))
+                        return Err(SemanticError::UndefinedVariable(name.clone()));
                     }
                 } else {
-                    Err(SemanticError::TypeMismatch {
+                    return Err(SemanticError::TypeMismatch {
                         expected: Type::None,
                         found: scrutinee_type.clone(),
-                    })
+                    });
                 }
-            } else {
-                Err(SemanticError::UndefinedVariable(name.clone()))
             }
+
+            // Otherwise treat as variable binding
+            context.define_variable(name.clone(), scrutinee_type.clone());
+            Ok(())
         }
         Expression::Call {
             function,
+            type_args,
             arguments,
         } => {
             // Destructuring: Color_Green(x)

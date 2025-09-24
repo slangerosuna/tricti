@@ -162,11 +162,19 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
         name = first.as_str().to_string();
     }
 
+    let mut type_params = Vec::new();
     let mut type_annotation = None;
     let mut value_pair = None;
 
     for pair in inner {
         match pair.as_rule() {
+            Rule::type_params => {
+                for tp in pair.into_inner() {
+                    if tp.as_rule() == Rule::identifier {
+                        type_params.push(tp.as_str().to_string());
+                    }
+                }
+            }
             Rule::r#type => {
                 if type_annotation.is_none() {
                     type_annotation = Some(parse_type(pair.clone()));
@@ -190,6 +198,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
 
     Statement::ConstDecl {
         name,
+        type_params,
         type_annotation,
         value,
         extern_linkage,
@@ -371,12 +380,26 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     for suffix_pair in inner {
         match suffix_pair.as_rule() {
             Rule::call_suffix => {
+                let mut type_args = Vec::new();
                 let mut arguments = Vec::new();
                 for arg_pair in suffix_pair.into_inner() {
-                    arguments.push(parse_argument(arg_pair));
+                    match arg_pair.as_rule() {
+                        Rule::type_args => {
+                            for t in arg_pair.into_inner() {
+                                if t.as_rule() == Rule::r#type {
+                                    type_args.push(parse_type(t));
+                                }
+                            }
+                        }
+                        Rule::argument => {
+                            arguments.push(parse_argument(arg_pair));
+                        }
+                        _ => {}
+                    }
                 }
                 expr = Expression::Call {
                     function: Box::new(expr),
+                    type_args,
                     arguments,
                 };
             }
@@ -419,13 +442,12 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let inner_pair = pair.into_inner().next().unwrap();
     match inner_pair.as_rule() {
-        Rule::block => Expression::Block {
-            statements: parse_block(inner_pair),
-        },
+        Rule::block => Expression::Block { statements: parse_block(inner_pair) },
         Rule::function => parse_function(inner_pair),
         Rule::conditional => parse_if_expression(inner_pair),
         Rule::r#match => parse_match_expression(inner_pair),
         Rule::matrix => parse_matrix(inner_pair),
+        Rule::tuple_expr => parse_tuple_expression(inner_pair),
         _ => parse_expression(inner_pair),
     }
 }
@@ -444,6 +466,15 @@ fn parse_matrix(pair: pest::iterators::Pair<Rule>) -> Expression {
         }
     }
     Expression::Matrix { rows }
+}
+
+fn parse_tuple_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let elements: Vec<Expression> = pair
+        .into_inner()
+        .filter(|inner| inner.as_rule() == Rule::expression)
+        .map(parse_expression)
+        .collect();
+    Expression::Tuple(elements)
 }
 
 fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -533,6 +564,15 @@ fn parse_argument(pair: pest::iterators::Pair<Rule>) -> Argument {
             value: parse_expression(first_pair),
         }
     }
+}
+
+fn parse_tuple_type(pair: pest::iterators::Pair<Rule>) -> Type {
+    let elements: Vec<Type> = pair
+        .into_inner()
+        .filter(|inner| inner.as_rule() == Rule::r#type)
+        .map(parse_type)
+        .collect();
+    Type::Tuple(elements)
 }
 
 fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
@@ -738,6 +778,7 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
             Rule::matrix_type => parse_matrix_type(inner_pair),
             Rule::function_type => parse_function_type(inner_pair),
             Rule::trait_type => parse_trait_type(inner_pair),
+            Rule::tuple_type => parse_tuple_type(inner_pair),
             _ => panic!("Unexpected type rule: {:?}", inner_pair.as_rule()),
         }
     } else {
@@ -768,9 +809,17 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut params: Vec<Parameter> = Vec::new();
     let mut return_ty: Option<Type> = None;
     let mut body_opt: Option<FunctionBody> = None;
+    let mut type_params: Vec<String> = Vec::new();
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
+            Rule::type_params => {
+                for tp in inner.into_inner() {
+                    if tp.as_rule() == Rule::identifier {
+                        type_params.push(tp.as_str().to_string());
+                    }
+                }
+            }
             Rule::function_params => {
                 for p in inner.into_inner() {
                     match p.as_rule() {
@@ -820,6 +869,7 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
 
     Expression::Function {
         is_async,
+        type_params,
         parameters: params,
         return_type: return_ty,
         body: body_opt.unwrap_or(FunctionBody::Block(Vec::new())),

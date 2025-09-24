@@ -1,0 +1,290 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Peano",
+  "scopeName": "source.peano",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#builtins"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.peano",
+          "begin": "#",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.peano"
+            }
+          },
+          "end": "$",
+          "patterns": []
+        },
+        {
+          "name": "comment.block.peano",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.begin.peano"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.end.peano"
+            }
+          },
+          "patterns": []
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.raw.peano",
+          "begin": "r\"\"\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.peano"
+            }
+          },
+          "end": "\"\"\"",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.peano"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.double.raw.peano",
+          "begin": "r\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.peano"
+            }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.peano"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.double.peano",
+          "begin": "\"\"\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.peano"
+            }
+          },
+          "end": "\"\"\"",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.peano"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.double.peano",
+          "begin": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.peano"
+            }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.peano"
+            }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.peano",
+              "match": "\\\\(?:[\\\"'ntr0\\\\]|u\\{[0-9A-Fa-f]+\\})"
+            }
+          ]
+        },
+        {
+          "name": "constant.character.peano",
+          "begin": "'",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.peano"
+            }
+          },
+          "end": "'",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.peano"
+            }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.peano",
+              "match": "\\\\(?:[\\\"'ntr0\\\\]|u\\{[0-9A-Fa-f]+\\})"
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.peano",
+          "match": "\\\\b\\\\d+\\\\.\\\\d+(?:[eE][+-]?\\\\d+)?\\\\b"
+        },
+        {
+          "name": "constant.numeric.integer.peano",
+          "match": "\\\\b\\\\d+(?:i8|i16|i32|i64|u8|u16|u32|u64)?\\\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.peano",
+          "match": "\\\\b(?:true|false)\\\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.peano",
+          "match": "\\\\b(?:if|else|for|in|match|loop|break|ret)\\\\b"
+        },
+        {
+          "name": "keyword.declaration.peano",
+          "match": "\\\\b(?:impl|trait|enum|struct|mod|use|extern)\\\\b"
+        },
+        {
+          "name": "keyword.other.async.peano",
+          "match": "\\\\basync\\\\b"
+        },
+        {
+          "name": "keyword.operator.logical.peano",
+          "match": "\\\\b(?:and|or|xor)\\\\b"
+        },
+        {
+          "name": "keyword.other.shader.peano",
+          "match": "\\\\b(?:vert|frag|comp)\\\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.peano",
+          "match": "\\\\b(?:bool|string|none|i8|i16|i32|i64|u8|u16|u32|u64|f32|f64)\\\\b"
+        },
+        {
+          "name": "storage.modifier.optional.peano",
+          "match": "\\?"
+        },
+        {
+          "name": "storage.modifier.error.peano",
+          "match": "!"
+        },
+        {
+          "name": "storage.modifier.reference.peano",
+          "match": "&mut"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.peano",
+          "match": "(?::=|=|\\*=|/=|\\+=|-=|\\.\\*=|\\./=|\\\\=)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.peano",
+          "match": "(?:\\+|-|\\*|/|%|\\.\\*|\\./|\\\\)"
+        },
+        {
+          "name": "keyword.operator.comparison.peano",
+          "match": "(?:==|~=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.member.peano",
+          "match": "::"
+        },
+        {
+          "name": "keyword.operator.range.peano",
+          "match": ":"
+        },
+        {
+          "name": "keyword.operator.arrow.peano",
+          "match": "=>"
+        },
+        {
+          "name": "keyword.operator.unary.peano",
+          "match": "[!~?]"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "entity.name.function.peano",
+          "match": "\\b[A-Za-z_]\\w*(?=\\s*::\\s*\\()"
+        },
+        {
+          "name": "entity.name.type.peano",
+          "match": "\\b[A-Za-z_]\\w*(?=\\s*::\\s*(?:enum|\\{))"
+        },
+        {
+          "name": "entity.name.type.peano",
+          "match": "(?<=\\bimpl\\s)[A-Za-z_]\\w*"
+        },
+        {
+          "name": "entity.name.type.peano",
+          "match": "(?<=\\bfor\\s)[A-Za-z_]\\w*"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.peano",
+          "match": "\\b(?:print|println|panic|assert|assert_eq_i64|slice_i64_from|vec_push_i64|vec_pop_i64|vec_len_i64|alloc|dealloc|exit)\\b"
+        },
+        {
+          "name": "variable.language.self.peano",
+          "match": "\\bself\\b"
+        },
+        {
+          "name": "storage.modifier.mut.peano",
+          "match": "\\bmut\\b"
+        }
+      ]
+    }
+  }
+}

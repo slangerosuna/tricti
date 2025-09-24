@@ -22,6 +22,7 @@ fn compiles_minimal_program_to_object() {
     match &program.statements[2] {
         peano::ast::Statement::Expression(peano::ast::Expression::Call {
             function,
+            type_args,
             arguments,
         }) => {
             match function.as_ref() {

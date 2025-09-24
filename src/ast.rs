@@ -14,6 +14,7 @@ pub enum Statement {
     },
     ConstDecl {
         name: String,
+        type_params: Vec<String>,
         type_annotation: Option<Type>,
         value: ConstValue,
         extern_linkage: Option<String>,
@@ -80,6 +81,7 @@ pub enum Expression {
     },
     Call {
         function: Box<Expression>,
+        type_args: Vec<Type>,
         arguments: Vec<Argument>,
     },
     FieldAccess {
@@ -103,10 +105,12 @@ pub enum Expression {
     },
     Function {
         is_async: bool,
+        type_params: Vec<String>,
         parameters: Vec<Parameter>,
         return_type: Option<Type>,
         body: FunctionBody,
     },
+    Tuple(Vec<Expression>),
     Match {
         value: Box<Expression>,
         arms: Vec<MatchArm>,
@@ -306,6 +310,7 @@ pub enum Type {
     Result {
         inner: Box<Type>,
     },
+    Tuple(Vec<Type>),
     Matrix {
         element_type: Box<Type>,
         dimensions: Vec<usize>,

@@ -1,0 +1,39 @@
+{
+  "name": "peano-language-support",
+  "displayName": "Peano Language Support",
+  "description": "Syntax highlighting and basic language configuration for Peano (.pn) files.",
+  "version": "0.1.0",
+  "publisher": "peano",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:peano"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "peano",
+        "aliases": ["Peano", "peano", "bplang"],
+        "extensions": [".pn"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "peano",
+        "scopeName": "source.peano",
+        "path": "./syntaxes/peano.tmLanguage.json"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slangerosuna/bplang_pest"
+  }
+}

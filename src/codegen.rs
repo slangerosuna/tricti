@@ -1,15 +1,14 @@
-use crate::ast::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{BasicTypeEnum, FloatType, IntType, StructType};
-use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue, BasicMetadataValueEnum, StructValue, IntValue, BasicValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-
+use crate::ast::{UnaryOperator, Expression, Argument, Type, FunctionBody, Statement, Program, ConstValue, Literal, BinaryOperator, IntegerLiteral};
 #[derive(Debug)]
 pub enum CodegenError {
     UndefinedVariable(String),
@@ -131,7 +130,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 Err(CodegenError::UndefinedVariable(name.clone()))
             }
-            Expression::Call { function, .. } => {
+            Expression::Call { function, type_args, .. } => {
                 if let Expression::Identifier(func_name) = &**function {
                     if let Some((tname, vname)) = func_name.split_once('_') {
                         if let Some(Type::Enum { variants, order }) = self.semantic.types.get(tname)
@@ -228,6 +227,21 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             AstType::Optional { .. } | AstType::Result { .. } => {
                 Some(self.context.i64_type().into())
+            }
+            AstType::Tuple(elems) => {
+                let element_types: Vec<BasicTypeEnum<'ctx>> = elems
+                    .iter()
+                    .map(|elem_ty| {
+                        self.map_ast_type(elem_ty)
+                            .unwrap_or_else(|| self.context.i64_type().into())
+                    })
+                    .collect();
+
+                if element_types.is_empty() {
+                    Some(self.context.struct_type(&[], false).into())
+                } else {
+                    Some(self.context.struct_type(&element_types, false).into())
+                }
             }
             AstType::Struct { .. } | AstType::Trait { .. } | AstType::Function { .. } => None,
             AstType::Enum { .. } => Some(self.enum_struct.unwrap().into()),
@@ -854,6 +868,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         match statement {
             Statement::ConstDecl {
                 name,
+                type_params,
                 type_annotation,
                 value,
                 extern_linkage: _extern_linkage,
@@ -919,6 +934,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Special-case: function.bind(...) assigned to a name -> synthesize a wrapper function with that name
                 if let Expression::Call {
                     function,
+                    type_args,
                     arguments: bind_args,
                 } = value
                 {
@@ -2324,12 +2340,202 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(loaded)
     }
 
+    fn load_tuple_from_value(
+        &mut self,
+        value: BasicValueEnum<'ctx>,
+    ) -> Option<StructValue<'ctx>> {
+        if value.is_struct_value() {
+            Some(value.into_struct_value())
+        } else {
+            None
+        }
+    }
+
+    fn evaluate_tuple_pattern(
+        &mut self,
+        tuple_val: StructValue<'ctx>,
+        tuple_ty: StructType<'ctx>,
+        items: &[Expression],
+    ) -> Result<(Vec<IntValue<'ctx>>, Vec<(String, Vec<u32>, BasicTypeEnum<'ctx>)>), CodegenError> {
+        if tuple_ty.count_fields() != items.len() as u32 {
+            return Err(CodegenError::InvalidOperation(
+                "tuple pattern arity mismatch".to_string(),
+            ));
+        }
+
+        let mut conds = Vec::new();
+        let mut bindings = Vec::new();
+        self.evaluate_tuple_pattern_inner(
+            tuple_val,
+            tuple_ty,
+            items,
+            &[],
+            &mut conds,
+            &mut bindings,
+        )?;
+        Ok((conds, bindings))
+    }
+
+    fn evaluate_tuple_pattern_inner(
+        &mut self,
+        tuple_val: StructValue<'ctx>,
+        tuple_ty: StructType<'ctx>,
+        items: &[Expression],
+        prefix: &[u32],
+        conds: &mut Vec<IntValue<'ctx>>,
+        bindings: &mut Vec<(String, Vec<u32>, BasicTypeEnum<'ctx>)>,
+    ) -> Result<(), CodegenError> {
+        for (idx, item) in items.iter().enumerate() {
+            let field_ty = tuple_ty
+                .get_field_type_at_index(idx as u32)
+                .ok_or_else(|| CodegenError::InvalidOperation("tuple field index out of range".to_string()))?;
+            let field_val = self
+                .builder
+                .build_extract_value(tuple_val, idx as u32, &format!("tuple_elem{}", idx))
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+            let mut path: Vec<u32> = prefix.to_vec();
+            path.push(idx as u32);
+
+            match item {
+                Expression::Identifier(name) if name == "_" => {}
+                Expression::Identifier(name) => {
+                    bindings.push((name.clone(), path, field_ty));
+                }
+                Expression::Literal(Literal::Integer(lit)) => {
+                    if let BasicTypeEnum::IntType(_it) = field_ty {
+                        let tuple_iv = field_val.into_int_value();
+                        let literal_i64 = self.const_int_from_literal(lit)?;
+                        let lit_cast = literal_i64;
+                        let cmp = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::EQ,
+                                tuple_iv,
+                                lit_cast,
+                                &format!("tuple_cmp{}_int", idx),
+                            )
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        conds.push(cmp);
+                    } else {
+                        return Err(CodegenError::InvalidOperation(
+                            "integer literal in tuple pattern requires integer field".to_string(),
+                        ));
+                    }
+                }
+                Expression::Literal(Literal::Boolean(value)) => {
+                    if let BasicTypeEnum::IntType(it) = field_ty {
+                        if it.get_bit_width() != 1 {
+                            return Err(CodegenError::InvalidOperation(
+                                "boolean literal in tuple pattern requires bool field".to_string(),
+                            ));
+                        }
+                        let tuple_iv = field_val.into_int_value();
+                        let literal_bool = self.context.bool_type().const_int(*value as u64, false);
+                        let cmp = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::EQ,
+                                tuple_iv,
+                                literal_bool,
+                                &format!("tuple_cmp{}_bool", idx),
+                            )
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        conds.push(cmp);
+                    } else {
+                        return Err(CodegenError::InvalidOperation(
+                            "boolean literal in tuple pattern requires bool field".to_string(),
+                        ));
+                    }
+                }
+                Expression::Literal(Literal::Char(ch)) => {
+                    if let BasicTypeEnum::IntType(it) = field_ty {
+                        let tuple_iv = field_val.into_int_value();
+                        let literal_char = it.const_int(*ch as u64, false);
+                        let cmp = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::EQ,
+                                tuple_iv,
+                                literal_char,
+                                &format!("tuple_cmp{}_char", idx),
+                            )
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        conds.push(cmp);
+                    } else {
+                        return Err(CodegenError::InvalidOperation(
+                            "char literal in tuple pattern requires integer field".to_string(),
+                        ));
+                    }
+                }
+                Expression::Tuple(sub_items) => {
+                    let sub_ty = match field_ty {
+                        BasicTypeEnum::StructType(st) => st,
+                        _ => {
+                            return Err(CodegenError::InvalidOperation(
+                                "nested tuple pattern requires tuple value".to_string(),
+                            ))
+                        }
+                    };
+                    let sub_val = field_val.into_struct_value();
+                    self.evaluate_tuple_pattern_inner(
+                        sub_val,
+                        sub_ty,
+                        sub_items,
+                        &path,
+                        conds,
+                        bindings,
+                    )?;
+                }
+                _ => {
+                    return Err(CodegenError::InvalidOperation(
+                        "unsupported pattern in tuple".to_string(),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn generate_expression(
         &mut self,
         expr: &Expression,
     ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
         match expr {
             Expression::Literal(literal) => self.generate_literal(literal),
+            Expression::Tuple(items) => {
+                let mut element_values: Vec<BasicValueEnum<'ctx>> = Vec::with_capacity(items.len());
+                let mut element_types: Vec<BasicTypeEnum<'ctx>> = Vec::with_capacity(items.len());
+                for (idx, item) in items.iter().enumerate() {
+                    let value = self.generate_expression(item)?;
+                    let value_ty = value.get_type();
+                    element_values.push(value);
+                    element_types.push(value_ty);
+                    if element_values.len() != element_types.len() {
+                        return Err(CodegenError::InvalidOperation(format!(
+                            "failed to gather element {} for tuple literal",
+                            idx
+                        )));
+                    }
+                }
+
+                let struct_ty = if element_types.is_empty() {
+                    self.context.struct_type(&[], false)
+                } else {
+                    self.context.struct_type(&element_types, false)
+                };
+
+                let mut aggregate: StructValue<'ctx> = struct_ty.get_undef();
+                for (idx, value) in element_values.into_iter().enumerate() {
+                    aggregate = self
+                        .builder
+                        .build_insert_value(aggregate, value, idx as u32, &format!("tuple_elem{}", idx))
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                        .into_struct_value();
+                }
+
+                Ok(aggregate.as_basic_value_enum())
+            }
             Expression::Matrix { rows } => {
                 // Only support 1D vectors concretely; for multi-dim, return a null i64* placeholder to avoid invalid IR.
                 let i64_ptr_ty = self.context.ptr_type(AddressSpace::default());
@@ -2773,8 +2979,89 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
 
             Expression::Match { value, arms } => {
-                // Evaluate scrutinee and extract tag as i64 for comparisons
+                // Evaluate scrutinee once
                 let raw = self.generate_expression(value)?;
+
+                // Tuple-specialized handling: single arm with pattern `(a, b, ...)`
+                if arms.len() == 1 {
+                    if let Expression::Tuple(pattern_items) = &arms[0].pattern {
+                        if let Some(struct_val) = if raw.is_struct_value() {
+                            Some(raw.into_struct_value())
+                        } else {
+                            None
+                        } {
+                            let tuple_ty = struct_val.get_type();
+                            if tuple_ty.count_fields() as usize != pattern_items.len() {
+                                return Err(CodegenError::InvalidOperation(
+                                    "tuple pattern arity mismatch".to_string(),
+                                ));
+                            }
+
+                            let mut saved_bindings: Vec<(String, Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>)> =
+                                Vec::new();
+
+                            for (idx, pat) in pattern_items.iter().enumerate() {
+                                let element_val = self
+                                    .builder
+                                    .build_extract_value(
+                                        struct_val,
+                                        idx as u32,
+                                        &format!("tuple_extract{}", idx),
+                                    )
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                                match pat {
+                                    Expression::Identifier(name) if name == "_" => {}
+                                    Expression::Identifier(name) => {
+                                        let field_ty = tuple_ty
+                                            .get_field_type_at_index(idx as u32)
+                                            .ok_or_else(|| {
+                                                CodegenError::InvalidOperation(
+                                                    "tuple field index out of range".to_string(),
+                                                )
+                                            })?;
+                                        let alloca = self.create_entry_block_alloca(name, field_ty)?;
+                                        self.builder
+                                            .build_store(alloca, element_val)
+                                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        let previous = self
+                                            .variables
+                                            .insert(name.clone(), (alloca, field_ty));
+                                        saved_bindings.push((name.clone(), previous));
+                                    }
+                                    _ => {
+                                        return Err(CodegenError::InvalidOperation(
+                                            "unsupported tuple pattern element".to_string(),
+                                        ));
+                                    }
+                                }
+                            }
+
+                            let body_val_raw = self.generate_expression(&arms[0].body)?;
+                            let body_val: BasicValueEnum<'ctx> = if body_val_raw.is_int_value() {
+                                body_val_raw
+                            } else {
+                                self.cast_to_int(body_val_raw, self.context.i64_type())?
+                                    .into()
+                            };
+
+                            for (name, previous) in saved_bindings.into_iter().rev() {
+                                match previous {
+                                    Some(binding) => {
+                                        self.variables.insert(name, binding);
+                                    }
+                                    None => {
+                                        self.variables.remove(&name);
+                                    }
+                                }
+                            }
+
+                            return Ok(body_val);
+                        }
+                    }
+                }
+
+                // Evaluate scrutinee and extract tag as i64 for comparisons (enum/default path)
                 let temp_alloca = if raw.is_struct_value() {
                     let struct_ty = self.enum_struct.unwrap().into();
                     let temp = self.create_entry_block_alloca("match_scrut", struct_ty)?;
@@ -2876,6 +3163,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // Bind variables from pattern
                     if let Expression::Call {
                         function,
+                        type_args,
                         arguments,
                     } = &arm.pattern
                     {
@@ -3021,6 +3309,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
             Expression::Call {
                 function,
+                type_args,
                 arguments,
             } => {
                 // Enum variant constructor call: Identifier("Type_Variant")(payload?) -> enum struct
@@ -3383,9 +3672,12 @@ impl<'ctx> CodeGenerator<'ctx> {
 
             UnaryOperator::Not => {
                 if operand.is_int_value() {
+                    let int_ty = operand.get_type().into_int_type();
+                    let zero = int_ty.const_zero();
+                    let operand_int = operand.into_int_value();
                     let result = self
                         .builder
-                        .build_not(operand.into_int_value(), "nottmp")
+                        .build_int_compare(IntPredicate::EQ, operand_int, zero, "not")
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     Ok(result.into())
                 } else {
@@ -3827,14 +4119,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     // Bind acc into variables table (save previous)
                                     let prev_acc = self
                                         .variables
-                                        .insert(p_acc_name.clone(), (acc_alloca, i64_bte));
+                                        .insert(p_acc_name.to_string(), (acc_alloca, i64_bte));
 
                                     // Also prepare a temporary alloca for the element (x)
                                     let x_alloca =
                                         self.create_entry_block_alloca(&p_x_name, i64_bte)?;
                                     let prev_x = self
                                         .variables
-                                        .insert(p_x_name.clone(), (x_alloca, i64_bte));
+                                        .insert(p_x_name.to_string(), (x_alloca, i64_bte));
 
                                     // Build loop blocks
                                     let current_fn = self.current_function.ok_or_else(|| {
@@ -3970,12 +4262,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     self.builder.position_at_end(end_bb);
                                     // Restore previous bindings
                                     if let Some(prev) = prev_x {
-                                        self.variables.insert(p_x_name.clone(), prev);
+                                        self.variables.insert(p_x_name.to_string(), prev);
                                     } else {
                                         self.variables.remove(&p_x_name);
                                     }
                                     if let Some(prev) = prev_acc {
-                                        self.variables.insert(p_acc_name.clone(), prev);
+                                        self.variables.insert(p_acc_name.to_string(), prev);
                                     } else {
                                         self.variables.remove(&p_acc_name);
                                     }
@@ -4027,12 +4319,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                                                 })?;
                                             let prev_acc = self
                                                 .variables
-                                                .insert(p_acc_name.clone(), (acc_alloca, i64_bte));
+                                                .insert(p_acc_name.to_string(), (acc_alloca, i64_bte));
                                             let x_alloca =
                                                 self.create_entry_block_alloca(&p_x_name, i64_bte)?;
                                             let prev_x = self
                                                 .variables
-                                                .insert(p_x_name.clone(), (x_alloca, i64_bte));
+                                                .insert(p_x_name.to_string(), (x_alloca, i64_bte));
 
                                             let current_fn =
                                                 self.current_function.ok_or_else(|| {
@@ -4198,12 +4490,12 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                                             self.builder.position_at_end(end_bb);
                                             if let Some(prev) = prev_x {
-                                                self.variables.insert(p_x_name.clone(), prev);
+                                                self.variables.insert(p_x_name.to_string(), prev);
                                             } else {
                                                 self.variables.remove(&p_x_name);
                                             }
                                             if let Some(prev) = prev_acc {
-                                                self.variables.insert(p_acc_name.clone(), prev);
+                                                self.variables.insert(p_acc_name.to_string(), prev);
                                             } else {
                                                 self.variables.remove(&p_acc_name);
                                             }
@@ -4382,6 +4674,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let mut handled_special = match &arg.value {
                     Expression::Call {
                         function,
+                        type_args,
                         arguments: hof_args,
                     } => {
                         if let Expression::FieldAccess { object, field } = function.as_ref() {
@@ -5571,9 +5864,6 @@ impl<'ctx> CodeGenerator<'ctx> {
         for stmt in &program.statements {
             match stmt {
                 Statement::ConstDecl { name, value, .. } => {
-                    if name == "main" && !self.runtime_mode {
-                        continue;
-                    }
                     if let ConstValue::Expression(Expression::Function {
                         parameters,
                         return_type,
@@ -5603,13 +5893,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                             _ => self.context.i64_type().fn_type(&param_meta, false),
                         };
                         // In runtime mode, emit user main as `peano_main` symbol
-                        let fname = if self.runtime_mode && name == "main" {
+                        let fname = if name == "main" {
                             "peano_main"
                         } else {
                             name
                         };
                         let f = self.module.add_function(fname, fn_type, None);
-                        self.functions.insert(name.clone(), f);
+                        self.functions.insert(fname.to_string(), f);
                     }
                 }
                 Statement::ImplBlock {
@@ -5671,9 +5961,6 @@ impl<'ctx> CodeGenerator<'ctx> {
         for stmt in &program.statements {
             match stmt {
                 Statement::ConstDecl { name, value, .. } => {
-                    if name == "main" && !self.runtime_mode {
-                        continue;
-                    }
                     if let ConstValue::Expression(Expression::Function {
                         parameters,
                         body,
@@ -5681,7 +5968,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                         ..
                     }) = value
                     {
-                        let f = match self.functions.get(name) {
+                        let fname = if name == "main" { "peano_main" } else { name };
+                        let f = match self.functions.get(fname) {
                             Some(f) => *f,
                             None => continue,
                         };
