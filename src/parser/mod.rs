@@ -75,7 +75,23 @@ fn parse_variable_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
 
 fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut inner = pair.into_inner();
-    let name = inner.next().unwrap().as_str().to_string();
+    
+    let mut extern_linkage = None;
+    let first = inner.next().unwrap();
+    let name;
+    if first.as_str() == "extern" {
+        // Check if next is string
+        let next = inner.peek().unwrap();
+        if next.as_rule() == Rule::string {
+            let linkage = inner.next().unwrap().as_str().to_string();
+            extern_linkage = Some(linkage);
+        } else {
+            extern_linkage = None;
+        }
+        name = inner.next().unwrap().as_str().to_string();
+    } else {
+        name = first.as_str().to_string();
+    }
     
     let mut type_annotation = None;
     let mut value_pair = None;
@@ -107,6 +123,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
         name,
         type_annotation,
         value,
+        extern_linkage,
     }
 }
 
@@ -427,24 +444,40 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
         // enum_variants is silent; we directly see identifier and optional type pairs
         let mut variants: HashMap<String, Option<Type>> = HashMap::new();
         let mut order: Vec<String> = Vec::new();
-        let inner_vec: Vec<_> = p.into_inner().collect();
-        let mut i = 0usize;
-        while i < inner_vec.len() {
-            let cur = &inner_vec[i];
-            if cur.as_rule() == Rule::identifier {
-                let name = cur.as_str().to_string();
-                let mut ty_opt: Option<Type> = None;
-                if i + 1 < inner_vec.len() {
-                    let next = &inner_vec[i + 1];
-                    if next.as_rule() == Rule::r#type {
-                        ty_opt = Some(parse_type(next.clone()));
-                        i += 1; // consume the type
+        let mut it = p.into_inner().peekable();
+        // Skip "enum" and "{"
+        it.next();
+        it.next();
+        loop {
+            if let Some(cur) = it.next() {
+                if cur.as_rule() == Rule::identifier {
+                    let name = cur.as_str().to_string();
+                    let mut ty_opt: Option<Type> = None;
+                    // Check if next is ":"
+                    if let Some(next_ref) = it.peek() {
+                        if next_ref.as_str() == ":" {
+                            it.next(); // consume ":"
+                            if let Some(type_pair) = it.next() {
+                                if type_pair.as_rule() == Rule::r#type {
+                                    ty_opt = Some(parse_type(type_pair));
+                                }
+                            }
+                        }
                     }
+                    variants.insert(name.clone(), ty_opt);
+                    order.push(name);
+                    // Skip optional ","
+                    if let Some(comma_ref) = it.peek() {
+                        if comma_ref.as_str() == "," {
+                            it.next();
+                        }
+                    }
+                } else if cur.as_str() == "}" {
+                    break;
                 }
-                variants.insert(name.clone(), ty_opt);
-                order.push(name);
+            } else {
+                break;
             }
-            i += 1;
         }
         Type::Enum { variants, order }
     }

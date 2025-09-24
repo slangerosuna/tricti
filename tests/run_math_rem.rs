@@ -7,15 +7,17 @@ use std::path::Path;
 fn clang_available() -> bool { Command::new("clang").arg("--version").output().is_ok() }
 
 #[test]
-fn enum_as_i64_tag_basics() {
+fn stdlib_rem_i64() {
     if !clang_available() { eprintln!("clang not found; skipping"); return; }
-    let src = r#"
-        Color :: enum { Red, Green, Blue }
+    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let user = r#"
         main :: () => {
-            c: i64 := Color::Blue
-            println(c)
+            println(rem_i64(10, 3))
+            println(rem_i64(11, 3))
+            println(rem_i64(3, 3))
         }
     "#;
+    let src = format!("{}\n{}", prelude, user);
 
     let program = parser::parse(src.to_string());
     let sem = semantic::analyze_program(&program).expect("semantic analysis");
@@ -24,7 +26,7 @@ fn enum_as_i64_tag_basics() {
     let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
     gen.generate_program(&program).expect("codegen");
 
-    let obj = "tests/tmp_enum_basic.o"; let exe = "tests/tmp_enum_basic.out";
+    let obj = "tests/tmp_rem.o"; let exe = "tests/tmp_rem.out";
     if Path::new(obj).exists() { let _ = fs::remove_file(obj); }
     if Path::new(exe).exists() { let _ = fs::remove_file(exe); }
     gen.write_object_file(obj).expect("write obj");
@@ -35,5 +37,5 @@ fn enum_as_i64_tag_basics() {
     let out = Command::new(exe).output().expect("run");
     assert!(out.status.success(), "program failed to run");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert_eq!(stdout, "2\n");
+    assert_eq!(stdout, "1\n2\n0\n");
 }

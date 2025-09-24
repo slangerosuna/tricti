@@ -12,7 +12,7 @@ fn enum_payload_basic() {
     let src = r#"
         Color :: enum { Red, Green: i64, Blue }
         main :: () => {
-            c: Color := Color::Green(42)
+            c := Color::Green(42)
             v := match c { Color::Red => -1, Color::Green => 100, Color::Blue => -2 }
             println(v)
         }

@@ -5,12 +5,42 @@
 print :: (x) => { println(x) }
 
 # Basic memory helpers (compiler maps to malloc/free for now)
-alloc :: (n: i64) -> *i8 => { 0 }
-dealloc :: (p: *i8) -> none => { }
+extern alloc :: (i64) -> *i64
+extern dealloc :: (*i64) -> none
 
 # Vector utilities (stubs)
 # Placeholder utility
 id :: (x: i64) -> i64 => x
+
+
+# Integer remainder until `%` operator is supported
+rem_i64 :: (a: i64, b: i64) -> i64 => {
+	q := a / b
+	a - q * b
+}
+
+# Small math helpers (replace with non-branching versions when xor, or, and, etc. added) (also generics when added)
+abs_i64 :: (x: i64) -> i64 => { if x < 0 { -x } else { x } }
+min_i64 :: (a: i64, b: i64) -> i64 => { if a < b { a } else { b } }
+max_i64 :: (a: i64, b: i64) -> i64 => { if a > b { a } else { b } }
+
+
+# Errors and assertions
+# Print a message and terminate the process with non-zero status
+panic :: (msg: string) -> none => {
+	println("Assertion failed:", msg)
+	exit(1)
+}
+
+# Assert a condition holds; otherwise panic with message
+assert :: (cond: bool, msg: string) -> none => {
+	if !cond { panic(msg) }
+}
+
+# Assert equality for i64 values; otherwise panic
+assert_eq_i64 :: (a: i64, b: i64, msg: string) -> none => {
+	if a ~= b { panic(msg) }
+}
 
 
 # Slices (prototype): minimal constructor for i64 slices
@@ -19,4 +49,36 @@ id :: (x: i64) -> i64 => x
 slice_i64_from :: (arr: [i64; 5], len: i64) -> slice_i64 => {
 	{ ptr: arr, len: len }
 }
+
+# Dynamic arrays (Vec)
+# This version is temporary until generics are implemented
+Vec_i64 :: struct { len: i64, ptr: *i64, cap: i64 }
+new_vec_i64 :: () -> Vec_i64 => { { len: 0, ptr: 0, cap: 0 } }
+
+realloc_i64 :: (old_ptr: *i64, len: i64, new_cap: i64) -> *i64 => {
+	new_ptr := alloc(new_cap * 8)
+	for i in 0:len {
+		new_ptr[i] = old_ptr[i]
+	}
+	if old_ptr ~= 0 { dealloc(old_ptr) }
+	new_ptr
+}
+
+vec_push_i64 :: (v: *Vec_i64, val: i64) -> none => {
+	if v.len == v.cap {
+		new_cap := if v.cap == 0 { 1 } else { v.cap * 2 }
+		v.ptr = realloc_i64(v.ptr, v.len, new_cap)
+		v.cap = new_cap
+	}
+	v.ptr[v.len] = val
+	v.len = v.len + 1
+}
+
+vec_pop_i64 :: (v: *Vec_i64) -> i64 => {
+	if v.len == 0 { panic("pop from empty vec") }
+	v.len = v.len - 1
+	v.ptr[v.len]
+}
+
+vec_len_i64 :: (v: *Vec_i64) -> i64 => { v.len }
 

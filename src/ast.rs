@@ -16,6 +16,7 @@ pub enum Statement {
         name: String,
         type_annotation: Option<Type>,
         value: ConstValue,
+        extern_linkage: Option<String>,
     },
     Assignment {
         target: Expression,

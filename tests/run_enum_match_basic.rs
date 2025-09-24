@@ -12,7 +12,7 @@ fn enum_match_basic() {
     let src = r#"
         Color :: enum { Red, Green, Blue }
         main :: () => {
-            c: Color := Color::Green
+            c := Color::Green
             v := match c { Color::Red => 10, Color::Green => 20, Color::Blue => 30 }
             println(v)
         }

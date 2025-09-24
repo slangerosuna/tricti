@@ -5,7 +5,7 @@ identifier   = @{ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
 integer      = @{ ASCII_DIGIT+ }
 float        = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 number       = { float | integer }
-string       = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+string       = @{ "r"? ~ ("\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"") | ("\"" ~ (!"\"" ~ !"\n" ~ (ANY | "\\\""))* ~ "\"") }
 boolean      = @{ "true" | "false" }
 
 program      = { SOI ~ statement* ~ EOI }
@@ -66,7 +66,7 @@ function_body = { expression | "{" ~ statement* ~ "}" }
 assignment_op = { "=" | "*=" | "/=" | "+=" | "-=" | ".*=" | "./=" | "\\=" }
 assignment    = { expression ~ assignment_op ~ expression }
 variable_decl  = { identifier ~ (":" ~ type)? ~ ":=" ~ expression }
-const_decl    = { identifier ~ (":" ~ type)? ~ "::" ~ (type | expression) }
+const_decl    = { ("extern" ~ string?)? ~ identifier ~ (":" ~ type)? ~ "::" ~ (type | expression) }
 
 shader   = { ("vert" | "frag" | "comp") ~ "{" ~ (const_decl | shader_field)* ~ "}" }
 shader_field = { identifier ~ ":" ~ type ~ ","? }

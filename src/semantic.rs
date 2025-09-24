@@ -136,7 +136,12 @@ impl SemanticContext {
             is_async: false,
         });
         
-        // Add built-in types
+        // Process exit (libc)
+        context.functions.insert("exit".to_string(), FunctionSignature {
+            parameters: vec![Type::Identifier("i32".to_string())],
+            return_type: Type::None,
+            is_async: false,
+        });
         context.types.insert("i32".to_string(), Type::Identifier("i32".to_string()));
         context.types.insert("i64".to_string(), Type::Identifier("i64".to_string()));
         context.types.insert("f32".to_string(), Type::Identifier("f32".to_string()));
@@ -224,12 +229,6 @@ fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> 
             match value {
                 ConstValue::Type(type_def) => {
                     context.types.insert(name.clone(), type_def.clone());
-                    // Also expose enum variants as constants: Type_Variant : i64
-                    if let Type::Enum { variants, .. } = type_def {
-                        for vname in variants.keys() {
-                            context.define_variable(format!("{}_{}", name, vname), Type::Identifier("i64".to_string()));
-                        }
-                    }
                     // If this is a trait type definition, register trait info too
                     if let Type::Trait { associated_types, methods } = type_def {
                         let ti = TraitInfo { associated_types: associated_types.clone(), methods: methods.clone() };
@@ -305,7 +304,12 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
         Statement::ModuleDecl { name: _, items } => {
             if let Some(stmts) = items { for s in stmts { analyze_statement(s, context)?; } }
         }
-        Statement::ConstDecl { name, type_annotation, value } => {
+        Statement::ConstDecl { name, type_annotation, value, extern_linkage: _extern_linkage } => {
+            if let ConstValue::Type(Type::Function { parameters, return_type }) = &value {
+                let param_types = parameters.clone();
+                let ret_type = *return_type.clone();
+                context.functions.insert(name.clone(), FunctionSignature { parameters: param_types, return_type: ret_type, is_async: false });
+            }
             match value {
                 ConstValue::Expression(Expression::Function { parameters, return_type, body, .. }) => {
                     // Analyze function body with parameter bindings and expected return type
@@ -552,7 +556,7 @@ fn types_match_with_assoc_and_self(expected: &Type, found: &Type, assoc: &HashMa
     e == f
 }
 
-fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result<Type, SemanticError> {
+fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Result<Type, SemanticError> {
     match expr {
         Expression::Literal(literal) => {
             Ok(match literal {
@@ -564,21 +568,23 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
         }
         
         Expression::Identifier(name) => {
+            // Heuristic: enum variant static path lowered by parser as Identifier("Type_Variant").
+            // If it matches a known enum type and existing variant name, treat as i64 tag.
+            if let Some((tname, vname)) = name.split_once('_') {
+                if let Some(ty) = context.types.get(tname).cloned() {
+                    if let Type::Enum { variants, .. } = ty {
+                        if variants.contains_key(vname) {
+                            return Ok(Type::Identifier("i64".to_string()));
+                        }
+                    }
+                }
+            }
             // Prefer variables; if not found, allow referencing functions as first-class values
             if let Some(v) = context.get_variable_type(name) {
                 Ok(v.clone())
             } else if let Some(sig) = context.get_function_signature(name) {
                 Ok(Type::Function { parameters: sig.parameters.clone(), return_type: Box::new(sig.return_type.clone()) })
             } else {
-                // Heuristic: enum variant static path lowered by parser as Identifier("Type_Variant").
-                // If it matches a known enum type and existing variant name, treat as i64 tag literal.
-                if let Some((tname, vname)) = name.split_once('_') {
-                    if let Some(Type::Enum { variants, .. }) = context.types.get(tname) {
-                        if variants.contains_key(vname) {
-                            return Ok(Type::Identifier("i64".to_string()));
-                        }
-                    }
-                }
                 Err(SemanticError::UndefinedVariable(name.clone()))
             }
         }
@@ -600,26 +606,28 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
                 Expression::Identifier(name) => {
                     // Enum variant constructor: Type::Variant(args...) lowered to Identifier("Type_Variant")
                     if let Some((tname, vname)) = name.split_once('_') {
-                        if let Some(Type::Enum { variants, .. }) = context.types.get(tname) {
-                            if let Some(payload_opt) = variants.get(vname) {
-                                match payload_opt {
-                                    Some(payload_ty) => {
-                                        if arguments.len() != 1 {
-                                            return Err(SemanticError::ArgumentCountMismatch { expected: 1, found: arguments.len() });
+                        if let Some(ty) = context.types.get(tname).cloned() {
+                            if let Type::Enum { variants, order } = ty {
+                                if let Some(payload_opt) = variants.get(vname).cloned() {
+                                    match payload_opt {
+                                        Some(payload_ty) => {
+                                            if arguments.len() != 1 {
+                                                return Err(SemanticError::ArgumentCountMismatch { expected: 1, found: arguments.len() });
+                                            }
+                                            let arg_ty = infer_expression_type(&arguments[0].value, context)?;
+                                            if !types_compatible(&payload_ty, &arg_ty) {
+                                                return Err(SemanticError::TypeMismatch { expected: payload_ty.clone(), found: arg_ty });
+                                            }
                                         }
-                                        let arg_ty = infer_expression_type(&arguments[0].value, context)?;
-                                        if !types_compatible(payload_ty, &arg_ty) {
-                                            return Err(SemanticError::TypeMismatch { expected: payload_ty.clone(), found: arg_ty });
+                                        None => {
+                                            if !arguments.is_empty() {
+                                                return Err(SemanticError::ArgumentCountMismatch { expected: 0, found: arguments.len() });
+                                            }
                                         }
                                     }
-                                    None => {
-                                        if !arguments.is_empty() {
-                                            return Err(SemanticError::ArgumentCountMismatch { expected: 0, found: arguments.len() });
-                                        }
-                                    }
+                                    // Constructors evaluate to enum struct
+                                    return Ok(Type::Enum { variants, order });
                                 }
-                                // Constructors evaluate to i64 tag for now
-                                return Ok(Type::Identifier("i64".to_string()));
                             }
                         }
                     }
@@ -636,9 +644,9 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
                             // Peel pointers to get the base identifier type name
                             let base_ty_name = peel_to_identifier_name(&recv_ty);
                             if let Some(type_name) = base_ty_name {
-                                if let Some(impls_for_trait) = context.trait_impls.get(trait_name) {
-                                    if let Some(info) = impls_for_trait.get(&type_name) {
-                                        if let Some(sig) = info.methods.get(method_name) {
+                                if let Some(impls_for_trait) = context.trait_impls.get(trait_name).cloned() {
+                                    if let Some(info) = impls_for_trait.get(&type_name).cloned() {
+                                        if let Some(sig) = info.methods.get(method_name).cloned() {
                                             // Validate arg count and types
                                             if arguments.len() != sig.parameters.len() {
                                                 return Err(SemanticError::ArgumentCountMismatch { expected: sig.parameters.len(), found: arguments.len() });
@@ -658,7 +666,8 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
                         // Fallthrough to plain function lookup if not resolved
                     }
 
-                    let signature = context.get_function_signature(name)
+                    let signature_opt = context.get_function_signature(name).cloned();
+                    let signature = signature_opt
                         .ok_or_else(|| SemanticError::UndefinedFunction(name.clone()))?;
 
                     if arguments.len() != signature.parameters.len() {
@@ -695,8 +704,8 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
                     let base_ty_name = peel_to_identifier_name(&recv_expr_ty);
                     if let Some(type_name) = base_ty_name {
                         // Inherent impl first
-                        if let Some(inh) = context.inherent_impls.get(&type_name) {
-                            if let Some(sig) = inh.methods.get(field) {
+                        if let Some(inh) = context.inherent_impls.get(&type_name).cloned() {
+                            if let Some(sig) = inh.methods.get(field).cloned() {
                                 // Expect signature includes receiver as first param; args must match remaining
                                 if sig.parameters.len() == 0 || arguments.len() != sig.parameters.len() - 1 {
                                     return Err(SemanticError::ArgumentCountMismatch { expected: sig.parameters.len() - 1, found: arguments.len() });
@@ -712,11 +721,11 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
                         }
 
                         // Otherwise, search trait impls for this type
-                        let mut candidates: Vec<(&String, &FunctionSignature)> = Vec::new();
+                        let mut candidates: Vec<(&String, FunctionSignature)> = Vec::new();
                         for (trait_name, impls_for_trait) in &context.trait_impls {
                             if let Some(info) = impls_for_trait.get(&type_name) {
                                 if let Some(sig) = info.methods.get(field) {
-                                    candidates.push((trait_name, sig));
+                                    candidates.push((trait_name, (*sig).clone()));
                                 }
                             }
                         }
@@ -747,13 +756,9 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
         }
         
         Expression::Match { value, arms } => {
-            let _ = infer_expression_type(value, context)?;
+            let value_type = infer_expression_type(value, context)?;
             for arm in arms {
-                // Allow wildcard pattern '_'
-                let is_wildcard = matches!(arm.pattern, Expression::Identifier(ref s) if s == "_");
-                if !is_wildcard {
-                    let _ = infer_expression_type(&arm.pattern, context)?;
-                }
+                analyze_pattern(&arm.pattern, context, &value_type)?;
                 let _ = infer_expression_type(&arm.body, context)?;
             }
             // For now matches yield i64 (we lower branches to i64 and phi them)
@@ -769,9 +774,11 @@ fn infer_expression_type(expr: &Expression, context: &SemanticContext) -> Result
             }
             // If base is an identifier type referring to a struct, pick field type
             if let Type::Identifier(ref name) = base_ty {
-                if let Some(Type::Struct { fields }) = context.types.get(name) {
-                    if let Some(fty) = fields.get(field) {
-                        return Ok(fty.clone());
+                if let Some(ty) = context.types.get(name).cloned() {
+                    if let Type::Struct { fields } = ty {
+                        if let Some(fty) = fields.get(field) {
+                            return Ok(fty.clone());
+                        }
                     }
                 }
             }
@@ -1001,6 +1008,76 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
         }
         (Type::None, _) | (_, Type::None) => true,
     _ => expected == found,
+    }
+}
+
+fn analyze_pattern(pattern: &Expression, context: &mut SemanticContext, scrutinee_type: &Type) -> Result<(), SemanticError> {
+    match pattern {
+        Expression::Identifier(name) if name == "_" => Ok(()),
+        Expression::Identifier(name) => {
+            // Enum variant: Color_Red
+            if let Some((_tname, vname)) = name.split_once('_') {
+                if let Type::Enum { variants, .. } = scrutinee_type {
+                    if variants.contains_key(vname) {
+                        Ok(())
+                    } else {
+                        Err(SemanticError::UndefinedVariable(name.clone()))
+                    }
+                } else {
+                    Err(SemanticError::TypeMismatch {
+                        expected: Type::None,
+                        found: scrutinee_type.clone(),
+                    })
+                }
+            } else {
+                Err(SemanticError::UndefinedVariable(name.clone()))
+            }
+        }
+        Expression::Call { function, arguments } => {
+            // Destructuring: Color_Green(x)
+            if let Expression::Identifier(func_name) = &**function {
+            if let Some((_tname, vname)) = func_name.split_once('_') {
+                    if let Type::Enum { variants, .. } = scrutinee_type {
+                        if let Some(payload_type_opt) = variants.get(vname) {
+                            if let Some(payload_type) = payload_type_opt {
+                                // Bind each argument as a variable of payload_type
+                                for arg in arguments {
+                                    if arg.name.is_some() {
+                                        return Err(SemanticError::UndefinedVariable("named arg in pattern".to_string()));
+                                    }
+                                    match &arg.value {
+                                        Expression::Identifier(var_name) => {
+                                            if var_name == "_" {
+                                                // Wildcard, no binding
+                                            } else {
+                                                // Bind variable
+                                                context.variables.insert(var_name.clone(), payload_type.clone());
+                                            }
+                                        }
+                                        _ => return Err(SemanticError::UndefinedVariable("invalid pattern".to_string())),
+                                    }
+                                }
+                                Ok(())
+                            } else {
+                                Err(SemanticError::UndefinedVariable(format!("{} has no payload", func_name)))
+                            }
+                        } else {
+                            Err(SemanticError::UndefinedVariable(func_name.clone()))
+                        }
+                    } else {
+                        Err(SemanticError::TypeMismatch {
+                            expected: Type::None,
+                            found: scrutinee_type.clone(),
+                        })
+                    }
+                } else {
+                    Err(SemanticError::UndefinedVariable("invalid pattern".to_string()))
+                }
+            } else {
+                Err(SemanticError::UndefinedVariable("invalid pattern".to_string()))
+            }
+        }
+        _ => Err(SemanticError::UndefinedVariable(format!("unknown pattern: {:?}", pattern))),
     }
 }
 
