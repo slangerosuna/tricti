@@ -14,19 +14,17 @@ fn iterate_slice_bool() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let src = r#"
-        slice_bool := {
-            ptr: &bool,
-            len: i64,
-        }
+    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let user = r#"
         v: [bool; 5] := [true, false, true, true, false]
-        s: slice_bool :: { ptr: v, len: 5 }
+        s: slice_bool := slice_bool_from(v, 5)
         count := 0
         for b in s {
             if b { count = count + 1 }
         }
         println(count)
     "#;
+    let src = format!("{}\n{}", prelude, user);
 
     let program = parser::parse(src.to_string());
     let sem = semantic::analyze_program(&program).expect("semantic analysis");
