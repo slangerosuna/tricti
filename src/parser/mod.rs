@@ -4,7 +4,7 @@ use pest_derive::*;
 use std::collections::HashMap;
 
 #[derive(Parser)]
-#[grammar = "parser/grammar.pest"]
+#[grammar = "src/parser/grammar.pest"]
 struct PnParser;
 
 pub fn parse(file: String) -> Program {

@@ -176,6 +176,35 @@ impl SemanticContext {
             },
         );
 
+        // bool slice helpers
+        context.functions.insert(
+            "slice_len_bool".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier("slice_bool".to_string())],
+                return_type: Type::Identifier("i64".to_string()),
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "slice_is_empty_bool".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier("slice_bool".to_string())],
+                return_type: Type::Identifier("bool".to_string()),
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "slice_get_bool".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Identifier("slice_bool".to_string()),
+                    Type::Identifier("i64".to_string()),
+                ],
+                return_type: Type::Identifier("bool".to_string()),
+                is_async: false,
+            },
+        );
+
         // Process exit (libc)
         context.functions.insert(
             "exit".to_string(),
@@ -217,6 +246,25 @@ impl SemanticContext {
                         Type::Pointer {
                             is_mutable: false,
                             pointee: Box::new(Type::Identifier("i64".to_string())),
+                        },
+                    );
+                    m.insert("len".to_string(), Type::Identifier("i64".to_string()));
+                    m
+                },
+            },
+        );
+
+        // Minimal built-in slice for bool: { ptr: &bool, len: i64 }
+        context.types.insert(
+            "slice_bool".to_string(),
+            Type::Struct {
+                fields: {
+                    let mut m = HashMap::new();
+                    m.insert(
+                        "ptr".to_string(),
+                        Type::Pointer {
+                            is_mutable: false,
+                            pointee: Box::new(Type::Identifier("bool".to_string())),
                         },
                     );
                     m.insert("len".to_string(), Type::Identifier("i64".to_string()));

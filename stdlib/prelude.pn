@@ -50,6 +50,26 @@ slice_i64_from :: (arr: [i64; 5], len: i64) -> slice_i64 => {
 	{ ptr: arr, len: len }
 }
 
+# Prototype slice for bool
+slice_bool :: struct {
+	ptr: &bool,
+	len: i64,
+}
+
+slice_bool_from :: (arr: [bool; 5], len: i64) -> slice_bool => {
+	{ ptr: arr, len: len }
+}
+
+slice_len_bool :: (s: slice_bool) -> i64 => s.len
+
+slice_is_empty_bool :: (s: slice_bool) -> bool => s.len == 0
+
+slice_get_bool :: (s: slice_bool, idx: i64) -> bool => {
+	if idx < 0 { panic("slice_bool index negative") }
+	if idx >= s.len { panic("slice_bool index out of bounds") }
+	s.ptr[idx]
+}
+
 # Dynamic arrays (Vec)
 # This version is temporary until generics are implemented
 Vec_i64 :: struct { len: i64, ptr: *i64, cap: i64 }

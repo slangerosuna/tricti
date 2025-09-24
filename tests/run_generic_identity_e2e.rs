@@ -9,16 +9,17 @@ fn clang_available() -> bool {
 }
 
 #[test]
-fn run_identity_e2e() {
+fn run_generic_identity_e2e() {
     if !clang_available() {
         eprintln!("clang not found; skipping");
         return;
     }
     let src = r#"
-        id :: (x: i64) -> i64 => { ret x }
+        id :: <T> (x: T) -> T => { ret x }
 
-        main :: () -> i64 => {
-            id(42)
+        main :: () => {
+            assert(id("hello") == "hello")
+            println(id(42))
         }
     "#;
 

@@ -54,3 +54,50 @@ fn iterate_slice_bool() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(stdout, "3\n");
 }
+
+#[test]
+fn slice_bool_helpers() {
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
+    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let user = r#"
+        v: [bool; 4] := [true, true, false, false]
+        s: slice_bool := slice_bool_from(v, 4)
+        println(slice_len_bool(s))
+        println(slice_is_empty_bool(s))
+        println(slice_get_bool(s, 0))
+        println(slice_get_bool(s, 2))
+    "#;
+    let src = format!("{}\n{}", prelude, user);
+
+    let program = parser::parse(src.to_string());
+    let sem = semantic::analyze_program(&program).expect("semantic analysis");
+
+    let context = Context::create();
+    let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
+    gen.generate_program(&program).expect("codegen");
+
+    let obj = "tests/tmp_slice_bool_helpers.o";
+    let exe = "tests/tmp_slice_bool_helpers.out";
+    if Path::new(obj).exists() {
+        let _ = fs::remove_file(obj);
+    }
+    if Path::new(exe).exists() {
+        let _ = fs::remove_file(exe);
+    }
+    gen.write_object_file(obj).expect("write obj");
+
+    let status = Command::new("clang")
+        .args(["-o", exe, obj])
+        .status()
+        .expect("link");
+    assert!(status.success(), "link failed");
+
+    let out = Command::new(exe).output().expect("run");
+    assert!(out.status.success(), "program failed to run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(stdout, "4\nfalse\ntrue\nfalse\n");
+}
+
