@@ -1,0 +1,4 @@
+```pest
+char_literal = "'" ~ (unicode_escape | any_char) ~ "'"
+unicode_escape = "\\" ~ ("u" ~ hex_digit{4} | "n" | "t" | "r" | "'" | "\\" )
+any_char = (!"'" ~ ANY_CHAR)

@@ -48,3 +48,10 @@ fn prints_char_literals() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(stdout, "A\nZ\n");
 }
+```rust
+#[test]
+fn test_char_literal() {
+    let input = "'\\u0041'"; // Represents 'A'
+    let result = parse(input);
+    assert_eq!(result, Ok(LiteralKind::Char(0x0041)));
+}
