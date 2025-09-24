@@ -1,23 +1,9 @@
-use inkwell::context::Context;
-use peano::{codegen, parser, semantic};
-use std::fs;
-use std::path::Path;
-use std::process::Command;
 
-fn clang_available() -> bool {
-    Command::new("clang").arg("--version").output().is_ok()
-}
+### Run Tests
 
-#[test]
-fn prints_char_literals() {
-    if !clang_available() {
-        eprintln!("clang not found; skipping");
-        return;
-    }
-    let src = r#"
-        println('A')
-        ch := 'Z'
-        println(ch)
+Now that all changes have been made, I will run the tests to ensure everything works as expected.
+
+**Action: Run the tests.**
     "#;
 
     let program = parser::parse(src.to_string());

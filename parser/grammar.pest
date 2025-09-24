@@ -1,4 +1,8 @@
+
+### Step 1: Extend the AST
+
+**Action: Update the AST to include `LiteralKind::Char`.**
 ```pest
-char_literal = "'" ~ (unicode_escape | any_char) ~ "'"
-unicode_escape = "\\" ~ ("u" ~ hex_digit{4} | "n" | "t" | "r" | "'" | "\\" )
-any_char = (!"'" ~ ANY_CHAR)
+char_literal = "'" ~ unicode_escape_sequence ~ "'"
+unicode_escape_sequence = "\\" ~ ("u" ~ hex_digit{4} | "n" | "t" | "r" | "'" | "\\" )
+hex_digit = ASCII_HEX_DIGIT

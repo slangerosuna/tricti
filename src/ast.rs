@@ -7,17 +7,8 @@ pub struct Program {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
-    VariableDecl {
-        name: String,
-        type_annotation: Option<Type>,
-        value: Expression,
-    },
-    ConstDecl {
-        name: String,
-        type_params: Vec<String>,
-        type_annotation: Option<Type>,
-        value: ConstValue,
-        extern_linkage: Option<String>,
+```rust
+Char(u32),
     },
     Assignment {
         target: Expression,
