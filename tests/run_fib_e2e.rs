@@ -1,14 +1,19 @@
-use peano::{parser, semantic, codegen};
 use inkwell::context::Context;
-use std::process::Command;
+use peano::{codegen, parser, semantic};
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
-fn clang_available() -> bool { Command::new("clang").arg("--version").output().is_ok() }
+fn clang_available() -> bool {
+    Command::new("clang").arg("--version").output().is_ok()
+}
 
 #[test]
 fn run_fib_e2e() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         fib :: (n: i64) -> i64 => {
             if n <= 1 {
@@ -29,12 +34,20 @@ fn run_fib_e2e() {
     let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
     gen.generate_program(&program).expect("codegen");
 
-    let obj = "tests/tmp_enum_basic.o"; let exe = "tests/tmp_enum_basic.out";
-    if Path::new(obj).exists() { let _ = fs::remove_file(obj); }
-    if Path::new(exe).exists() { let _ = fs::remove_file(exe); }
+    let obj = "tests/tmp_enum_basic.o";
+    let exe = "tests/tmp_enum_basic.out";
+    if Path::new(obj).exists() {
+        let _ = fs::remove_file(obj);
+    }
+    if Path::new(exe).exists() {
+        let _ = fs::remove_file(exe);
+    }
     gen.write_object_file(obj).expect("write obj");
 
-    let status = Command::new("clang").args(["-o", exe, obj]).status().expect("link");
+    let status = Command::new("clang")
+        .args(["-o", exe, obj])
+        .status()
+        .expect("link");
     assert!(status.success(), "link failed");
 
     let out = Command::new(exe).output().expect("run");

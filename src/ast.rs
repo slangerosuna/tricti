@@ -214,7 +214,10 @@ impl IntSuffix {
     }
 
     pub fn is_signed(&self) -> bool {
-        matches!(self, IntSuffix::I8 | IntSuffix::I16 | IntSuffix::I32 | IntSuffix::I64)
+        matches!(
+            self,
+            IntSuffix::I8 | IntSuffix::I16 | IntSuffix::I32 | IntSuffix::I64
+        )
     }
 }
 
@@ -234,10 +237,7 @@ impl IntegerLiteral {
     }
 
     pub fn bit_width(&self) -> u32 {
-        self.suffix
-            .as_ref()
-            .map(IntSuffix::bit_width)
-            .unwrap_or(64)
+        self.suffix.as_ref().map(IntSuffix::bit_width).unwrap_or(64)
     }
 
     pub fn is_signed(&self) -> bool {
@@ -318,7 +318,7 @@ pub enum Type {
         fields: HashMap<String, Type>,
     },
     Enum {
-        variants: HashMap<String, Option<Type>>,    
+        variants: HashMap<String, Option<Type>>,
         order: Vec<String>,
     },
     Trait {

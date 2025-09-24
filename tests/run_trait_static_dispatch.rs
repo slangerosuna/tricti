@@ -1,7 +1,7 @@
+use inkwell::context::Context;
+use peano::codegen::CodeGenerator;
 use peano::parser;
 use peano::semantic::analyze_program;
-use peano::codegen::CodeGenerator;
-use inkwell::context::Context;
 use std::process::Command;
 
 #[test]
@@ -16,7 +16,8 @@ fn trait_static_dispatch_e2e() {
             println(p.val())
             0
         }
-    "#.to_string();
+    "#
+    .to_string();
 
     let program = parser::parse(src);
     println!("AST: {:#?}", program);
@@ -31,7 +32,10 @@ fn trait_static_dispatch_e2e() {
     gen.write_object_file(obj).expect("obj");
 
     let bin = "/tmp/bplang_trait_static_dispatch_e2e";
-    let output = Command::new("clang").args([obj, "-o", bin]).output().expect("clang link");
+    let output = Command::new("clang")
+        .args([obj, "-o", bin])
+        .output()
+        .expect("clang link");
     assert!(output.status.success(), "clang failed: {:?}", output);
 
     let run = Command::new(bin).output().expect("run");

@@ -1,5 +1,5 @@
-use peano::parser;
 use peano::ast::*;
+use peano::parser;
 
 #[test]
 fn parse_trait_type_and_impl_for() {
@@ -24,7 +24,10 @@ fn parse_trait_type_and_impl_for() {
         Statement::ConstDecl { name, value, .. } => {
             assert_eq!(name, "my_iterator");
             match value {
-                ConstValue::Type(Type::Trait { associated_types, methods }) => {
+                ConstValue::Type(Type::Trait {
+                    associated_types,
+                    methods,
+                }) => {
                     assert!(associated_types.contains(&"T".to_string()));
                     assert!(methods.contains_key("next"));
                 }
@@ -36,7 +39,11 @@ fn parse_trait_type_and_impl_for() {
 
     // Check impl block
     match &program.statements[2] {
-        Statement::ImplBlock { trait_name, type_name, methods } => {
+        Statement::ImplBlock {
+            trait_name,
+            type_name,
+            methods,
+        } => {
             assert_eq!(trait_name.as_deref(), Some("my_iterator"));
             assert_eq!(type_name, "my_struct");
             assert_eq!(methods.len(), 1);

@@ -1,7 +1,7 @@
+use inkwell::context::Context;
+use peano::{codegen, parser, semantic};
 use std::fs;
 use std::path::Path;
-use peano::{parser, semantic, codegen};
-use inkwell::context::Context;
 
 #[test]
 fn compiles_minimal_program_to_object() {
@@ -13,9 +13,17 @@ fn compiles_minimal_program_to_object() {
     "#;
 
     let program = parser::parse(src.to_string());
-    assert_eq!(program.statements.len(), 3, "expected three statements, got {:?}", program);
+    assert_eq!(
+        program.statements.len(),
+        3,
+        "expected three statements, got {:?}",
+        program
+    );
     match &program.statements[2] {
-        peano::ast::Statement::Expression(peano::ast::Expression::Call { function, arguments }) => {
+        peano::ast::Statement::Expression(peano::ast::Expression::Call {
+            function,
+            arguments,
+        }) => {
             match function.as_ref() {
                 peano::ast::Expression::Identifier(name) => assert_eq!(name, "println"),
                 other => panic!("expected identifier function, got {:?}", other),
@@ -32,7 +40,9 @@ fn compiles_minimal_program_to_object() {
     gen.generate_program(&program).expect("codegen");
 
     let obj = "tests/tmp_min.o";
-    if Path::new(obj).exists() { let _ = fs::remove_file(obj); }
+    if Path::new(obj).exists() {
+        let _ = fs::remove_file(obj);
+    }
     gen.write_object_file(obj).expect("write obj");
     assert!(Path::new(obj).exists());
 }

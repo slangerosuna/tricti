@@ -1,7 +1,7 @@
+use inkwell::context::Context;
+use peano::{codegen, parser, semantic};
 use std::fs;
 use std::path::Path;
-use peano::{parser, semantic, codegen};
-use inkwell::context::Context;
 
 #[test]
 fn compiles_bool_and_ifexpr() {
@@ -20,7 +20,9 @@ fn compiles_bool_and_ifexpr() {
     gen.generate_program(&program).expect("codegen");
 
     let obj = "tests/tmp_bool_if.o";
-    if Path::new(obj).exists() { let _ = fs::remove_file(obj); }
+    if Path::new(obj).exists() {
+        let _ = fs::remove_file(obj);
+    }
     gen.write_object_file(obj).expect("write obj");
     assert!(Path::new(obj).exists());
 }

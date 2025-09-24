@@ -1,4 +1,4 @@
-use peano::{parser};
+use peano::parser;
 
 #[test]
 fn print_enum_ast() {

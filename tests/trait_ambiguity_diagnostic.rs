@@ -14,13 +14,18 @@ fn ambiguous_trait_method_errors() {
             println(t.foo())
             0
         }
-    "#.to_string();
+    "#
+    .to_string();
 
     let program = parser::parse(src);
     println!("AST: {:#?}", program);
     let err = analyze_program(&program).expect_err("expected ambiguity error");
     match err {
-        SemanticError::AmbiguousMethod { type_name, method, traits } => {
+        SemanticError::AmbiguousMethod {
+            type_name,
+            method,
+            traits,
+        } => {
             assert_eq!(type_name, "T");
             assert_eq!(method, "foo");
             assert_eq!(traits.len(), 2);

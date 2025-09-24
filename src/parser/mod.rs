@@ -1,16 +1,16 @@
+use crate::ast::*;
 use pest::*;
 use pest_derive::*;
 use std::collections::HashMap;
-use crate::ast::*;
 
 #[derive(Parser)]
 #[grammar = "parser/grammar.pest"]
 struct PnParser;
 
 pub fn parse(file: String) -> Program {
-    let successful_parse = PnParser::parse(Rule::program, &file)
-        .unwrap_or_else(|e| panic!("Parse error: {}", e));
-    
+    let successful_parse =
+        PnParser::parse(Rule::program, &file).unwrap_or_else(|e| panic!("Parse error: {}", e));
+
     let program_pair = successful_parse.into_iter().next().unwrap();
     parse_program(program_pair)
 }
@@ -77,14 +77,16 @@ fn parse_integer_literal(pair: pest::iterators::Pair<Rule>) -> Literal {
         panic!("integer literal missing digits: {}", text);
     }
 
-    let value = digits.parse::<u128>().unwrap_or_else(|_| panic!("invalid integer literal: {}", text));
+    let value = digits
+        .parse::<u128>()
+        .unwrap_or_else(|_| panic!("invalid integer literal: {}", text));
 
     Literal::integer_from_parts(text.to_string(), value, suffix_enum)
 }
 
 fn parse_program(pair: pest::iterators::Pair<Rule>) -> Program {
     let mut statements = Vec::new();
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::statement => {
@@ -94,23 +96,23 @@ fn parse_program(pair: pest::iterators::Pair<Rule>) -> Program {
             _ => {}
         }
     }
-    
+
     Program { statements }
 }
 
 fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
     let inner_pair = pair.into_inner().next().unwrap();
-    
+
     match inner_pair.as_rule() {
         Rule::variable_decl => parse_variable_decl(inner_pair),
         Rule::const_decl => parse_const_decl(inner_pair),
         Rule::assignment => parse_assignment(inner_pair),
-    Rule::return_statement => parse_return_statement(inner_pair),
-    Rule::break_statement => parse_break_statement(inner_pair),
-    Rule::for_loop => parse_for_loop(inner_pair),
-    Rule::use_statement => parse_use_statement(inner_pair),
-    Rule::mod_decl => parse_mod_decl(inner_pair),
-    Rule::impl_block => parse_impl_block(inner_pair),
+        Rule::return_statement => parse_return_statement(inner_pair),
+        Rule::break_statement => parse_break_statement(inner_pair),
+        Rule::for_loop => parse_for_loop(inner_pair),
+        Rule::use_statement => parse_use_statement(inner_pair),
+        Rule::mod_decl => parse_mod_decl(inner_pair),
+        Rule::impl_block => parse_impl_block(inner_pair),
         Rule::expression => Statement::Expression(parse_expression(inner_pair)),
         _ => panic!("Unexpected statement rule: {:?}", inner_pair.as_rule()),
     }
@@ -119,10 +121,10 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
 fn parse_variable_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut inner = pair.into_inner();
     let name = inner.next().unwrap().as_str().to_string();
-    
+
     let mut type_annotation = None;
     let mut value_pair = None;
-    
+
     for pair in inner {
         match pair.as_rule() {
             Rule::r#type => type_annotation = Some(parse_type(pair)),
@@ -130,9 +132,9 @@ fn parse_variable_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
             _ => {}
         }
     }
-    
+
     let value = parse_expression(value_pair.unwrap());
-    
+
     Statement::VariableDecl {
         name,
         type_annotation,
@@ -142,7 +144,7 @@ fn parse_variable_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
 
 fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut inner = pair.into_inner();
-    
+
     let mut extern_linkage = None;
     let first = inner.next().unwrap();
     let name;
@@ -159,10 +161,10 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     } else {
         name = first.as_str().to_string();
     }
-    
+
     let mut type_annotation = None;
     let mut value_pair = None;
-    
+
     for pair in inner {
         match pair.as_rule() {
             Rule::r#type => {
@@ -175,7 +177,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
             _ => {}
         }
     }
-    
+
     let value = if let Some(pair) = value_pair {
         match pair.as_rule() {
             Rule::r#type => ConstValue::Type(parse_type(pair)),
@@ -185,7 +187,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     } else {
         panic!("Expected const value");
     };
-    
+
     Statement::ConstDecl {
         name,
         type_annotation,
@@ -210,9 +212,9 @@ fn parse_assignment(pair: pest::iterators::Pair<Rule>) -> Statement {
         "\\=" => AssignmentOp::ModAssign,
         _ => panic!("Unknown assignment operator: {}", operator_str),
     };
-    
+
     let value = parse_expression(inner.next().unwrap());
-    
+
     Statement::Assignment {
         target,
         operator,
@@ -228,11 +230,11 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::comparison => parse_binary_expression(pair),
         Rule::addition => parse_binary_expression(pair),
         Rule::multiplication => parse_binary_expression(pair),
-    Rule::with_range => parse_with_range(pair),
-    Rule::unary => parse_unary(pair),
+        Rule::with_range => parse_with_range(pair),
+        Rule::unary => parse_unary(pair),
         Rule::post_fix => parse_postfix_expression(pair),
         Rule::primary => parse_primary_expression(pair),
-    Rule::function => parse_function(pair),
+        Rule::function => parse_function(pair),
         Rule::literal => parse_literal(pair),
         Rule::identifier => Expression::Identifier(pair.as_str().to_string()),
         Rule::number => parse_number(pair),
@@ -240,9 +242,9 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::float => Expression::Literal(Literal::Float(pair.as_str().parse().unwrap())),
         Rule::string => {
             let content = pair.as_str();
-            let unquoted = &content[1..content.len()-1]; // Remove quotes
+            let unquoted = &content[1..content.len() - 1]; // Remove quotes
             Expression::Literal(Literal::String(unquoted.to_string()))
-        },
+        }
         Rule::char => {
             let content = pair.as_str();
             let ch = parse_char_literal(content);
@@ -271,8 +273,14 @@ fn parse_with_range(pair: pest::iterators::Pair<Rule>) -> Expression {
     let end = parse_expression(inners[1].clone());
     let step = if inners.len() >= 3 {
         Some(Box::new(parse_expression(inners[2].clone())))
-    } else { None };
-    Expression::Range { start: Box::new(start), end: Box::new(end), step }
+    } else {
+        None
+    };
+    Expression::Range {
+        start: Box::new(start),
+        end: Box::new(end),
+        step,
+    }
 }
 
 fn parse_unary(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -301,13 +309,20 @@ fn parse_unary(pair: pest::iterators::Pair<Rule>) -> Expression {
                     "&" => UnaryOperator::AddressOf,
                     _ => UnaryOperator::Not,
                 };
-                return Expression::UnaryOp { operator: op, operand: Box::new(operand_expr) };
+                return Expression::UnaryOp {
+                    operator: op,
+                    operand: Box::new(operand_expr),
+                };
             }
             _ => {}
         }
     }
     // Fallback: just parse as expression
-    if let Some(p) = first { parse_expression(p) } else { Expression::Literal(Literal::integer_zero()) }
+    if let Some(p) = first {
+        parse_expression(p)
+    } else {
+        Expression::Literal(Literal::integer_zero())
+    }
 }
 
 fn parse_binary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -338,21 +353,21 @@ fn parse_binary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
             ">=" => BinaryOperator::GreaterEqual,
             _ => panic!("Unknown binary operator: {}", op_pair.as_str()),
         };
-        
+
         left = Expression::BinaryOp {
             left: Box::new(left),
             operator,
             right: Box::new(right),
         };
     }
-    
+
     left
 }
 
 fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut inner = pair.into_inner();
     let mut expr = parse_expression(inner.next().unwrap());
-    
+
     for suffix_pair in inner {
         match suffix_pair.as_rule() {
             Rule::call_suffix => {
@@ -376,7 +391,10 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
             Rule::field_suffix => {
                 let mut it2 = suffix_pair.into_inner();
                 let name = it2.next().unwrap().as_str().to_string();
-                expr = Expression::FieldAccess { object: Box::new(expr), field: name };
+                expr = Expression::FieldAccess {
+                    object: Box::new(expr),
+                    field: name,
+                };
             }
             _ if suffix_pair.as_str().starts_with("[") => {
                 // Indexing suffix: "[ expr (, expr)* ]" possibly repeated; grammar emits it as part of post_fix
@@ -386,22 +404,27 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
                     // inner pairs are expressions
                     indices.push(parse_expression(idx));
                 }
-                expr = Expression::Index { object: Box::new(expr), indices };
+                expr = Expression::Index {
+                    object: Box::new(expr),
+                    indices,
+                };
             }
             _ => {}
         }
     }
-    
+
     expr
 }
 
 fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let inner_pair = pair.into_inner().next().unwrap();
     match inner_pair.as_rule() {
-        Rule::block => Expression::Block { statements: parse_block(inner_pair) },
+        Rule::block => Expression::Block {
+            statements: parse_block(inner_pair),
+        },
         Rule::function => parse_function(inner_pair),
-    Rule::conditional => parse_if_expression(inner_pair),
-    Rule::r#match => parse_match_expression(inner_pair),
+        Rule::conditional => parse_if_expression(inner_pair),
+        Rule::r#match => parse_match_expression(inner_pair),
         Rule::matrix => parse_matrix(inner_pair),
         _ => parse_expression(inner_pair),
     }
@@ -431,13 +454,22 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut arms: Vec<MatchArm> = Vec::new();
     // Remaining are pattern/body expression pairs; punctuation tokens are silent in grammar
     loop {
-        let pat_pair = match it.next() { Some(p) => p, None => break };
-        let body_pair = match it.next() { Some(p) => p, None => break };
+        let pat_pair = match it.next() {
+            Some(p) => p,
+            None => break,
+        };
+        let body_pair = match it.next() {
+            Some(p) => p,
+            None => break,
+        };
         let pattern = parse_expression(pat_pair);
         let body = parse_expression(body_pair);
         arms.push(MatchArm { pattern, body });
     }
-    Expression::Match { value: Box::new(value), arms }
+    Expression::Match {
+        value: Box::new(value),
+        arms,
+    }
 }
 
 fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -460,8 +492,13 @@ fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Expression {
             let mut fields: HashMap<String, Expression> = HashMap::new();
             let mut it = inner_pair.into_inner();
             loop {
-                let name_pair = match it.next() { Some(p) => p, None => break };
-                if name_pair.as_rule() != Rule::identifier { break; }
+                let name_pair = match it.next() {
+                    Some(p) => p,
+                    None => break,
+                };
+                if name_pair.as_rule() != Rule::identifier {
+                    break;
+                }
                 let name = name_pair.as_str().to_string();
                 // Expect a ':' then an expression; grammar yields the expression directly
                 let expr_pair = it.next().expect("struct literal missing field expression");
@@ -482,7 +519,7 @@ fn parse_number(pair: pest::iterators::Pair<Rule>) -> Expression {
 fn parse_argument(pair: pest::iterators::Pair<Rule>) -> Argument {
     let mut inner = pair.into_inner();
     let first_pair = inner.next().unwrap();
-    
+
     if let Some(second_pair) = inner.next() {
         // Named argument
         Argument {
@@ -566,19 +603,33 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
         match first.as_rule() {
             Rule::r#type => {
                 // This happens when grammar flattens; fall back
-                Type::Pointer { is_mutable: false, pointee: Box::new(parse_type(first)) }
+                Type::Pointer {
+                    is_mutable: false,
+                    pointee: Box::new(parse_type(first)),
+                }
             }
             _ => {
                 let text = first.as_str();
                 let ty_pair = it.next().unwrap_or_else(|| panic!("pointer missing type"));
                 if text.starts_with("&mut") {
-                    Type::Pointer { is_mutable: true, pointee: Box::new(parse_type(ty_pair)) }
+                    Type::Pointer {
+                        is_mutable: true,
+                        pointee: Box::new(parse_type(ty_pair)),
+                    }
                 } else if text.starts_with('&') {
-                    Type::Pointer { is_mutable: false, pointee: Box::new(parse_type(ty_pair)) }
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(parse_type(ty_pair)),
+                    }
                 } else if text.starts_with('*') {
-                    Type::RawPointer { pointee: Box::new(parse_type(ty_pair)) }
+                    Type::RawPointer {
+                        pointee: Box::new(parse_type(ty_pair)),
+                    }
                 } else {
-                    Type::Pointer { is_mutable: false, pointee: Box::new(parse_type(ty_pair)) }
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(parse_type(ty_pair)),
+                    }
                 }
             }
         }
@@ -586,12 +637,16 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
 
     fn parse_optional(p: pest::iterators::Pair<Rule>) -> Type {
         let inner_ty = p.into_inner().next().map(parse_type).unwrap();
-        Type::Optional { inner: Box::new(inner_ty) }
+        Type::Optional {
+            inner: Box::new(inner_ty),
+        }
     }
 
     fn parse_result(p: pest::iterators::Pair<Rule>) -> Type {
         let inner_ty = p.into_inner().next().map(parse_type).unwrap();
-        Type::Result { inner: Box::new(inner_ty) }
+        Type::Result {
+            inner: Box::new(inner_ty),
+        }
     }
 
     fn parse_matrix_type(p: pest::iterators::Pair<Rule>) -> Type {
@@ -611,7 +666,10 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
                 _ => {}
             }
         }
-        Type::Matrix { element_type: Box::new(elem_ty), dimensions: dims }
+        Type::Matrix {
+            element_type: Box::new(elem_ty),
+            dimensions: dims,
+        }
     }
 
     fn parse_function_type(p: pest::iterators::Pair<Rule>) -> Type {
@@ -634,13 +692,17 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
             }
         }
         let ret_ty = ret.unwrap_or(Type::None);
-        Type::Function { parameters: params, return_type: Box::new(ret_ty) }
+        Type::Function {
+            parameters: params,
+            return_type: Box::new(ret_ty),
+        }
     }
 
     fn parse_trait_type(p: pest::iterators::Pair<Rule>) -> Type {
         let mut associated_types: Vec<String> = Vec::new();
         let mut methods: HashMap<String, Type> = HashMap::new();
-        for item in p.into_inner() { // trait_assoc or trait_method directly (trait_items is silent)
+        for item in p.into_inner() {
+            // trait_assoc or trait_method directly (trait_items is silent)
             match item.as_rule() {
                 Rule::trait_assoc => {
                     let mut it = item.into_inner();
@@ -657,27 +719,34 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
                 _ => {}
             }
         }
-        Type::Trait { associated_types, methods }
+        Type::Trait {
+            associated_types,
+            methods,
+        }
     }
 
     let src_text = pair.as_str().to_string();
     let mut it = pair.into_inner();
     if let Some(inner_pair) = it.next() {
         match inner_pair.as_rule() {
-        Rule::identifier => Type::Identifier(inner_pair.as_str().to_string()),
-    Rule::r#struct => parse_struct(inner_pair),
-    Rule::r#enum => parse_enum(inner_pair),
-        Rule::pointer => parse_pointer(inner_pair),
-        Rule::optional => parse_optional(inner_pair),
-        Rule::result => parse_result(inner_pair),
-        Rule::matrix_type => parse_matrix_type(inner_pair),
-    Rule::function_type => parse_function_type(inner_pair),
-    Rule::trait_type => parse_trait_type(inner_pair),
+            Rule::identifier => Type::Identifier(inner_pair.as_str().to_string()),
+            Rule::r#struct => parse_struct(inner_pair),
+            Rule::r#enum => parse_enum(inner_pair),
+            Rule::pointer => parse_pointer(inner_pair),
+            Rule::optional => parse_optional(inner_pair),
+            Rule::result => parse_result(inner_pair),
+            Rule::matrix_type => parse_matrix_type(inner_pair),
+            Rule::function_type => parse_function_type(inner_pair),
+            Rule::trait_type => parse_trait_type(inner_pair),
             _ => panic!("Unexpected type rule: {:?}", inner_pair.as_rule()),
         }
     } else {
         // No inner: check for literal `none`
-        if src_text == "none" { Type::None } else { panic!("Unexpected empty type pair: {:?}", src_text) }
+        if src_text == "none" {
+            Type::None
+        } else {
+            panic!("Unexpected empty type pair: {:?}", src_text)
+        }
     }
 }
 
@@ -713,11 +782,17 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
                             for part in it {
                                 match part.as_rule() {
                                     Rule::r#type => ty = Some(parse_type(part)),
-                                    Rule::expression => default_value = Some(parse_expression(part)),
+                                    Rule::expression => {
+                                        default_value = Some(parse_expression(part))
+                                    }
                                     _ => {}
                                 }
                             }
-                            params.push(Parameter { name, param_type: ty, default_value });
+                            params.push(Parameter {
+                                name,
+                                param_type: ty,
+                                default_value,
+                            });
                         }
                         _ => { /* self variants ignored for now */ }
                     }
@@ -730,7 +805,10 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
             Rule::function_body => {
                 if let Some(first) = inner.into_inner().next() {
                     match first.as_rule() {
-                        Rule::expression => body_opt = Some(FunctionBody::Expression(Box::new(parse_expression(first)))),
+                        Rule::expression => {
+                            body_opt =
+                                Some(FunctionBody::Expression(Box::new(parse_expression(first))))
+                        }
                         Rule::block => body_opt = Some(FunctionBody::Block(parse_block(first))),
                         _ => {}
                     }
@@ -740,7 +818,12 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
         }
     }
 
-    Expression::Function { is_async, parameters: params, return_type: return_ty, body: body_opt.unwrap_or(FunctionBody::Block(Vec::new())) }
+    Expression::Function {
+        is_async,
+        parameters: params,
+        return_type: return_ty,
+        body: body_opt.unwrap_or(FunctionBody::Block(Vec::new())),
+    }
 }
 
 fn parse_if_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -771,7 +854,9 @@ fn parse_if_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 fn parse_return_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut expr: Option<Expression> = None;
     for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::expression { expr = Some(parse_expression(inner)); }
+        if inner.as_rule() == Rule::expression {
+            expr = Some(parse_expression(inner));
+        }
     }
     Statement::Return(expr)
 }
@@ -779,7 +864,9 @@ fn parse_return_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
 fn parse_break_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut expr: Option<Expression> = None;
     for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::expression { expr = Some(parse_expression(inner)); }
+        if inner.as_rule() == Rule::expression {
+            expr = Some(parse_expression(inner));
+        }
     }
     Statement::Break(expr)
 }
@@ -832,7 +919,10 @@ fn parse_mod_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     if items.is_empty() {
         Statement::ModuleDecl { name, items: None }
     } else {
-        Statement::ModuleDecl { name, items: Some(items) }
+        Statement::ModuleDecl {
+            name,
+            items: Some(items),
+        }
     }
 }
 
@@ -863,5 +953,9 @@ fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
             _ => {}
         }
     }
-    Statement::ImplBlock { trait_name, type_name, methods }
+    Statement::ImplBlock {
+        trait_name,
+        type_name,
+        methods,
+    }
 }

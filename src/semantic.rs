@@ -8,7 +8,7 @@ pub struct SemanticContext {
     // Lexical scopes (innermost at the end). Only used during analysis
     // to model block/loop scopes. Variables declared while a scope is
     // active live here and are removed on exit.
-    pub var_scopes: Vec<HashMap<String, Type>>, 
+    pub var_scopes: Vec<HashMap<String, Type>>,
     pub functions: HashMap<String, FunctionSignature>,
     pub types: HashMap<String, Type>,
     pub current_function_return_type: Option<Type>,
@@ -42,12 +42,25 @@ pub struct ImplInfo {
 pub enum SemanticError {
     UndefinedVariable(String),
     UndefinedFunction(String),
-    TypeMismatch { expected: Type, found: Type },
-    InvalidOperation { operator: String, operand_types: Vec<Type> },
+    TypeMismatch {
+        expected: Type,
+        found: Type,
+    },
+    InvalidOperation {
+        operator: String,
+        operand_types: Vec<Type>,
+    },
     ReturnOutsideFunction,
     BreakOutsideLoop,
-    ArgumentCountMismatch { expected: usize, found: usize },
-    AmbiguousMethod { type_name: String, method: String, traits: Vec<String> },
+    ArgumentCountMismatch {
+        expected: usize,
+        found: usize,
+    },
+    AmbiguousMethod {
+        type_name: String,
+        method: String,
+        traits: Vec<String>,
+    },
     InvalidRangeStepZero,
 }
 
@@ -64,91 +77,135 @@ impl SemanticContext {
             trait_impls: HashMap::new(),
             inherent_impls: HashMap::new(),
         };
-        
+
         // Add built-in functions
-        context.functions.insert("println".to_string(), FunctionSignature {
-            parameters: vec![], // Variadic, we'll handle this specially
-            return_type: Type::None,
-            is_async: false,
-        });
+        context.functions.insert(
+            "println".to_string(),
+            FunctionSignature {
+                parameters: vec![], // Variadic, we'll handle this specially
+                return_type: Type::None,
+                is_async: false,
+            },
+        );
         // len: string length in bytes
-        context.functions.insert("len".to_string(), FunctionSignature {
-            parameters: vec![Type::Identifier("string".to_string())],
-            return_type: Type::Identifier("i64".to_string()),
-            is_async: false,
-        });
+        context.functions.insert(
+            "len".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier("string".to_string())],
+                return_type: Type::Identifier("i64".to_string()),
+                is_async: false,
+            },
+        );
         // streq: string equality (byte-wise)
-        context.functions.insert("streq".to_string(), FunctionSignature {
-            parameters: vec![
-                Type::Identifier("string".to_string()),
-                Type::Identifier("string".to_string()),
-            ],
-            return_type: Type::Identifier("bool".to_string()),
-            is_async: false,
-        });
-        // contains: substring check (byte-wise)
-        context.functions.insert("contains".to_string(), FunctionSignature {
-            parameters: vec![
-                Type::Identifier("string".to_string()),
-                Type::Identifier("string".to_string()),
-            ],
-            return_type: Type::Identifier("bool".to_string()),
-            is_async: false,
-        });
-        // starts_with / ends_with: prefix/suffix checks (byte-wise)
-        for name in ["starts_with", "ends_with"] {
-            context.functions.insert(name.to_string(), FunctionSignature {
+        context.functions.insert(
+            "streq".to_string(),
+            FunctionSignature {
                 parameters: vec![
                     Type::Identifier("string".to_string()),
                     Type::Identifier("string".to_string()),
                 ],
                 return_type: Type::Identifier("bool".to_string()),
                 is_async: false,
-            });
+            },
+        );
+        // contains: substring check (byte-wise)
+        context.functions.insert(
+            "contains".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Identifier("string".to_string()),
+                    Type::Identifier("string".to_string()),
+                ],
+                return_type: Type::Identifier("bool".to_string()),
+                is_async: false,
+            },
+        );
+        // starts_with / ends_with: prefix/suffix checks (byte-wise)
+        for name in ["starts_with", "ends_with"] {
+            context.functions.insert(
+                name.to_string(),
+                FunctionSignature {
+                    parameters: vec![
+                        Type::Identifier("string".to_string()),
+                        Type::Identifier("string".to_string()),
+                    ],
+                    return_type: Type::Identifier("bool".to_string()),
+                    is_async: false,
+                },
+            );
         }
         // find: first index of needle in haystack, or -1 if missing (byte index)
-        context.functions.insert("find".to_string(), FunctionSignature {
-            parameters: vec![
-                Type::Identifier("string".to_string()),
-                Type::Identifier("string".to_string()),
-            ],
-            return_type: Type::Identifier("i64".to_string()),
-            is_async: false,
-        });
+        context.functions.insert(
+            "find".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Identifier("string".to_string()),
+                    Type::Identifier("string".to_string()),
+                ],
+                return_type: Type::Identifier("i64".to_string()),
+                is_async: false,
+            },
+        );
         // slice helpers (prototype): slice_len(s: slice_i64) -> i64; slice_is_empty(s: slice_i64) -> bool
-        context.functions.insert("slice_len".to_string(), FunctionSignature {
-            parameters: vec![Type::Identifier("slice_i64".to_string())],
-            return_type: Type::Identifier("i64".to_string()),
-            is_async: false,
-        });
-        context.functions.insert("slice_is_empty".to_string(), FunctionSignature {
-            parameters: vec![Type::Identifier("slice_i64".to_string())],
-            return_type: Type::Identifier("bool".to_string()),
-            is_async: false,
-        });
+        context.functions.insert(
+            "slice_len".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier("slice_i64".to_string())],
+                return_type: Type::Identifier("i64".to_string()),
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "slice_is_empty".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier("slice_i64".to_string())],
+                return_type: Type::Identifier("bool".to_string()),
+                is_async: false,
+            },
+        );
         // slice_get(s: slice_i64, idx: i64) -> i64
-        context.functions.insert("slice_get".to_string(), FunctionSignature {
-            parameters: vec![
-                Type::Identifier("slice_i64".to_string()),
-                Type::Identifier("i64".to_string()),
-            ],
-            return_type: Type::Identifier("i64".to_string()),
-            is_async: false,
-        });
-        
+        context.functions.insert(
+            "slice_get".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Identifier("slice_i64".to_string()),
+                    Type::Identifier("i64".to_string()),
+                ],
+                return_type: Type::Identifier("i64".to_string()),
+                is_async: false,
+            },
+        );
+
         // Process exit (libc)
-        context.functions.insert("exit".to_string(), FunctionSignature {
-            parameters: vec![Type::Identifier("i32".to_string())],
-            return_type: Type::None,
-            is_async: false,
-        });
-        context.types.insert("i32".to_string(), Type::Identifier("i32".to_string()));
-        context.types.insert("i64".to_string(), Type::Identifier("i64".to_string()));
-        context.types.insert("f32".to_string(), Type::Identifier("f32".to_string()));
-        context.types.insert("f64".to_string(), Type::Identifier("f64".to_string()));
-        context.types.insert("bool".to_string(), Type::Identifier("bool".to_string()));
-        context.types.insert("string".to_string(), Type::Identifier("string".to_string()));
-        context.types.insert("char".to_string(), Type::Identifier("char".to_string()));
+        context.functions.insert(
+            "exit".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier("i32".to_string())],
+                return_type: Type::None,
+                is_async: false,
+            },
+        );
+        context
+            .types
+            .insert("i32".to_string(), Type::Identifier("i32".to_string()));
+        context
+            .types
+            .insert("i64".to_string(), Type::Identifier("i64".to_string()));
+        context
+            .types
+            .insert("f32".to_string(), Type::Identifier("f32".to_string()));
+        context
+            .types
+            .insert("f64".to_string(), Type::Identifier("f64".to_string()));
+        context
+            .types
+            .insert("bool".to_string(), Type::Identifier("bool".to_string()));
+        context
+            .types
+            .insert("string".to_string(), Type::Identifier("string".to_string()));
+        context
+            .types
+            .insert("char".to_string(), Type::Identifier("char".to_string()));
         // Minimal built-in slice for i64: { ptr: &i64, len: i64 }
         context.types.insert(
             "slice_i64".to_string(),
@@ -157,27 +214,30 @@ impl SemanticContext {
                     let mut m = HashMap::new();
                     m.insert(
                         "ptr".to_string(),
-                        Type::Pointer { is_mutable: false, pointee: Box::new(Type::Identifier("i64".to_string())) },
+                        Type::Pointer {
+                            is_mutable: false,
+                            pointee: Box::new(Type::Identifier("i64".to_string())),
+                        },
                     );
                     m.insert("len".to_string(), Type::Identifier("i64".to_string()));
                     m
                 },
             },
         );
-        
+
         context
     }
-    
+
     pub fn enter_scope(&mut self) {
         // Push a new lexical scope for variables declared within blocks/loops
         self.var_scopes.push(HashMap::new());
     }
-    
+
     pub fn exit_scope(&mut self) {
         // Pop the most recent lexical scope. If none exists, it's a no-op.
         let _ = self.var_scopes.pop();
     }
-    
+
     pub fn define_variable(&mut self, name: String, var_type: Type) {
         if let Some(scope) = self.var_scopes.last_mut() {
             scope.insert(name, var_type);
@@ -185,19 +245,21 @@ impl SemanticContext {
             self.variables.insert(name, var_type);
         }
     }
-    
+
     pub fn get_variable_type(&self, name: &str) -> Option<&Type> {
         // Look from innermost scope outward, then fall back to globals
         for scope in self.var_scopes.iter().rev() {
-            if let Some(t) = scope.get(name) { return Some(t); }
+            if let Some(t) = scope.get(name) {
+                return Some(t);
+            }
         }
         self.variables.get(name)
     }
-    
+
     pub fn define_function(&mut self, name: String, signature: FunctionSignature) {
         self.functions.insert(name, signature);
     }
-    
+
     pub fn get_function_signature(&self, name: &str) -> Option<&FunctionSignature> {
         self.functions.get(name)
     }
@@ -205,25 +267,30 @@ impl SemanticContext {
 
 pub fn analyze_program(program: &Program) -> Result<SemanticContext, SemanticError> {
     let mut context = SemanticContext::new();
-    
+
     // First pass: collect function signatures and type definitions
     for statement in &program.statements {
         collect_definitions(statement, &mut context)?;
     }
-    
+
     // Second pass: type check all statements
     for statement in &program.statements {
         analyze_statement(statement, &mut context)?;
     }
-    
+
     Ok(context)
 }
 
-fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> Result<(), SemanticError> {
+fn collect_definitions(
+    statement: &Statement,
+    context: &mut SemanticContext,
+) -> Result<(), SemanticError> {
     match statement {
         Statement::ModuleDecl { name: _, items } => {
             if let Some(stmts) = items {
-                for s in stmts { collect_definitions(s, context)?; }
+                for s in stmts {
+                    collect_definitions(s, context)?;
+                }
             }
         }
         Statement::ConstDecl { name, value, .. } => {
@@ -231,21 +298,48 @@ fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> 
                 ConstValue::Type(type_def) => {
                     context.types.insert(name.clone(), type_def.clone());
                     // If this is a trait type definition, register trait info too
-                    if let Type::Trait { associated_types, methods } = type_def {
-                        let ti = TraitInfo { associated_types: associated_types.clone(), methods: methods.clone() };
+                    if let Type::Trait {
+                        associated_types,
+                        methods,
+                    } = type_def
+                    {
+                        let ti = TraitInfo {
+                            associated_types: associated_types.clone(),
+                            methods: methods.clone(),
+                        };
                         context.traits.insert(name.clone(), ti);
                     }
                 }
                 ConstValue::Expression(expr) => {
                     // If expression is a function, pre-declare its signature in the function table and as a variable value of function type
-                    if let Expression::Function { parameters, return_type, .. } = expr {
+                    if let Expression::Function {
+                        parameters,
+                        return_type,
+                        ..
+                    } = expr
+                    {
                         let sig = FunctionSignature {
-                            parameters: parameters.iter().map(|p| p.param_type.clone().unwrap_or(Type::Identifier("i64".to_string()))).collect(),
-                            return_type: return_type.clone().unwrap_or(Type::Identifier("i64".to_string())),
+                            parameters: parameters
+                                .iter()
+                                .map(|p| {
+                                    p.param_type
+                                        .clone()
+                                        .unwrap_or(Type::Identifier("i64".to_string()))
+                                })
+                                .collect(),
+                            return_type: return_type
+                                .clone()
+                                .unwrap_or(Type::Identifier("i64".to_string())),
                             is_async: false,
                         };
                         context.define_function(name.clone(), sig.clone());
-                        context.define_variable(name.clone(), Type::Function { parameters: sig.parameters.clone(), return_type: Box::new(sig.return_type.clone()) });
+                        context.define_variable(
+                            name.clone(),
+                            Type::Function {
+                                parameters: sig.parameters.clone(),
+                                return_type: Box::new(sig.return_type.clone()),
+                            },
+                        );
                     } else {
                         // For other expression constants, infer the type during analysis
                         let expr_type = infer_expression_type(expr, context)?;
@@ -254,7 +348,11 @@ fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> 
                 }
             }
         }
-        Statement::ImplBlock { trait_name, type_name, methods } => {
+        Statement::ImplBlock {
+            trait_name,
+            type_name,
+            methods,
+        } => {
             let is_trait_impl = trait_name.is_some();
             // Prepare impl info bucket
             let impl_info = ImplInfo::default();
@@ -270,27 +368,45 @@ fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> 
 
             // Scan methods: register mangled function signatures so later expression calls can resolve
             for m in methods {
-                if let Statement::ConstDecl { name: mname, value, .. } = m {
+                if let Statement::ConstDecl {
+                    name: mname, value, ..
+                } = m
+                {
                     match value {
-                        ConstValue::Expression(Expression::Function { parameters, return_type, .. }) => {
+                        ConstValue::Expression(Expression::Function {
+                            parameters,
+                            return_type,
+                            ..
+                        }) => {
                             // Prepend implicit receiver parameter of type &type_name for inherent methods
                             let mut params: Vec<Type> = Vec::new();
                             if trait_name.is_none() {
-                                params.push(Type::Pointer { is_mutable: false, pointee: Box::new(Type::Identifier(type_name.clone())) });
+                                params.push(Type::Pointer {
+                                    is_mutable: false,
+                                    pointee: Box::new(Type::Identifier(type_name.clone())),
+                                });
                             }
-                            params.extend(parameters.iter().map(|p| p.param_type.clone().unwrap_or(Type::Identifier("i64".to_string()))));
+                            params.extend(parameters.iter().map(|p| {
+                                p.param_type
+                                    .clone()
+                                    .unwrap_or(Type::Identifier("i64".to_string()))
+                            }));
                             let sig = FunctionSignature {
                                 parameters: params,
-                                return_type: return_type.clone().unwrap_or(Type::Identifier("i64".to_string())),
+                                return_type: return_type
+                                    .clone()
+                                    .unwrap_or(Type::Identifier("i64".to_string())),
                                 is_async: false,
                             };
-                            let mangled = mangle_method_name(trait_name.as_deref(), type_name, mname);
+                            let mangled =
+                                mangle_method_name(trait_name.as_deref(), type_name, mname);
                             context.define_function(mangled, sig);
                         }
                         ConstValue::Type(_) => {
                             // associated type binding; collected during analysis phase below
                         }
-                        ConstValue::Expression(_) => { /* ignore non-function expressions in impl header pass */ }
+                        ConstValue::Expression(_) => { /* ignore non-function expressions in impl header pass */
+                        }
                     }
                 }
             }
@@ -300,37 +416,73 @@ fn collect_definitions(statement: &Statement, context: &mut SemanticContext) -> 
     Ok(())
 }
 
-fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Result<(), SemanticError> {
+fn analyze_statement(
+    statement: &Statement,
+    context: &mut SemanticContext,
+) -> Result<(), SemanticError> {
     match statement {
         Statement::ModuleDecl { name: _, items } => {
-            if let Some(stmts) = items { for s in stmts { analyze_statement(s, context)?; } }
+            if let Some(stmts) = items {
+                for s in stmts {
+                    analyze_statement(s, context)?;
+                }
+            }
         }
-        Statement::ConstDecl { name, type_annotation, value, extern_linkage: _extern_linkage } => {
-            if let ConstValue::Type(Type::Function { parameters, return_type }) = &value {
+        Statement::ConstDecl {
+            name,
+            type_annotation,
+            value,
+            extern_linkage: _extern_linkage,
+        } => {
+            if let ConstValue::Type(Type::Function {
+                parameters,
+                return_type,
+            }) = &value
+            {
                 let param_types = parameters.clone();
                 let ret_type = *return_type.clone();
-                context.functions.insert(name.clone(), FunctionSignature { parameters: param_types, return_type: ret_type, is_async: false });
+                context.functions.insert(
+                    name.clone(),
+                    FunctionSignature {
+                        parameters: param_types,
+                        return_type: ret_type,
+                        is_async: false,
+                    },
+                );
             }
             match value {
-                ConstValue::Expression(Expression::Function { parameters, return_type, body, .. }) => {
+                ConstValue::Expression(Expression::Function {
+                    parameters,
+                    return_type,
+                    body,
+                    ..
+                }) => {
                     // Analyze function body with parameter bindings and expected return type
                     let prev_vars = context.variables.clone();
                     let prev_ret = context.current_function_return_type.clone();
                     // Bind parameters
                     for p in parameters {
-                        let ty = p.param_type.clone().unwrap_or(Type::Identifier("i64".into()));
+                        let ty = p
+                            .param_type
+                            .clone()
+                            .unwrap_or(Type::Identifier("i64".into()));
                         context.define_variable(p.name.clone(), ty);
                     }
                     // Set expected return
-                    context.current_function_return_type = Some(return_type.clone().unwrap_or(Type::None));
+                    context.current_function_return_type =
+                        Some(return_type.clone().unwrap_or(Type::None));
                     match body {
                         FunctionBody::Block(stmts) => {
-                            for s in stmts { analyze_statement(s, context)?; }
+                            for s in stmts {
+                                analyze_statement(s, context)?;
+                            }
                         }
                         FunctionBody::Expression(expr) => {
                             // If body is a block expression, descend into its statements to analyze side-effects and calls
                             if let Expression::Block { statements } = expr.as_ref() {
-                                for s in statements { analyze_statement(s, context)?; }
+                                for s in statements {
+                                    analyze_statement(s, context)?;
+                                }
                             } else {
                                 let _ = infer_expression_type(expr, context)?;
                             }
@@ -343,7 +495,11 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
                 ConstValue::Expression(other_expr) => {
                     // Non-function const expression: define it as a (module-level) variable with its type
                     let inferred = infer_expression_type(other_expr, context)?;
-                    let final_type = if let Some(ann) = type_annotation { ann.clone() } else { inferred };
+                    let final_type = if let Some(ann) = type_annotation {
+                        ann.clone()
+                    } else {
+                        inferred
+                    };
                     context.define_variable(name.clone(), final_type);
                 }
                 ConstValue::Type(_) => {
@@ -351,14 +507,22 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
                 }
             }
         }
-        Statement::VariableDecl { name, type_annotation, value } => {
+        Statement::VariableDecl {
+            name,
+            type_annotation,
+            value,
+        } => {
             let value_type = infer_expression_type(value, context)?;
-            
+
             let final_type = if let Some(annotation) = type_annotation {
                 // Allow assigning i64 to enum-typed variables (repr i64)
                 let enum_i64_ok = match (annotation, &value_type) {
                     (Type::Identifier(tn), Type::Identifier(vn)) if vn == "i64" => {
-                        if let Some(Type::Enum { .. }) = context.types.get(tn) { true } else { false }
+                        if let Some(Type::Enum { .. }) = context.types.get(tn) {
+                            true
+                        } else {
+                            false
+                        }
                     }
                     _ => false,
                 };
@@ -374,18 +538,22 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
             } else {
                 value_type
             };
-            
+
             context.define_variable(name.clone(), final_type);
         }
-        
+
         Statement::Assignment { target, value, .. } => {
             let target_type = infer_expression_type(target, context)?;
             let value_type = infer_expression_type(value, context)?;
-            
+
             // Allow assigning i64 to enum-typed variables (repr i64)
             let enum_i64_ok = match (&target_type, &value_type) {
                 (Type::Identifier(tn), Type::Identifier(vn)) if vn == "i64" => {
-                    if let Some(Type::Enum { .. }) = context.types.get(tn) { true } else { false }
+                    if let Some(Type::Enum { .. }) = context.types.get(tn) {
+                        true
+                    } else {
+                        false
+                    }
                 }
                 _ => false,
             };
@@ -398,20 +566,20 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
                 }
             }
         }
-        
+
         Statement::Expression(expr) => {
             infer_expression_type(expr, context)?;
         }
-        
+
         Statement::Return(expr) => {
             if context.current_function_return_type.is_none() {
                 return Err(SemanticError::ReturnOutsideFunction);
             }
-            
+
             if let Some(expr) = expr {
                 let expr_type = infer_expression_type(expr, context)?;
                 let expected_type = context.current_function_return_type.as_ref().unwrap();
-                
+
                 if !types_compatible(expected_type, &expr_type) {
                     return Err(SemanticError::TypeMismatch {
                         expected: expected_type.clone(),
@@ -420,37 +588,57 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
                 }
             }
         }
-        
+
         Statement::Break(_) => {
             if !context.in_loop {
                 return Err(SemanticError::BreakOutsideLoop);
             }
         }
-        
-        Statement::ForLoop { variable, type_annotation, iterable, body } => {
+
+        Statement::ForLoop {
+            variable,
+            type_annotation,
+            iterable,
+            body,
+        } => {
             let _iterable_type = infer_expression_type(iterable, context)?;
-            
+
             // Assume the variable type is i64 if not specified (matches codegen loop counter)
-            let var_type = type_annotation.clone().unwrap_or(Type::Identifier("i64".to_string()));
-            
+            let var_type = type_annotation
+                .clone()
+                .unwrap_or(Type::Identifier("i64".to_string()));
+
             context.enter_scope();
             context.define_variable(variable.clone(), var_type);
             context.in_loop = true;
-            
+
             for stmt in body {
                 analyze_statement(stmt, context)?;
             }
-            
+
             context.in_loop = false;
             context.exit_scope();
         }
-        
-        Statement::ImplBlock { trait_name, type_name, methods } => {
+
+        Statement::ImplBlock {
+            trait_name,
+            type_name,
+            methods,
+        } => {
             // Validate impls and collect associated types + methods into impl registries
             if let Some(tn) = trait_name {
                 // Trait impl
-                let trait_info = context.traits.get(tn).ok_or_else(|| SemanticError::UndefinedVariable(format!("trait {} not defined", tn)))?.clone();
-                let impls_for_trait = context.trait_impls.get_mut(tn).and_then(|m| m.get_mut(type_name));
+                let trait_info = context
+                    .traits
+                    .get(tn)
+                    .ok_or_else(|| {
+                        SemanticError::UndefinedVariable(format!("trait {} not defined", tn))
+                    })?
+                    .clone();
+                let impls_for_trait = context
+                    .trait_impls
+                    .get_mut(tn)
+                    .and_then(|m| m.get_mut(type_name));
                 let mut info = impls_for_trait.cloned().unwrap_or_default();
 
                 // Gather provided items
@@ -462,15 +650,29 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
                             ConstValue::Type(ty) => {
                                 provided_assoc.insert(name.clone(), ty.clone());
                             }
-                            ConstValue::Expression(Expression::Function { parameters, return_type, .. }) => {
+                            ConstValue::Expression(Expression::Function {
+                                parameters,
+                                return_type,
+                                ..
+                            }) => {
                                 let sig = FunctionSignature {
-                                    parameters: parameters.iter().map(|p| p.param_type.clone().unwrap_or(Type::Identifier("i64".to_string()))).collect(),
-                                    return_type: return_type.clone().unwrap_or(Type::Identifier("i64".to_string())),
+                                    parameters: parameters
+                                        .iter()
+                                        .map(|p| {
+                                            p.param_type
+                                                .clone()
+                                                .unwrap_or(Type::Identifier("i64".to_string()))
+                                        })
+                                        .collect(),
+                                    return_type: return_type
+                                        .clone()
+                                        .unwrap_or(Type::Identifier("i64".to_string())),
                                     is_async: false,
                                 };
                                 provided_methods.insert(name.clone(), sig);
                             }
-                            ConstValue::Expression(_) => { /* ignore other expressions in impl items */ }
+                            ConstValue::Expression(_) => { /* ignore other expressions in impl items */
+                            }
                         }
                     }
                 }
@@ -478,44 +680,88 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
                 // Check associated types coverage
                 for assoc in &trait_info.associated_types {
                     if !provided_assoc.contains_key(assoc) {
-                        return Err(SemanticError::UndefinedVariable(format!("impl {} for {} missing associated type {}", tn, type_name, assoc)));
+                        return Err(SemanticError::UndefinedVariable(format!(
+                            "impl {} for {} missing associated type {}",
+                            tn, type_name, assoc
+                        )));
                     }
                 }
 
                 // Check methods coverage and signatures compatibility
                 for (mname, mty) in &trait_info.methods {
                     // method type is a function type
-                    let Type::Function { parameters, return_type } = mty else { continue };
+                    let Type::Function {
+                        parameters,
+                        return_type,
+                    } = mty
+                    else {
+                        continue;
+                    };
                     let Some(impl_sig) = provided_methods.get(mname) else {
-                        return Err(SemanticError::UndefinedFunction(format!("impl {} for {} missing method {}", tn, type_name, mname)));
+                        return Err(SemanticError::UndefinedFunction(format!(
+                            "impl {} for {} missing method {}",
+                            tn, type_name, mname
+                        )));
                     };
                     // Compare param lengths
                     if parameters.len() != impl_sig.parameters.len() {
-                        return Err(SemanticError::ArgumentCountMismatch { expected: parameters.len(), found: impl_sig.parameters.len() });
+                        return Err(SemanticError::ArgumentCountMismatch {
+                            expected: parameters.len(),
+                            found: impl_sig.parameters.len(),
+                        });
                     }
                     // Check params/return with associated type substitution
                     for (a, b) in parameters.iter().zip(&impl_sig.parameters) {
                         if !types_match_with_assoc_and_self(a, b, &provided_assoc, type_name) {
-                            return Err(SemanticError::TypeMismatch { expected: a.clone(), found: b.clone() });
+                            return Err(SemanticError::TypeMismatch {
+                                expected: a.clone(),
+                                found: b.clone(),
+                            });
                         }
                     }
-                    if !types_match_with_assoc_and_self(return_type, &impl_sig.return_type, &provided_assoc, type_name) {
-                        return Err(SemanticError::TypeMismatch { expected: (*return_type.clone()).clone(), found: impl_sig.return_type.clone() });
+                    if !types_match_with_assoc_and_self(
+                        return_type,
+                        &impl_sig.return_type,
+                        &provided_assoc,
+                        type_name,
+                    ) {
+                        return Err(SemanticError::TypeMismatch {
+                            expected: (*return_type.clone()).clone(),
+                            found: impl_sig.return_type.clone(),
+                        });
                     }
                 }
 
                 info.associated_types = provided_assoc;
                 info.methods = provided_methods;
-                context.trait_impls.entry(tn.clone()).or_default().insert(type_name.clone(), info);
+                context
+                    .trait_impls
+                    .entry(tn.clone())
+                    .or_default()
+                    .insert(type_name.clone(), info);
             } else {
                 // Inherent impl: accept all method function consts
                 let mut info = context.inherent_impls.remove(type_name).unwrap_or_default();
                 for item in methods {
                     if let Statement::ConstDecl { name, value, .. } = item {
-                        if let ConstValue::Expression(Expression::Function { parameters, return_type, .. }) = value {
+                        if let ConstValue::Expression(Expression::Function {
+                            parameters,
+                            return_type,
+                            ..
+                        }) = value
+                        {
                             let sig = FunctionSignature {
-                                parameters: parameters.iter().map(|p| p.param_type.clone().unwrap_or(Type::Identifier("i64".to_string()))).collect(),
-                                return_type: return_type.clone().unwrap_or(Type::Identifier("i64".to_string())),
+                                parameters: parameters
+                                    .iter()
+                                    .map(|p| {
+                                        p.param_type
+                                            .clone()
+                                            .unwrap_or(Type::Identifier("i64".to_string()))
+                                    })
+                                    .collect(),
+                                return_type: return_type
+                                    .clone()
+                                    .unwrap_or(Type::Identifier("i64".to_string())),
                                 is_async: false,
                             };
                             info.methods.insert(name.clone(), sig);
@@ -527,7 +773,7 @@ fn analyze_statement(statement: &Statement, context: &mut SemanticContext) -> Re
         }
         _ => {}
     }
-    
+
     Ok(())
 }
 
@@ -538,16 +784,42 @@ fn mangle_method_name(trait_name: Option<&str>, type_name: &str, method_name: &s
     }
 }
 
-fn types_match_with_assoc_and_self(expected: &Type, found: &Type, assoc: &HashMap<String, Type>, self_type: &str) -> bool {
+fn types_match_with_assoc_and_self(
+    expected: &Type,
+    found: &Type,
+    assoc: &HashMap<String, Type>,
+    self_type: &str,
+) -> bool {
     fn subst(t: &Type, assoc: &HashMap<String, Type>, self_type: &str) -> Type {
         match t {
             Type::Identifier(a) if a == "self" => Type::Identifier(self_type.to_string()),
             Type::Identifier(a) if assoc.contains_key(a) => assoc.get(a).unwrap().clone(),
-            Type::Pointer { is_mutable, pointee } => Type::Pointer { is_mutable: *is_mutable, pointee: Box::new(subst(pointee, assoc, self_type)) },
-            Type::RawPointer { pointee } => Type::RawPointer { pointee: Box::new(subst(pointee, assoc, self_type)) },
-            Type::Optional { inner } => Type::Optional { inner: Box::new(subst(inner, assoc, self_type)) },
-            Type::Result { inner } => Type::Result { inner: Box::new(subst(inner, assoc, self_type)) },
-            Type::Function { parameters, return_type } => Type::Function { parameters: parameters.iter().map(|p| subst(p, assoc, self_type)).collect(), return_type: Box::new(subst(return_type, assoc, self_type)) },
+            Type::Pointer {
+                is_mutable,
+                pointee,
+            } => Type::Pointer {
+                is_mutable: *is_mutable,
+                pointee: Box::new(subst(pointee, assoc, self_type)),
+            },
+            Type::RawPointer { pointee } => Type::RawPointer {
+                pointee: Box::new(subst(pointee, assoc, self_type)),
+            },
+            Type::Optional { inner } => Type::Optional {
+                inner: Box::new(subst(inner, assoc, self_type)),
+            },
+            Type::Result { inner } => Type::Result {
+                inner: Box::new(subst(inner, assoc, self_type)),
+            },
+            Type::Function {
+                parameters,
+                return_type,
+            } => Type::Function {
+                parameters: parameters
+                    .iter()
+                    .map(|p| subst(p, assoc, self_type))
+                    .collect(),
+                return_type: Box::new(subst(return_type, assoc, self_type)),
+            },
             other => other.clone(),
         }
     }
@@ -557,18 +829,19 @@ fn types_match_with_assoc_and_self(expected: &Type, found: &Type, assoc: &HashMa
     e == f
 }
 
-fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Result<Type, SemanticError> {
+fn infer_expression_type(
+    expr: &Expression,
+    context: &mut SemanticContext,
+) -> Result<Type, SemanticError> {
     match expr {
-        Expression::Literal(literal) => {
-            Ok(match literal {
-                Literal::Integer(int_lit) => Type::Identifier(int_lit.type_name().to_string()),
-                Literal::Float(_) => Type::Identifier("f64".to_string()),
-                Literal::String(_) => Type::Identifier("string".to_string()),
-                Literal::Boolean(_) => Type::Identifier("bool".to_string()),
-                Literal::Char(_) => Type::Identifier("char".to_string()),
-            })
-        }
-        
+        Expression::Literal(literal) => Ok(match literal {
+            Literal::Integer(int_lit) => Type::Identifier(int_lit.type_name().to_string()),
+            Literal::Float(_) => Type::Identifier("f64".to_string()),
+            Literal::String(_) => Type::Identifier("string".to_string()),
+            Literal::Boolean(_) => Type::Identifier("bool".to_string()),
+            Literal::Char(_) => Type::Identifier("char".to_string()),
+        }),
+
         Expression::Identifier(name) => {
             // Heuristic: enum variant static path lowered by parser as Identifier("Type_Variant").
             // If it matches a known enum type and existing variant name, treat as i64 tag.
@@ -585,25 +858,35 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
             if let Some(v) = context.get_variable_type(name) {
                 Ok(v.clone())
             } else if let Some(sig) = context.get_function_signature(name) {
-                Ok(Type::Function { parameters: sig.parameters.clone(), return_type: Box::new(sig.return_type.clone()) })
+                Ok(Type::Function {
+                    parameters: sig.parameters.clone(),
+                    return_type: Box::new(sig.return_type.clone()),
+                })
             } else {
                 Err(SemanticError::UndefinedVariable(name.clone()))
             }
         }
-        
-        Expression::BinaryOp { left, operator, right } => {
+
+        Expression::BinaryOp {
+            left,
+            operator,
+            right,
+        } => {
             let left_type = infer_expression_type(left, context)?;
             let right_type = infer_expression_type(right, context)?;
-            
+
             infer_binary_op_type(&left_type, operator, &right_type)
         }
-        
+
         Expression::UnaryOp { operator, operand } => {
             let operand_type = infer_expression_type(operand, context)?;
             infer_unary_op_type(operator, &operand_type)
         }
-        
-        Expression::Call { function, arguments } => {
+
+        Expression::Call {
+            function,
+            arguments,
+        } => {
             match function.as_ref() {
                 Expression::Identifier(name) => {
                     // Enum variant constructor: Type::Variant(args...) lowered to Identifier("Type_Variant")
@@ -614,16 +897,28 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
                                     match payload_opt {
                                         Some(payload_ty) => {
                                             if arguments.len() != 1 {
-                                                return Err(SemanticError::ArgumentCountMismatch { expected: 1, found: arguments.len() });
+                                                return Err(SemanticError::ArgumentCountMismatch {
+                                                    expected: 1,
+                                                    found: arguments.len(),
+                                                });
                                             }
-                                            let arg_ty = infer_expression_type(&arguments[0].value, context)?;
+                                            let arg_ty = infer_expression_type(
+                                                &arguments[0].value,
+                                                context,
+                                            )?;
                                             if !types_compatible(&payload_ty, &arg_ty) {
-                                                return Err(SemanticError::TypeMismatch { expected: payload_ty.clone(), found: arg_ty });
+                                                return Err(SemanticError::TypeMismatch {
+                                                    expected: payload_ty.clone(),
+                                                    found: arg_ty,
+                                                });
                                             }
                                         }
                                         None => {
                                             if !arguments.is_empty() {
-                                                return Err(SemanticError::ArgumentCountMismatch { expected: 0, found: arguments.len() });
+                                                return Err(SemanticError::ArgumentCountMismatch {
+                                                    expected: 0,
+                                                    found: arguments.len(),
+                                                });
                                             }
                                         }
                                     }
@@ -635,7 +930,9 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
                     }
                     if name == "println" {
                         // Special handling for println - it's variadic, but still analyze args
-                        for arg in arguments { let _ = infer_expression_type(&arg.value, context)?; }
+                        for arg in arguments {
+                            let _ = infer_expression_type(&arg.value, context)?;
+                        }
                         return Ok(Type::None);
                     }
                     // Support trait static-path calls: Trait_method(x, ...)
@@ -646,17 +943,28 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
                             // Peel pointers to get the base identifier type name
                             let base_ty_name = peel_to_identifier_name(&recv_ty);
                             if let Some(type_name) = base_ty_name {
-                                if let Some(impls_for_trait) = context.trait_impls.get(trait_name).cloned() {
+                                if let Some(impls_for_trait) =
+                                    context.trait_impls.get(trait_name).cloned()
+                                {
                                     if let Some(info) = impls_for_trait.get(&type_name).cloned() {
                                         if let Some(sig) = info.methods.get(method_name).cloned() {
                                             // Validate arg count and types
                                             if arguments.len() != sig.parameters.len() {
-                                                return Err(SemanticError::ArgumentCountMismatch { expected: sig.parameters.len(), found: arguments.len() });
+                                                return Err(SemanticError::ArgumentCountMismatch {
+                                                    expected: sig.parameters.len(),
+                                                    found: arguments.len(),
+                                                });
                                             }
-                                            for (arg, expected_type) in arguments.iter().zip(&sig.parameters) {
-                                                let arg_ty = infer_expression_type(&arg.value, context)?;
+                                            for (arg, expected_type) in
+                                                arguments.iter().zip(&sig.parameters)
+                                            {
+                                                let arg_ty =
+                                                    infer_expression_type(&arg.value, context)?;
                                                 if !types_compatible(expected_type, &arg_ty) {
-                                                    return Err(SemanticError::TypeMismatch { expected: expected_type.clone(), found: arg_ty });
+                                                    return Err(SemanticError::TypeMismatch {
+                                                        expected: expected_type.clone(),
+                                                        found: arg_ty,
+                                                    });
                                                 }
                                             }
                                             return Ok(sig.return_type.clone());
@@ -695,12 +1003,23 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
                     // Method call: expr.method(args...) → resolve inherent first, otherwise trait for the base type
                     let recv_expr_ty = infer_expression_type(object, context)?;
                     // Special-case: function.bind(...) for partial application
-                    if let Type::Function { parameters, return_type } = recv_expr_ty.clone() {
+                    if let Type::Function {
+                        parameters,
+                        return_type,
+                    } = recv_expr_ty.clone()
+                    {
                         if field == "bind" {
                             // Binding N arguments yields a function expecting the remaining parameters (best-effort typing)
                             let bound_n = arguments.len();
-                            let remaining = if bound_n >= parameters.len() { Vec::new() } else { parameters[bound_n..].to_vec() };
-                            return Ok(Type::Function { parameters: remaining, return_type });
+                            let remaining = if bound_n >= parameters.len() {
+                                Vec::new()
+                            } else {
+                                parameters[bound_n..].to_vec()
+                            };
+                            return Ok(Type::Function {
+                                parameters: remaining,
+                                return_type,
+                            });
                         }
                     }
                     let base_ty_name = peel_to_identifier_name(&recv_expr_ty);
@@ -709,13 +1028,23 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
                         if let Some(inh) = context.inherent_impls.get(&type_name).cloned() {
                             if let Some(sig) = inh.methods.get(field).cloned() {
                                 // Expect signature includes receiver as first param; args must match remaining
-                                if sig.parameters.len() == 0 || arguments.len() != sig.parameters.len() - 1 {
-                                    return Err(SemanticError::ArgumentCountMismatch { expected: sig.parameters.len() - 1, found: arguments.len() });
+                                if sig.parameters.len() == 0
+                                    || arguments.len() != sig.parameters.len() - 1
+                                {
+                                    return Err(SemanticError::ArgumentCountMismatch {
+                                        expected: sig.parameters.len() - 1,
+                                        found: arguments.len(),
+                                    });
                                 }
-                                for (arg, expected_type) in arguments.iter().zip(sig.parameters.iter().skip(1)) {
+                                for (arg, expected_type) in
+                                    arguments.iter().zip(sig.parameters.iter().skip(1))
+                                {
                                     let arg_ty = infer_expression_type(&arg.value, context)?;
                                     if !types_compatible(expected_type, &arg_ty) {
-                                        return Err(SemanticError::TypeMismatch { expected: expected_type.clone(), found: arg_ty });
+                                        return Err(SemanticError::TypeMismatch {
+                                            expected: expected_type.clone(),
+                                            found: arg_ty,
+                                        });
                                     }
                                 }
                                 return Ok(sig.return_type.clone());
@@ -732,16 +1061,31 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
                             }
                         }
                         if candidates.len() > 1 {
-                            let trait_list: Vec<String> = candidates.into_iter().map(|(tn, _)| tn.clone()).collect();
-                            return Err(SemanticError::AmbiguousMethod { type_name, method: field.clone(), traits: trait_list });
+                            let trait_list: Vec<String> =
+                                candidates.into_iter().map(|(tn, _)| tn.clone()).collect();
+                            return Err(SemanticError::AmbiguousMethod {
+                                type_name,
+                                method: field.clone(),
+                                traits: trait_list,
+                            });
                         } else if let Some((_tn, sig)) = candidates.into_iter().next() {
-                            if sig.parameters.len() == 0 || arguments.len() != sig.parameters.len() - 1 {
-                                return Err(SemanticError::ArgumentCountMismatch { expected: sig.parameters.len() - 1, found: arguments.len() });
+                            if sig.parameters.len() == 0
+                                || arguments.len() != sig.parameters.len() - 1
+                            {
+                                return Err(SemanticError::ArgumentCountMismatch {
+                                    expected: sig.parameters.len() - 1,
+                                    found: arguments.len(),
+                                });
                             }
-                            for (arg, expected_type) in arguments.iter().zip(sig.parameters.iter().skip(1)) {
+                            for (arg, expected_type) in
+                                arguments.iter().zip(sig.parameters.iter().skip(1))
+                            {
                                 let arg_ty = infer_expression_type(&arg.value, context)?;
                                 if !types_compatible(expected_type, &arg_ty) {
-                                    return Err(SemanticError::TypeMismatch { expected: expected_type.clone(), found: arg_ty });
+                                    return Err(SemanticError::TypeMismatch {
+                                        expected: expected_type.clone(),
+                                        found: arg_ty,
+                                    });
                                 }
                             }
                             return Ok(sig.return_type.clone());
@@ -756,7 +1100,7 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
                 }
             }
         }
-        
+
         Expression::Match { value, arms } => {
             let value_type = infer_expression_type(value, context)?;
             for arm in arms {
@@ -766,8 +1110,8 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
             // For now matches yield i64 (we lower branches to i64 and phi them)
             Ok(Type::Identifier("i64".to_string()))
         }
-        
-    Expression::FieldAccess { object, field } => {
+
+        Expression::FieldAccess { object, field } => {
             let object_type = infer_expression_type(object, context)?;
             // Resolve through pointers
             let mut base_ty = object_type.clone();
@@ -787,11 +1131,14 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
             // Fallback
             Ok(Type::Identifier("i64".to_string()))
         }
-        
+
         Expression::Index { object, indices: _ } => {
             let object_type = infer_expression_type(object, context)?;
             match object_type {
-                Type::Matrix { element_type, dimensions: _ } => {
+                Type::Matrix {
+                    element_type,
+                    dimensions: _,
+                } => {
                     // If full indexing provided (indices length equals dimensions), return element type
                     // Also allow 1D indexing into 1D matrix (vector)
                     // For now, we don't validate index types rigorously
@@ -800,14 +1147,21 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
                 _ => Ok(Type::None),
             }
         }
-        
-        Expression::If { condition, then_branch: _, else_branch: _ } => {
+
+        Expression::If {
+            condition,
+            then_branch: _,
+            else_branch: _,
+        } => {
             let condition_type = infer_expression_type(condition, context)?;
             // Accept common truthy types (bool, numeric, string, pointers)
             let is_bool = types_compatible(&Type::Identifier("bool".to_string()), &condition_type);
             let is_num = is_numeric_type(&condition_type);
             let is_str = matches!(condition_type, Type::Identifier(ref s) if s == "string");
-            let is_ptr = matches!(condition_type, Type::Pointer { .. } | Type::RawPointer { .. });
+            let is_ptr = matches!(
+                condition_type,
+                Type::Pointer { .. } | Type::RawPointer { .. }
+            );
             if !(is_bool || is_num || is_str || is_ptr) {
                 return Err(SemanticError::TypeMismatch {
                     expected: Type::Identifier("bool".to_string()),
@@ -818,26 +1172,34 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
             // For now, assume if expressions return none
             Ok(Type::None)
         }
-        
+
         Expression::Block { statements: _ } => {
             // For now, assume blocks return none
             Ok(Type::None)
         }
-        
+
         Expression::Range { start, end, step } => {
             let st = infer_expression_type(start, context)?;
             let et = infer_expression_type(end, context)?;
             if !(is_numeric_type(&st) && is_numeric_type(&et)) {
-                return Err(SemanticError::TypeMismatch { expected: Type::Identifier("i64".to_string()), found: st });
+                return Err(SemanticError::TypeMismatch {
+                    expected: Type::Identifier("i64".to_string()),
+                    found: st,
+                });
             }
             if let Some(s) = step {
                 let s_ty = infer_expression_type(s, context)?;
                 if !is_numeric_type(&s_ty) {
-                    return Err(SemanticError::TypeMismatch { expected: Type::Identifier("i64".to_string()), found: s_ty });
+                    return Err(SemanticError::TypeMismatch {
+                        expected: Type::Identifier("i64".to_string()),
+                        found: s_ty,
+                    });
                 }
                 // If step is a literal zero, reject.
                 if let Expression::Literal(Literal::Integer(ival)) = s.as_ref() {
-                    if ival.value == 0 { return Err(SemanticError::InvalidRangeStepZero); }
+                    if ival.value == 0 {
+                        return Err(SemanticError::InvalidRangeStepZero);
+                    }
                 }
             }
             Ok(Type::Identifier("i64".to_string()))
@@ -847,19 +1209,34 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
             let row_count = rows.len();
             let col_count = if row_count > 0 { rows[0].len() } else { 0 };
             // validate equal columns
-            for r in rows { if r.len() != col_count { /* ignore mismatch for now */ } }
+            for r in rows {
+                if r.len() != col_count { /* ignore mismatch for now */ }
+            }
             // infer element type by scanning; prefer f64 if any float present, else i64
             let mut has_float = false;
             for r in rows {
                 for e in r {
                     if let Ok(t) = infer_expression_type(e, context) {
-                        if matches!(t, Type::Identifier(ref s) if s == "f32" || s == "f64") { has_float = true; }
+                        if matches!(t, Type::Identifier(ref s) if s == "f32" || s == "f64") {
+                            has_float = true;
+                        }
                     }
                 }
             }
-            let elem = if has_float { Type::Identifier("f64".to_string()) } else { Type::Identifier("i64".to_string()) };
-            let dims = if row_count <= 1 { vec![col_count] } else { vec![row_count, col_count] };
-            Ok(Type::Matrix { element_type: Box::new(elem), dimensions: dims })
+            let elem = if has_float {
+                Type::Identifier("f64".to_string())
+            } else {
+                Type::Identifier("i64".to_string())
+            };
+            let dims = if row_count <= 1 {
+                vec![col_count]
+            } else {
+                vec![row_count, col_count]
+            };
+            Ok(Type::Matrix {
+                element_type: Box::new(elem),
+                dimensions: dims,
+            })
         }
         _ => {
             // For other expression types, return none for now
@@ -882,9 +1259,17 @@ fn peel_to_identifier_name(t: &Type) -> Option<String> {
     }
 }
 
-fn infer_binary_op_type(left: &Type, operator: &BinaryOperator, right: &Type) -> Result<Type, SemanticError> {
+fn infer_binary_op_type(
+    left: &Type,
+    operator: &BinaryOperator,
+    right: &Type,
+) -> Result<Type, SemanticError> {
     match operator {
-        BinaryOperator::Add | BinaryOperator::Sub | BinaryOperator::Mul | BinaryOperator::Div | BinaryOperator::Mod => {
+        BinaryOperator::Add
+        | BinaryOperator::Sub
+        | BinaryOperator::Mul
+        | BinaryOperator::Div
+        | BinaryOperator::Mod => {
             if types_compatible(left, right) && is_numeric_type(left) {
                 Ok(left.clone())
             } else {
@@ -894,10 +1279,13 @@ fn infer_binary_op_type(left: &Type, operator: &BinaryOperator, right: &Type) ->
                 })
             }
         }
-        
-        BinaryOperator::Equal | BinaryOperator::NotEqual | 
-        BinaryOperator::Less | BinaryOperator::Greater | 
-        BinaryOperator::LessEqual | BinaryOperator::GreaterEqual => {
+
+        BinaryOperator::Equal
+        | BinaryOperator::NotEqual
+        | BinaryOperator::Less
+        | BinaryOperator::Greater
+        | BinaryOperator::LessEqual
+        | BinaryOperator::GreaterEqual => {
             if types_compatible(left, right) {
                 Ok(Type::Identifier("bool".to_string()))
             } else {
@@ -907,7 +1295,7 @@ fn infer_binary_op_type(left: &Type, operator: &BinaryOperator, right: &Type) ->
                 })
             }
         }
-        
+
         BinaryOperator::And | BinaryOperator::Or | BinaryOperator::Xor => {
             let bool_type = Type::Identifier("bool".to_string());
             if types_compatible(left, &bool_type) && types_compatible(right, &bool_type) {
@@ -919,7 +1307,7 @@ fn infer_binary_op_type(left: &Type, operator: &BinaryOperator, right: &Type) ->
                 })
             }
         }
-        
+
         _ => {
             // For other operators, return the left type for now
             Ok(left.clone())
@@ -939,7 +1327,7 @@ fn infer_unary_op_type(operator: &UnaryOperator, operand: &Type) -> Result<Type,
                 })
             }
         }
-        
+
         UnaryOperator::Not => {
             let bool_type = Type::Identifier("bool".to_string());
             if types_compatible(operand, &bool_type) {
@@ -951,33 +1339,27 @@ fn infer_unary_op_type(operator: &UnaryOperator, operand: &Type) -> Result<Type,
                 })
             }
         }
-        
-        UnaryOperator::AddressOf => {
-            Ok(Type::Pointer {
-                is_mutable: false,
-                pointee: Box::new(operand.clone()),
-            })
-        }
-        
-        UnaryOperator::MutAddressOf => {
-            Ok(Type::Pointer {
-                is_mutable: true,
-                pointee: Box::new(operand.clone()),
-            })
-        }
-        
-        UnaryOperator::Deref => {
-            match operand {
-                Type::Pointer { pointee, .. } | Type::RawPointer { pointee } => {
-                    Ok(pointee.as_ref().clone())
-                }
-                _ => Err(SemanticError::InvalidOperation {
-                    operator: format!("{:?}", operator),
-                    operand_types: vec![operand.clone()],
-                })
+
+        UnaryOperator::AddressOf => Ok(Type::Pointer {
+            is_mutable: false,
+            pointee: Box::new(operand.clone()),
+        }),
+
+        UnaryOperator::MutAddressOf => Ok(Type::Pointer {
+            is_mutable: true,
+            pointee: Box::new(operand.clone()),
+        }),
+
+        UnaryOperator::Deref => match operand {
+            Type::Pointer { pointee, .. } | Type::RawPointer { pointee } => {
+                Ok(pointee.as_ref().clone())
             }
-        }
-        
+            _ => Err(SemanticError::InvalidOperation {
+                operator: format!("{:?}", operator),
+                operand_types: vec![operand.clone()],
+            }),
+        },
+
         _ => Ok(operand.clone()),
     }
 }
@@ -985,12 +1367,15 @@ fn infer_unary_op_type(operator: &UnaryOperator, operand: &Type) -> Result<Type,
 fn types_compatible(expected: &Type, found: &Type) -> bool {
     match (expected, found) {
         // Treat enums as i64-compatible for now (repr i64)
-    (Type::Identifier(e), Type::Enum { .. }) | (Type::Enum { .. }, Type::Identifier(e)) => {
+        (Type::Identifier(e), Type::Enum { .. }) | (Type::Enum { .. }, Type::Identifier(e)) => {
             e == "i64"
         }
         // Allow implicit address-of: passing T where &T is expected
         (
-            Type::Pointer { pointee: exp_pointee, .. },
+            Type::Pointer {
+                pointee: exp_pointee,
+                ..
+            },
             Type::Identifier(found_name),
         ) => {
             if let Type::Identifier(exp_name) = exp_pointee.as_ref() {
@@ -999,21 +1384,29 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             false
         }
         (Type::Identifier(a), Type::Identifier(b)) => {
-            if a == b { return true; }
+            if a == b {
+                return true;
+            }
             // Allow any pair of numeric scalar types to be used together; codegen will unify bit-widths.
             let na = a.as_str();
             let nb = b.as_str();
-            let is_num_a = matches!(na, "i32"|"i64"|"u16"|"u32"|"u64"|"f32"|"f64");
-            let is_num_b = matches!(nb, "i32"|"i64"|"u16"|"u32"|"u64"|"f32"|"f64");
-            if is_num_a && is_num_b { return true; }
+            let is_num_a = matches!(na, "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64");
+            let is_num_b = matches!(nb, "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64");
+            if is_num_a && is_num_b {
+                return true;
+            }
             false
         }
         (Type::None, _) | (_, Type::None) => true,
-    _ => expected == found,
+        _ => expected == found,
     }
 }
 
-fn analyze_pattern(pattern: &Expression, context: &mut SemanticContext, scrutinee_type: &Type) -> Result<(), SemanticError> {
+fn analyze_pattern(
+    pattern: &Expression,
+    context: &mut SemanticContext,
+    scrutinee_type: &Type,
+) -> Result<(), SemanticError> {
     match pattern {
         Expression::Identifier(name) if name == "_" => Ok(()),
         Expression::Identifier(name) => {
@@ -1035,17 +1428,22 @@ fn analyze_pattern(pattern: &Expression, context: &mut SemanticContext, scrutine
                 Err(SemanticError::UndefinedVariable(name.clone()))
             }
         }
-        Expression::Call { function, arguments } => {
+        Expression::Call {
+            function,
+            arguments,
+        } => {
             // Destructuring: Color_Green(x)
             if let Expression::Identifier(func_name) = &**function {
-            if let Some((_tname, vname)) = func_name.split_once('_') {
+                if let Some((_tname, vname)) = func_name.split_once('_') {
                     if let Type::Enum { variants, .. } = scrutinee_type {
                         if let Some(payload_type_opt) = variants.get(vname) {
                             if let Some(payload_type) = payload_type_opt {
                                 // Bind each argument as a variable of payload_type
                                 for arg in arguments {
                                     if arg.name.is_some() {
-                                        return Err(SemanticError::UndefinedVariable("named arg in pattern".to_string()));
+                                        return Err(SemanticError::UndefinedVariable(
+                                            "named arg in pattern".to_string(),
+                                        ));
                                     }
                                     match &arg.value {
                                         Expression::Identifier(var_name) => {
@@ -1053,15 +1451,24 @@ fn analyze_pattern(pattern: &Expression, context: &mut SemanticContext, scrutine
                                                 // Wildcard, no binding
                                             } else {
                                                 // Bind variable
-                                                context.variables.insert(var_name.clone(), payload_type.clone());
+                                                context
+                                                    .variables
+                                                    .insert(var_name.clone(), payload_type.clone());
                                             }
                                         }
-                                        _ => return Err(SemanticError::UndefinedVariable("invalid pattern".to_string())),
+                                        _ => {
+                                            return Err(SemanticError::UndefinedVariable(
+                                                "invalid pattern".to_string(),
+                                            ))
+                                        }
                                     }
                                 }
                                 Ok(())
                             } else {
-                                Err(SemanticError::UndefinedVariable(format!("{} has no payload", func_name)))
+                                Err(SemanticError::UndefinedVariable(format!(
+                                    "{} has no payload",
+                                    func_name
+                                )))
                             }
                         } else {
                             Err(SemanticError::UndefinedVariable(func_name.clone()))
@@ -1073,20 +1480,30 @@ fn analyze_pattern(pattern: &Expression, context: &mut SemanticContext, scrutine
                         })
                     }
                 } else {
-                    Err(SemanticError::UndefinedVariable("invalid pattern".to_string()))
+                    Err(SemanticError::UndefinedVariable(
+                        "invalid pattern".to_string(),
+                    ))
                 }
             } else {
-                Err(SemanticError::UndefinedVariable("invalid pattern".to_string()))
+                Err(SemanticError::UndefinedVariable(
+                    "invalid pattern".to_string(),
+                ))
             }
         }
-        _ => Err(SemanticError::UndefinedVariable(format!("unknown pattern: {:?}", pattern))),
+        _ => Err(SemanticError::UndefinedVariable(format!(
+            "unknown pattern: {:?}",
+            pattern
+        ))),
     }
 }
 
 fn is_numeric_type(t: &Type) -> bool {
     match t {
         Type::Identifier(name) => {
-            matches!(name.as_str(), "i32" | "i64" | "f32" | "f64" | "u16" | "u32" | "u64")
+            matches!(
+                name.as_str(),
+                "i32" | "i64" | "f32" | "f64" | "u16" | "u32" | "u64"
+            )
         }
         _ => false,
     }

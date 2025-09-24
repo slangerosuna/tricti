@@ -8,7 +8,8 @@ fn parse_struct_and_method_syntax() {
             sum :: (self: &mut point) -> i64 => { self.x + self.y }
         }
         main :: () -> i64 => { 0 }
-    "#.to_string();
+    "#
+    .to_string();
 
     let _program = parser::parse(src);
 }

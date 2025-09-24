@@ -1,8 +1,8 @@
-use peano::{parser, semantic, codegen};
 use inkwell::context::Context;
-use std::process::Command;
+use peano::{codegen, parser, semantic};
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 fn clang_available() -> bool {
     Command::new("clang").arg("--version").output().is_ok()
@@ -10,7 +10,10 @@ fn clang_available() -> bool {
 
 #[test]
 fn typed_function_return_and_call() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         add_i32 :: (a:i32, b:i32) -> i64 => { a + b }
         println(add_i32(5, 7))
@@ -26,12 +29,19 @@ fn typed_function_return_and_call() {
 
     let obj = "tests/tmp_fn_typed.o";
     let exe = "tests/tmp_fn_typed.out";
-    if Path::new(obj).exists() { let _ = fs::remove_file(obj); }
-    if Path::new(exe).exists() { let _ = fs::remove_file(exe); }
+    if Path::new(obj).exists() {
+        let _ = fs::remove_file(obj);
+    }
+    if Path::new(exe).exists() {
+        let _ = fs::remove_file(exe);
+    }
 
     gen.write_object_file(obj).expect("write obj");
 
-    let status = Command::new("clang").args(["-o", exe, obj]).status().expect("link");
+    let status = Command::new("clang")
+        .args(["-o", exe, obj])
+        .status()
+        .expect("link");
     assert!(status.success(), "link failed");
 
     let out = Command::new(exe).output().expect("run");
