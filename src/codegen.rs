@@ -203,7 +203,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn map_ast_type(&self, t: &crate::ast::Type) -> Option<BasicTypeEnum<'ctx>> {
         use crate::ast::Type as AstType;
         match t {
-            AstType::Identifier(name) => match name.as_str() {
+            AstType::Identifier { name, type_args: _ } => match name.as_str() {
                 "i32" => Some(self.context.i32_type().into()),
                 "i64" => Some(self.context.i64_type().into()),
                 "f32" => Some(self.context.f32_type().into()),
@@ -306,7 +306,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
         if let Some(t) = self.semantic.get_variable_type(var_name) {
-            if let AstType::Identifier(name) = peel(t) {
+            if let AstType::Identifier { name, type_args: _ } = peel(t) {
                 return Some(name.clone());
             }
         }
@@ -868,7 +868,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         match statement {
             Statement::ConstDecl {
                 name,
-                type_params,
+                type_params: _,
                 type_annotation,
                 value,
                 extern_linkage: _extern_linkage,
@@ -880,7 +880,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                     // Struct literal special-case when annotated with a known struct type
                     if let (
-                        Some(Type::Identifier(struct_name)),
+                        Some(Type::Identifier { name: struct_name, type_args: _ }),
                         Expression::StructLiteral { fields },
                     ) = (type_annotation, expr)
                     {
@@ -934,7 +934,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Special-case: function.bind(...) assigned to a name -> synthesize a wrapper function with that name
                 if let Expression::Call {
                     function,
-                    type_args,
+                    type_args: _,
                     arguments: bind_args,
                 } = value
                 {
@@ -1094,7 +1094,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 // Struct literal special-case when annotated with a known struct type
-                if let (Some(Type::Identifier(struct_name)), Expression::StructLiteral { fields }) =
+                if let (Some(Type::Identifier { name: struct_name, type_args: _ }), Expression::StructLiteral { fields }) =
                     (type_annotation, value)
                 {
                     // limit borrow scope and clone needed data
@@ -1711,7 +1711,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }
                         }
                         // else fall through to semantic typing below
-                    } else if let Some(Type::Identifier(tn)) = self.semantic.get_variable_type(name)
+                    } else if let Some(Type::Identifier { name: tn, type_args: _ }) = self.semantic.get_variable_type(name)
                     {
                         // Support built-in slice_i64 iteration
                         if tn == "slice_i64" {
@@ -4675,7 +4675,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let mut handled_special = match &arg.value {
                     Expression::Call {
                         function,
-                        type_args,
+                        type_args: _,
                         arguments: hof_args,
                     } => {
                         if let Expression::FieldAccess { object, field } = function.as_ref() {
@@ -5395,7 +5395,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         Expression::Identifier(name) => {
                             self.local_types.get(name)
                                 .or_else(|| self.semantic.get_variable_type(name))
-                                .map(|t| matches!(t, crate::ast::Type::Identifier(s) if s == "string" || s == "String" || s == "str"))
+                                .map(|t| matches!(t, crate::ast::Type::Identifier { name: s, type_args: _ } if s == "string" || s == "String" || s == "str"))
                                 .unwrap_or(false)
                         }
                         _ => false,
@@ -5999,7 +5999,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             let ast_ty = parameters
                                 .get(i)
                                 .and_then(|p| p.param_type.clone())
-                                .unwrap_or(crate::ast::Type::Identifier("i64".to_string()));
+                                .unwrap_or(crate::ast::Type::Identifier { name: "i64".to_string(), type_args: vec![] });
                             self.local_types.insert(p_name, ast_ty);
                         }
 
@@ -6283,9 +6283,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                                 crate::ast::Type::Pointer {
                                                     is_mutable: false,
                                                     pointee: Box::new(
-                                                        crate::ast::Type::Identifier(
-                                                            type_name.clone(),
-                                                        ),
+                                                        crate::ast::Type::Identifier {
+                                                            name: type_name.clone(),
+                                                            type_args: vec![],
+                                                        },
                                                     ),
                                                 },
                                             );
@@ -6311,7 +6312,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     let ast_ty = parameters
                                         .get(i - param_index)
                                         .and_then(|p| p.param_type.clone())
-                                        .unwrap_or(crate::ast::Type::Identifier("i64".to_string()));
+                                        .unwrap_or(crate::ast::Type::Identifier { name: "i64".to_string(), type_args: vec![] });
                                     self.local_types.insert(p_name, ast_ty);
                                 }
 

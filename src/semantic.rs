@@ -95,8 +95,8 @@ impl SemanticContext {
         context.functions.insert(
             "len".to_string(),
             FunctionSignature {
-                parameters: vec![Type::Identifier("string".to_string())],
-                return_type: Type::Identifier("i64".to_string()),
+                parameters: vec![Type::Identifier { name: "string".to_string(), type_args: vec![] }],
+                return_type: Type::Identifier { name: "i64".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
@@ -105,10 +105,10 @@ impl SemanticContext {
             "streq".to_string(),
             FunctionSignature {
                 parameters: vec![
-                    Type::Identifier("string".to_string()),
-                    Type::Identifier("string".to_string()),
+                    Type::Identifier { name: "string".to_string(), type_args: vec![] },
+                    Type::Identifier { name: "string".to_string(), type_args: vec![] },
                 ],
-                return_type: Type::Identifier("bool".to_string()),
+                return_type: Type::Identifier { name: "bool".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
@@ -117,10 +117,10 @@ impl SemanticContext {
             "contains".to_string(),
             FunctionSignature {
                 parameters: vec![
-                    Type::Identifier("string".to_string()),
-                    Type::Identifier("string".to_string()),
+                    Type::Identifier { name: "string".to_string(), type_args: vec![] },
+                    Type::Identifier { name: "string".to_string(), type_args: vec![] },
                 ],
-                return_type: Type::Identifier("bool".to_string()),
+                return_type: Type::Identifier { name: "bool".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
@@ -130,10 +130,10 @@ impl SemanticContext {
                 name.to_string(),
                 FunctionSignature {
                     parameters: vec![
-                        Type::Identifier("string".to_string()),
-                        Type::Identifier("string".to_string()),
+                        Type::Identifier { name: "string".to_string(), type_args: vec![] },
+                        Type::Identifier { name: "string".to_string(), type_args: vec![] },
                     ],
-                    return_type: Type::Identifier("bool".to_string()),
+                    return_type: Type::Identifier { name: "bool".to_string(), type_args: vec![] },
                     is_async: false,
                 },
             );
@@ -143,10 +143,10 @@ impl SemanticContext {
             "find".to_string(),
             FunctionSignature {
                 parameters: vec![
-                    Type::Identifier("string".to_string()),
-                    Type::Identifier("string".to_string()),
+                    Type::Identifier { name: "string".to_string(), type_args: vec![] },
+                    Type::Identifier { name: "string".to_string(), type_args: vec![] },
                 ],
-                return_type: Type::Identifier("i64".to_string()),
+                return_type: Type::Identifier { name: "i64".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
@@ -154,16 +154,16 @@ impl SemanticContext {
         context.functions.insert(
             "slice_len".to_string(),
             FunctionSignature {
-                parameters: vec![Type::Identifier("slice_i64".to_string())],
-                return_type: Type::Identifier("i64".to_string()),
+                parameters: vec![Type::Identifier { name: "slice_i64".to_string(), type_args: vec![] }],
+                return_type: Type::Identifier { name: "i64".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
         context.functions.insert(
             "slice_is_empty".to_string(),
             FunctionSignature {
-                parameters: vec![Type::Identifier("slice_i64".to_string())],
-                return_type: Type::Identifier("bool".to_string()),
+                parameters: vec![Type::Identifier { name: "slice_i64".to_string(), type_args: vec![] }],
+                return_type: Type::Identifier { name: "bool".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
@@ -172,10 +172,10 @@ impl SemanticContext {
             "slice_get".to_string(),
             FunctionSignature {
                 parameters: vec![
-                    Type::Identifier("slice_i64".to_string()),
-                    Type::Identifier("i64".to_string()),
+                    Type::Identifier { name: "slice_i64".to_string(), type_args: vec![] },
+                    Type::Identifier { name: "i64".to_string(), type_args: vec![] },
                 ],
-                return_type: Type::Identifier("i64".to_string()),
+                return_type: Type::Identifier { name: "i64".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
@@ -184,16 +184,16 @@ impl SemanticContext {
         context.functions.insert(
             "slice_len_bool".to_string(),
             FunctionSignature {
-                parameters: vec![Type::Identifier("slice_bool".to_string())],
-                return_type: Type::Identifier("i64".to_string()),
+                parameters: vec![Type::Identifier { name: "slice_bool".to_string(), type_args: vec![] }],
+                return_type: Type::Identifier { name: "i64".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
         context.functions.insert(
             "slice_is_empty_bool".to_string(),
             FunctionSignature {
-                parameters: vec![Type::Identifier("slice_bool".to_string())],
-                return_type: Type::Identifier("bool".to_string()),
+                parameters: vec![Type::Identifier { name: "slice_bool".to_string(), type_args: vec![] }],
+                return_type: Type::Identifier { name: "bool".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
@@ -201,10 +201,10 @@ impl SemanticContext {
             "slice_get_bool".to_string(),
             FunctionSignature {
                 parameters: vec![
-                    Type::Identifier("slice_bool".to_string()),
-                    Type::Identifier("i64".to_string()),
+                    Type::Identifier { name: "slice_bool".to_string(), type_args: vec![] },
+                    Type::Identifier { name: "i64".to_string(), type_args: vec![] },
                 ],
-                return_type: Type::Identifier("bool".to_string()),
+                return_type: Type::Identifier { name: "bool".to_string(), type_args: vec![] },
                 is_async: false,
             },
         );
@@ -213,32 +213,32 @@ impl SemanticContext {
         context.functions.insert(
             "exit".to_string(),
             FunctionSignature {
-                parameters: vec![Type::Identifier("i32".to_string())],
+                parameters: vec![Type::Identifier { name: "i32".to_string(), type_args: vec![] }],
                 return_type: Type::None,
                 is_async: false,
             },
         );
         context
             .types
-            .insert("i32".to_string(), Type::Identifier("i32".to_string()));
+            .insert("i32".to_string(), Type::Identifier { name: "i32".to_string(), type_args: vec![] });
         context
             .types
-            .insert("i64".to_string(), Type::Identifier("i64".to_string()));
+            .insert("i64".to_string(), Type::Identifier { name: "i64".to_string(), type_args: vec![] });
         context
             .types
-            .insert("f32".to_string(), Type::Identifier("f32".to_string()));
+            .insert("f32".to_string(), Type::Identifier { name: "f32".to_string(), type_args: vec![] });
         context
             .types
-            .insert("f64".to_string(), Type::Identifier("f64".to_string()));
+            .insert("f64".to_string(), Type::Identifier { name: "f64".to_string(), type_args: vec![] });
         context
             .types
-            .insert("bool".to_string(), Type::Identifier("bool".to_string()));
+            .insert("bool".to_string(), Type::Identifier { name: "bool".to_string(), type_args: vec![] });
         context
             .types
-            .insert("string".to_string(), Type::Identifier("string".to_string()));
+            .insert("string".to_string(), Type::Identifier { name: "string".to_string(), type_args: vec![] });
         context
             .types
-            .insert("char".to_string(), Type::Identifier("char".to_string()));
+            .insert("char".to_string(), Type::Identifier { name: "char".to_string(), type_args: vec![] });
         // Minimal built-in slice for i64: { ptr: &i64, len: i64 }
         context.types.insert(
             "slice_i64".to_string(),
@@ -249,10 +249,10 @@ impl SemanticContext {
                         "ptr".to_string(),
                         Type::Pointer {
                             is_mutable: false,
-                            pointee: Box::new(Type::Identifier("i64".to_string())),
+                            pointee: Box::new(Type::Identifier { name: "i64".to_string(), type_args: vec![] }),
                         },
                     );
-                    m.insert("len".to_string(), Type::Identifier("i64".to_string()));
+                    m.insert("len".to_string(), Type::Identifier { name: "i64".to_string(), type_args: vec![] });
                     m
                 },
             },
@@ -268,10 +268,10 @@ impl SemanticContext {
                         "ptr".to_string(),
                         Type::Pointer {
                             is_mutable: false,
-                            pointee: Box::new(Type::Identifier("bool".to_string())),
+                            pointee: Box::new(Type::Identifier { name: "bool".to_string(), type_args: vec![] }),
                         },
                     );
-                    m.insert("len".to_string(), Type::Identifier("i64".to_string()));
+                    m.insert("len".to_string(), Type::Identifier { name: "i64".to_string(), type_args: vec![] });
                     m
                 },
             },
@@ -295,6 +295,75 @@ impl SemanticContext {
             scope.insert(name, var_type);
         } else {
             self.variables.insert(name, var_type);
+        }
+    }
+
+    pub fn resolve_type(&self, ty: &Type) -> Type {
+        match ty {
+            Type::Identifier { name, type_args } if !type_args.is_empty() => {
+                if let Some(params) = self.type_generics.get(name) {
+                    if let Some(base_ty) = self.types.get(name) {
+                        self.substitute_type(base_ty, params, type_args)
+                    } else {
+                        ty.clone()
+                    }
+                } else {
+                    ty.clone()
+                }
+            }
+            _ => ty.clone(),
+        }
+    }
+
+    fn substitute_type(&self, ty: &Type, params: &[String], args: &[Type]) -> Type {
+        match ty {
+            Type::Identifier { name, type_args } => {
+                if type_args.is_empty() {
+                    if let Some(pos) = params.iter().position(|p| p == name) {
+                        args[pos].clone()
+                    } else {
+                        ty.clone()
+                    }
+                } else {
+                    Type::Identifier {
+                        name: name.clone(),
+                        type_args: type_args.iter().map(|t| self.substitute_type(t, params, args)).collect(),
+                    }
+                }
+            }
+            Type::Pointer { is_mutable, pointee } => Type::Pointer {
+                is_mutable: *is_mutable,
+                pointee: Box::new(self.substitute_type(pointee, params, args)),
+            },
+            Type::RawPointer { pointee } => Type::RawPointer {
+                pointee: Box::new(self.substitute_type(pointee, params, args)),
+            },
+            Type::Optional { inner } => Type::Optional {
+                inner: Box::new(self.substitute_type(inner, params, args)),
+            },
+            Type::Result { inner } => Type::Result {
+                inner: Box::new(self.substitute_type(inner, params, args)),
+            },
+            Type::Tuple(elements) => Type::Tuple(
+                elements.iter().map(|e| self.substitute_type(e, params, args)).collect()
+            ),
+            Type::Matrix { element_type, dimensions } => Type::Matrix {
+                element_type: Box::new(self.substitute_type(element_type, params, args)),
+                dimensions: dimensions.clone(),
+            },
+            Type::Function { parameters, return_type } => Type::Function {
+                parameters: parameters.iter().map(|p| self.substitute_type(p, params, args)).collect(),
+                return_type: Box::new(self.substitute_type(return_type, params, args)),
+            },
+            Type::Struct { fields } => Type::Struct {
+                fields: fields.iter().map(|(k, v)| (k.clone(), self.substitute_type(v, params, args))).collect(),
+            },
+            Type::Enum { variants, order } => Type::Enum {
+                variants: variants.iter().map(|(k, v)| (k.clone(), v.as_ref().map(|t| self.substitute_type(t, params, args)))).collect(),
+                order: order.clone(),
+            },
+            Type::Trait { .. } => ty.clone(),
+            Type::None => ty.clone(),
         }
     }
 
@@ -385,12 +454,12 @@ fn collect_definitions(
                                 .map(|p| {
                                     p.param_type
                                         .clone()
-                                        .unwrap_or(Type::Identifier("i64".to_string()))
+                                        .unwrap_or(Type::Identifier { name: "i64".to_string(), type_args: vec![] })
                                 })
                                 .collect(),
                             return_type: return_type
                                 .clone()
-                                .unwrap_or(Type::Identifier("i64".to_string())),
+                                .unwrap_or(Type::Identifier { name: "i64".to_string(), type_args: vec![] }),
                             is_async: false,
                         };
                         context.define_function(name.clone(), sig.clone());
@@ -454,19 +523,19 @@ fn collect_definitions(
                             if trait_name.is_none() {
                                 params.push(Type::Pointer {
                                     is_mutable: false,
-                                    pointee: Box::new(Type::Identifier(type_name.clone())),
+                                    pointee: Box::new(Type::Identifier { name: type_name.clone(), type_args: vec![] }),
                                 });
                             }
                             params.extend(parameters.iter().map(|p| {
                                 p.param_type
                                     .clone()
-                                    .unwrap_or(Type::Identifier("i64".to_string()))
+                                    .unwrap_or(Type::Identifier { name: "i64".to_string(), type_args: vec![] })
                             }));
                             let sig = FunctionSignature {
                                 parameters: params,
                                 return_type: return_type
                                     .clone()
-                                    .unwrap_or(Type::Identifier("i64".to_string())),
+                                    .unwrap_or(Type::Identifier { name: "i64".to_string(), type_args: vec![] }),
                                 is_async: false,
                             };
                             let mangled =
@@ -506,6 +575,9 @@ fn analyze_statement(
             value,
             extern_linkage: _extern_linkage,
         } => {
+            if !type_params.is_empty() {
+                context.type_generics.insert(name.clone(), type_params.clone());
+            }
             if let ConstValue::Type(Type::Function {
                 parameters,
                 return_type,
@@ -537,7 +609,7 @@ fn analyze_statement(
                         let ty = p
                             .param_type
                             .clone()
-                            .unwrap_or(Type::Identifier("i64".into()));
+                            .unwrap_or(Type::Identifier { name: "i64".into(), type_args: vec![] });
                         context.define_variable(p.name.clone(), ty);
                     }
                     // Set expected return
@@ -589,7 +661,7 @@ fn analyze_statement(
             let final_type = if let Some(annotation) = type_annotation {
                 // Allow assigning i64 to enum-typed variables (repr i64)
                 let enum_i64_ok = match (annotation, &value_type) {
-                    (Type::Identifier(tn), Type::Identifier(vn)) if vn == "i64" => {
+                    (Type::Identifier { name: tn, type_args: _ }, Type::Identifier { name: vn, type_args: _ }) if vn == "i64" => {
                         if let Some(Type::Enum { .. }) = context.types.get(tn) {
                             true
                         } else {
@@ -620,7 +692,7 @@ fn analyze_statement(
 
             // Allow assigning i64 to enum-typed variables (repr i64)
             let enum_i64_ok = match (&target_type, &value_type) {
-                (Type::Identifier(tn), Type::Identifier(vn)) if vn == "i64" => {
+                (Type::Identifier { name: tn, type_args: _ }, Type::Identifier { name: vn, type_args: _ }) if vn == "i64" => {
                     if let Some(Type::Enum { .. }) = context.types.get(tn) {
                         true
                     } else {
@@ -678,7 +750,7 @@ fn analyze_statement(
             // Assume the variable type is i64 if not specified (matches codegen loop counter)
             let var_type = type_annotation
                 .clone()
-                .unwrap_or(Type::Identifier("i64".to_string()));
+                .unwrap_or(Type::Identifier { name: "i64".to_string(), type_args: vec![] });
 
             context.enter_scope();
             context.define_variable(variable.clone(), var_type);
@@ -733,12 +805,12 @@ fn analyze_statement(
                                         .map(|p| {
                                             p.param_type
                                                 .clone()
-                                                .unwrap_or(Type::Identifier("i64".to_string()))
+                                                .unwrap_or(Type::Identifier { name: "i64".to_string(), type_args: vec![] })
                                         })
                                         .collect(),
                                     return_type: return_type
                                         .clone()
-                                        .unwrap_or(Type::Identifier("i64".to_string())),
+                                        .unwrap_or(Type::Identifier { name: "i64".to_string(), type_args: vec![] }),
                                     is_async: false,
                                 };
                                 provided_methods.insert(name.clone(), sig);
@@ -828,12 +900,12 @@ fn analyze_statement(
                                     .map(|p| {
                                         p.param_type
                                             .clone()
-                                            .unwrap_or(Type::Identifier("i64".to_string()))
+                                            .unwrap_or(Type::Identifier { name: "i64".to_string(), type_args: vec![] })
                                     })
                                     .collect(),
                                 return_type: return_type
                                     .clone()
-                                    .unwrap_or(Type::Identifier("i64".to_string())),
+                                    .unwrap_or(Type::Identifier { name: "i64".to_string(), type_args: vec![] }),
                                 is_async: false,
                             };
                             info.methods.insert(name.clone(), sig);
@@ -864,8 +936,8 @@ fn types_match_with_assoc_and_self(
 ) -> bool {
     fn subst(t: &Type, assoc: &HashMap<String, Type>, self_type: &str) -> Type {
         match t {
-            Type::Identifier(a) if a == "self" => Type::Identifier(self_type.to_string()),
-            Type::Identifier(a) if assoc.contains_key(a) => assoc.get(a).unwrap().clone(),
+            Type::Identifier { name, type_args } if name == "self" => Type::Identifier { name: self_type.to_string(), type_args: type_args.clone() },
+            Type::Identifier { name, type_args: _ } if assoc.contains_key(name) => assoc.get(name).unwrap().clone(),
             Type::Pointer {
                 is_mutable,
                 pointee,
@@ -907,11 +979,11 @@ fn infer_expression_type(
 ) -> Result<Type, SemanticError> {
     match expr {
         Expression::Literal(literal) => Ok(match literal {
-            Literal::Integer(int_lit) => Type::Identifier(int_lit.type_name().to_string()),
-            Literal::Float(_) => Type::Identifier("f64".to_string()),
-            Literal::String(_) => Type::Identifier("string".to_string()),
-            Literal::Boolean(_) => Type::Identifier("bool".to_string()),
-            Literal::Char(_) => Type::Identifier("char".to_string()),
+            Literal::Integer(int_lit) => Type::Identifier { name: int_lit.type_name().to_string(), type_args: vec![] },
+            Literal::Float(_) => Type::Identifier { name: "f64".to_string(), type_args: vec![] },
+            Literal::String(_) => Type::Identifier { name: "string".to_string(), type_args: vec![] },
+            Literal::Boolean(_) => Type::Identifier { name: "bool".to_string(), type_args: vec![] },
+            Literal::Char(_) => Type::Identifier { name: "char".to_string(), type_args: vec![] },
         }),
 
         Expression::Tuple(elements) => {
@@ -929,7 +1001,7 @@ fn infer_expression_type(
                 if let Some(ty) = context.types.get(tname).cloned() {
                     if let Type::Enum { variants, .. } = ty {
                         if variants.contains_key(vname) {
-                            return Ok(Type::Identifier("i64".to_string()));
+                            return Ok(Type::Identifier { name: "i64".to_string(), type_args: vec![] });
                         }
                     }
                 }
@@ -965,7 +1037,7 @@ fn infer_expression_type(
 
         Expression::Call {
             function,
-            type_args,
+            type_args: _,
             arguments,
         } => {
             match function.as_ref() {
@@ -1189,7 +1261,7 @@ fn infer_expression_type(
                 let _ = infer_expression_type(&arm.body, context)?;
             }
             // For now matches yield i64 (we lower branches to i64 and phi them)
-            Ok(Type::Identifier("i64".to_string()))
+            Ok(Type::Identifier { name: "i64".to_string(), type_args: vec![] })
         }
 
         Expression::FieldAccess { object, field } => {
@@ -1200,7 +1272,7 @@ fn infer_expression_type(
                 base_ty = (*pointee.clone()).clone();
             }
             // If base is an identifier type referring to a struct, pick field type
-            if let Type::Identifier(ref name) = base_ty {
+            if let Type::Identifier { name, type_args: _ } = &base_ty {
                 if let Some(ty) = context.types.get(name).cloned() {
                     if let Type::Struct { fields } = ty {
                         if let Some(fty) = fields.get(field) {
@@ -1210,7 +1282,7 @@ fn infer_expression_type(
                 }
             }
             // Fallback
-            Ok(Type::Identifier("i64".to_string()))
+            Ok(Type::Identifier { name: "i64".to_string(), type_args: vec![] })
         }
 
         Expression::Index { object, indices: _ } => {
@@ -1236,16 +1308,16 @@ fn infer_expression_type(
         } => {
             let condition_type = infer_expression_type(condition, context)?;
             // Accept common truthy types (bool, numeric, string, pointers)
-            let is_bool = types_compatible(&Type::Identifier("bool".to_string()), &condition_type);
+            let is_bool = types_compatible(&Type::Identifier { name: "bool".to_string(), type_args: vec![] }, &condition_type);
             let is_num = is_numeric_type(&condition_type);
-            let is_str = matches!(condition_type, Type::Identifier(ref s) if s == "string");
+            let is_str = matches!(condition_type, Type::Identifier { ref name, type_args: _ } if name == "string");
             let is_ptr = matches!(
                 condition_type,
                 Type::Pointer { .. } | Type::RawPointer { .. }
             );
             if !(is_bool || is_num || is_str || is_ptr) {
                 return Err(SemanticError::TypeMismatch {
-                    expected: Type::Identifier("bool".to_string()),
+                    expected: Type::Identifier { name: "bool".to_string(), type_args: vec![] },
                     found: condition_type,
                 });
             }
@@ -1264,7 +1336,7 @@ fn infer_expression_type(
             let et = infer_expression_type(end, context)?;
             if !(is_numeric_type(&st) && is_numeric_type(&et)) {
                 return Err(SemanticError::TypeMismatch {
-                    expected: Type::Identifier("i64".to_string()),
+                    expected: Type::Identifier { name: "i64".to_string(), type_args: vec![] },
                     found: st,
                 });
             }
@@ -1272,7 +1344,7 @@ fn infer_expression_type(
                 let s_ty = infer_expression_type(s, context)?;
                 if !is_numeric_type(&s_ty) {
                     return Err(SemanticError::TypeMismatch {
-                        expected: Type::Identifier("i64".to_string()),
+                        expected: Type::Identifier { name: "i64".to_string(), type_args: vec![] },
                         found: s_ty,
                     });
                 }
@@ -1283,7 +1355,7 @@ fn infer_expression_type(
                     }
                 }
             }
-            Ok(Type::Identifier("i64".to_string()))
+            Ok(Type::Identifier { name: "i64".to_string(), type_args: vec![] })
         }
         Expression::Matrix { rows } => {
             // Determine dimensions and element type (numeric best-effort)
@@ -1301,10 +1373,10 @@ fn infer_expression_type(
                 for e in r {
                     if let Ok(t) = infer_expression_type(e, context) {
                         match t {
-                            Type::Identifier(ref s) if s == "f32" || s == "f64" => {
+                            Type::Identifier { name, type_args: _ } if name == "f32" || name == "f64" => {
                                 has_float = true;
                             }
-                            Type::Identifier(ref s) if s == "bool" => {
+                            Type::Identifier { name, type_args: _ } if name == "bool" => {
                                 has_bool = true;
                             }
                             _ => {
@@ -1315,11 +1387,11 @@ fn infer_expression_type(
                 }
             }
             let elem = if has_float {
-                Type::Identifier("f64".to_string())
+                Type::Identifier { name: "f64".to_string(), type_args: vec![] }
             } else if has_bool && !has_non_bool {
-                Type::Identifier("bool".to_string())
+                Type::Identifier { name: "bool".to_string(), type_args: vec![] }
             } else {
-                Type::Identifier("i64".to_string())
+                Type::Identifier { name: "i64".to_string(), type_args: vec![] }
             };
             let dims = if row_count <= 1 {
                 vec![col_count]
@@ -1346,7 +1418,7 @@ fn peel_to_identifier_name(t: &Type) -> Option<String> {
             Type::RawPointer { pointee } => cur = pointee.as_ref(),
             Type::Optional { inner } => cur = inner.as_ref(),
             Type::Result { inner } => cur = inner.as_ref(),
-            Type::Identifier(name) => return Some(name.clone()),
+            Type::Identifier { name, type_args: _ } => return Some(name.clone()),
             _ => return None,
         }
     }
@@ -1380,7 +1452,7 @@ fn infer_binary_op_type(
         | BinaryOperator::LessEqual
         | BinaryOperator::GreaterEqual => {
             if types_compatible(left, right) {
-                Ok(Type::Identifier("bool".to_string()))
+                Ok(Type::Identifier { name: "bool".to_string(), type_args: vec![] })
             } else {
                 Err(SemanticError::InvalidOperation {
                     operator: format!("{:?}", operator),
@@ -1390,7 +1462,7 @@ fn infer_binary_op_type(
         }
 
         BinaryOperator::And | BinaryOperator::Or | BinaryOperator::Xor => {
-            let bool_type = Type::Identifier("bool".to_string());
+            let bool_type = Type::Identifier { name: "bool".to_string(), type_args: vec![] };
             if types_compatible(left, &bool_type) && types_compatible(right, &bool_type) {
                 Ok(bool_type)
             } else {
@@ -1422,7 +1494,7 @@ fn infer_unary_op_type(operator: &UnaryOperator, operand: &Type) -> Result<Type,
         }
 
         UnaryOperator::Not => {
-            let bool_type = Type::Identifier("bool".to_string());
+            let bool_type = Type::Identifier { name: "bool".to_string(), type_args: vec![] };
             if types_compatible(operand, &bool_type) {
                 Ok(bool_type)
             } else {
@@ -1460,7 +1532,7 @@ fn infer_unary_op_type(operator: &UnaryOperator, operand: &Type) -> Result<Type,
 fn types_compatible(expected: &Type, found: &Type) -> bool {
     match (expected, found) {
         // Treat enums as i64-compatible for now (repr i64)
-        (Type::Identifier(e), Type::Enum { .. }) | (Type::Enum { .. }, Type::Identifier(e)) => {
+        (Type::Identifier { name: e, type_args: _ }, Type::Enum { .. }) | (Type::Enum { .. }, Type::Identifier { name: e, type_args: _ }) => {
             e == "i64"
         }
         // Allow implicit address-of: passing T where &T is expected
@@ -1469,14 +1541,14 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
                 pointee: exp_pointee,
                 ..
             },
-            Type::Identifier(found_name),
+            Type::Identifier { name: found_name, type_args: _ },
         ) => {
-            if let Type::Identifier(exp_name) = exp_pointee.as_ref() {
+            if let Type::Identifier { name: exp_name, type_args: _ } = exp_pointee.as_ref() {
                 return exp_name == found_name;
             }
             false
         }
-        (Type::Identifier(a), Type::Identifier(b)) => {
+        (Type::Identifier { name: a, type_args: _ }, Type::Identifier { name: b, type_args: _ }) => {
             if a == b {
                 return true;
             }
@@ -1604,7 +1676,7 @@ fn analyze_pattern(
 
 fn is_numeric_type(t: &Type) -> bool {
     match t {
-        Type::Identifier(name) => {
+        Type::Identifier { name, type_args: _ } => {
             matches!(
                 name.as_str(),
                 "i32" | "i64" | "f32" | "f64" | "u16" | "u32" | "u64"

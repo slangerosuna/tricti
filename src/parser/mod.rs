@@ -769,7 +769,21 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
     let mut it = pair.into_inner();
     if let Some(inner_pair) = it.next() {
         match inner_pair.as_rule() {
-            Rule::identifier => Type::Identifier(inner_pair.as_str().to_string()),
+            Rule::identifier => {
+                let name = inner_pair.as_str().to_string();
+                let mut type_args = vec![];
+                // Check if next is type_args
+                if let Some(next) = it.next() {
+                    if next.as_rule() == Rule::type_args {
+                        for ta in next.into_inner() {
+                            if ta.as_rule() == Rule::r#type {
+                                type_args.push(parse_type(ta));
+                            }
+                        }
+                    }
+                }
+                Type::Identifier { name, type_args }
+            }
             Rule::r#struct => parse_struct(inner_pair),
             Rule::r#enum => parse_enum(inner_pair),
             Rule::pointer => parse_pointer(inner_pair),

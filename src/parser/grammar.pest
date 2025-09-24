@@ -10,7 +10,7 @@ string       = @{ "r"? ~ ("\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"") | ("\"" ~ (!
 boolean      = @{ "true" | "false" }
 
 program      = { SOI ~ statement* ~ EOI }
-statement    = { use_statement | mod_decl | variable_decl | assignment | const_decl | impl_block | for_loop | return_statement | break_statement | expression }
+statement    = { (use_statement | mod_decl | variable_decl | assignment | const_decl | impl_block | for_loop | return_statement | break_statement | expression) ~ ";"? }
 
 use_statement = { "use" ~ identifier ~ ("::" ~ (identifier | "*"))* ~ ";"? }
 
@@ -79,7 +79,7 @@ shader_field = { identifier ~ ":" ~ type ~ ","? }
 
 tuple_type = { "(" ~ type ~ ("," ~ type)+ ~ ","? ~ ")" }
 matrix_type = { "[" ~ type ~ ";" ~ (integer | identifier ~ ","?)* ~ "]" }
-type = { struct | enum | trait_type | pointer | optional | result | matrix_type | function_type | tuple_type | "none" | identifier }
+type = { struct | enum | trait_type | pointer | optional | result | matrix_type | function_type | tuple_type | "none" | identifier ~ type_args? }
 trait_type = { "trait" ~ "{" ~ trait_items ~ "}" }
 trait_items = _{ (trait_assoc | trait_method)* }
 trait_assoc = { identifier ~ ":" ~ "type" ~ ","? }
@@ -95,4 +95,4 @@ enum = { "enum" ~ "{" ~ enum_variants ~ "}" }
 enum_variants = _{ (identifier ~ (":" ~ type)? ~ ","?)* }
 
 struct   = { "{" ~ struct_fields ~ "}" }
-struct_fields = _{ (identifier ~ ":" ~ type ~ ","?)* }
+struct_fields = _{ (identifier ~ ":" ~ type) ~ ("," ~ identifier ~ ":" ~ type)* ~ ","? }

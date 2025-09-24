@@ -296,7 +296,10 @@ pub enum UnaryOperator {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     None,
-    Identifier(String),
+    Identifier {
+        name: String,
+        type_args: Vec<Type>,
+    },
     Pointer {
         is_mutable: bool,
         pointee: Box<Type>,
