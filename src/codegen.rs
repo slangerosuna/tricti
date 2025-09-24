@@ -95,6 +95,17 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
+    fn const_int_from_literal(&self, literal: &IntegerLiteral) -> Result<inkwell::values::IntValue<'ctx>, CodegenError> {
+        let value = literal.value;
+        if value > u64::MAX as u128 {
+            return Err(CodegenError::InvalidOperation(format!(
+                "integer literal {} exceeds supported range for codegen",
+                literal.raw
+            )));
+        }
+        Ok(self.context.i64_type().const_int(value as u64, false))
+    }
+
     fn get_pattern_tag(&self, pattern: &Expression) -> Result<inkwell::values::IntValue<'ctx>, CodegenError> {
         match pattern {
             Expression::Identifier(name) => {
@@ -174,6 +185,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 "f32" => Some(self.context.f32_type().into()),
                 "f64" => Some(self.context.f64_type().into()),
                 "bool" => Some(self.context.bool_type().into()),
+                "char" => Some(self.context.i32_type().into()),
                 "string" | "String" | "str" => Some(self.context.ptr_type(AddressSpace::default()).into()),
                 _ => {
                     // Fallback: if identifier names a known struct, return its LLVM struct type
@@ -1143,7 +1155,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Fallback: index-based numeric or range loop
                 // Support: for i in N and for i in start:end[:step]
                 let (init_val_opt, end_val_opt, step_val_opt) = match iterable {
-                    Expression::Literal(Literal::Integer(n)) => (Some(self.context.i64_type().const_zero()), Some(self.context.i64_type().const_int(*n as u64, false)), Some(self.context.i64_type().const_int(1, false))),
+                    Expression::Literal(Literal::Integer(n)) => {
+                        let end_val = self.const_int_from_literal(n)?;
+                        (Some(self.context.i64_type().const_zero()), Some(end_val), Some(self.context.i64_type().const_int(1, false)))
+                    }
                     Expression::Identifier(name) => {
                         if let Some((ptr, ty)) = self.variables.get(name) {
                             if let BasicTypeEnum::IntType(i_ty) = ty {
@@ -1799,9 +1814,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     
     fn generate_literal(&self, literal: &Literal) -> Result<BasicValueEnum<'ctx>, CodegenError> {
         match literal {
-            Literal::Integer(value) => {
-                Ok(self.context.i64_type().const_int(*value as u64, false).into())
-            }
+            Literal::Integer(value) => self.const_int_from_literal(value).map(Into::into),
             
             Literal::Float(value) => {
                 Ok(self.context.f64_type().const_float(*value).into())
@@ -1811,6 +1824,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Ok(self.context.bool_type().const_int(*value as u64, false).into())
             }
             
+            Literal::Char(value) => {
+                Ok(self.context.i32_type().const_int(*value as u32 as u64, false).into())
+            }
+
             Literal::String(value) => {
                 let string_val = self.builder.build_global_string_ptr(value, "str")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -2915,6 +2932,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                         let f = self.builder.build_global_string_ptr("false", "false_str").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                         let sel_ptr = self.builder.build_select(iv, t.as_pointer_value(), f.as_pointer_value(), "boolstr").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                         let args: Vec<BasicValueEnum<'ctx>> = vec![fmt.as_pointer_value().into(), sel_ptr.into()];
+                        let argsm: Vec<_> = args.into_iter().map(|v| v.into()).collect();
+                        self.builder.build_call(printf_fn, &argsm, "printf_call").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    } else if value.is_int_value() && value.into_int_value().get_type().get_bit_width() == 32 {
+                        // Treat i32 as potential char: cast to i32 and use %c
+                        let iv = value.into_int_value();
+                        let fmt = self.builder.build_global_string_ptr("%c", "fmtc").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        let args: Vec<BasicValueEnum<'ctx>> = vec![fmt.as_pointer_value().into(), iv.into()];
                         let argsm: Vec<_> = args.into_iter().map(|v| v.into()).collect();
                         self.builder.build_call(printf_fn, &argsm, "printf_call").map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     } else if value.is_int_value() {

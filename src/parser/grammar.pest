@@ -2,7 +2,8 @@ WHITESPACE   = _{ " " | "\t" | "\n" | "\r" }
 COMMENT      = _{ "#" ~ (!"\n" ~ ANY)* | "/*" ~ (!"*/" ~ ANY)* ~ "*/"}
 
 identifier   = @{ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
-integer      = @{ ASCII_DIGIT+ }
+integer      = @{ ASCII_DIGIT+ ~ int_suffix? }
+int_suffix   = _{ "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" }
 float        = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 number       = { float | integer }
 string       = @{ "r"? ~ ("\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"") | ("\"" ~ (!"\"" ~ !"\n" ~ (ANY | "\\\""))* ~ "\"") }
@@ -48,7 +49,9 @@ primary       = { number | loop | conditional | match | function | literal | blo
 
 call_suffix = { "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
 argument = { (identifier ~ ":")? ~ expression }
-literal       = { integer | float | string | boolean | struct_literal }
+literal       = { integer | float | string | boolean | char | struct_literal }
+
+char         = @{ "'" ~ ( "\\" ~ ("'" | "\\" | "n" | "t" | "r" | "0" | "u" ~ "{" ~ ASCII_HEX_DIGIT+ ~ "}" ) | (!"\\" ~ !"'" ~ ANY) ) ~ "'" }
 
 struct_literal = { "{" ~ (identifier ~ ":" ~ expression ~ ","?)* ~ "}" }
 

@@ -171,10 +171,91 @@ pub struct Argument {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
-    Integer(i64),
+    Integer(IntegerLiteral),
     Float(f64),
     String(String),
     Boolean(bool),
+    Char(char),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IntSuffix {
+    I8,
+    I16,
+    I32,
+    I64,
+    U8,
+    U16,
+    U32,
+    U64,
+}
+
+impl IntSuffix {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            IntSuffix::I8 => "i8",
+            IntSuffix::I16 => "i16",
+            IntSuffix::I32 => "i32",
+            IntSuffix::I64 => "i64",
+            IntSuffix::U8 => "u8",
+            IntSuffix::U16 => "u16",
+            IntSuffix::U32 => "u32",
+            IntSuffix::U64 => "u64",
+        }
+    }
+
+    pub fn bit_width(&self) -> u32 {
+        match self {
+            IntSuffix::I8 | IntSuffix::U8 => 8,
+            IntSuffix::I16 | IntSuffix::U16 => 16,
+            IntSuffix::I32 | IntSuffix::U32 => 32,
+            IntSuffix::I64 | IntSuffix::U64 => 64,
+        }
+    }
+
+    pub fn is_signed(&self) -> bool {
+        matches!(self, IntSuffix::I8 | IntSuffix::I16 | IntSuffix::I32 | IntSuffix::I64)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IntegerLiteral {
+    pub raw: String,
+    pub value: u128,
+    pub suffix: Option<IntSuffix>,
+}
+
+impl IntegerLiteral {
+    pub fn type_name(&self) -> &'static str {
+        self.suffix
+            .as_ref()
+            .map(IntSuffix::type_name)
+            .unwrap_or("i64")
+    }
+
+    pub fn bit_width(&self) -> u32 {
+        self.suffix
+            .as_ref()
+            .map(IntSuffix::bit_width)
+            .unwrap_or(64)
+    }
+
+    pub fn is_signed(&self) -> bool {
+        self.suffix
+            .as_ref()
+            .map(IntSuffix::is_signed)
+            .unwrap_or(true)
+    }
+}
+
+impl Literal {
+    pub fn integer_from_parts(raw: String, value: u128, suffix: Option<IntSuffix>) -> Self {
+        Literal::Integer(IntegerLiteral { raw, value, suffix })
+    }
+
+    pub fn integer_zero() -> Self {
+        Literal::integer_from_parts("0".to_string(), 0, None)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -148,6 +148,7 @@ impl SemanticContext {
         context.types.insert("f64".to_string(), Type::Identifier("f64".to_string()));
         context.types.insert("bool".to_string(), Type::Identifier("bool".to_string()));
         context.types.insert("string".to_string(), Type::Identifier("string".to_string()));
+        context.types.insert("char".to_string(), Type::Identifier("char".to_string()));
         // Minimal built-in slice for i64: { ptr: &i64, len: i64 }
         context.types.insert(
             "slice_i64".to_string(),
@@ -560,10 +561,11 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
     match expr {
         Expression::Literal(literal) => {
             Ok(match literal {
-                Literal::Integer(_) => Type::Identifier("i64".to_string()),
+                Literal::Integer(int_lit) => Type::Identifier(int_lit.type_name().to_string()),
                 Literal::Float(_) => Type::Identifier("f64".to_string()),
                 Literal::String(_) => Type::Identifier("string".to_string()),
                 Literal::Boolean(_) => Type::Identifier("bool".to_string()),
+                Literal::Char(_) => Type::Identifier("char".to_string()),
             })
         }
         
@@ -835,7 +837,7 @@ fn infer_expression_type(expr: &Expression, context: &mut SemanticContext) -> Re
                 }
                 // If step is a literal zero, reject.
                 if let Expression::Literal(Literal::Integer(ival)) = s.as_ref() {
-                    if *ival == 0 { return Err(SemanticError::InvalidRangeStepZero); }
+                    if ival.value == 0 { return Err(SemanticError::InvalidRangeStepZero); }
                 }
             }
             Ok(Type::Identifier("i64".to_string()))

@@ -15,6 +15,73 @@ pub fn parse(file: String) -> Program {
     parse_program(program_pair)
 }
 
+fn parse_char_literal(content: &str) -> char {
+    // content includes surrounding single quotes
+    if content.len() < 2 {
+        panic!("invalid char literal: {}", content);
+    }
+    let inner = &content[1..content.len() - 1];
+    if inner.starts_with('\\') {
+        if inner.len() < 2 {
+            panic!("invalid escape in char literal: {}", content);
+        }
+        match inner.chars().nth(1).unwrap() {
+            'n' => '\n',
+            't' => '\t',
+            'r' => '\r',
+            '0' => '\0',
+            '\\' => '\\',
+            '\'' => '\'',
+            other => panic!("unsupported escape \\{} in char literal", other),
+        }
+    } else {
+        let mut chars = inner.chars();
+        let ch = chars.next().expect("empty char literal");
+        if chars.next().is_some() {
+            panic!("char literal must be a single code point: {}", content);
+        }
+        ch
+    }
+}
+
+fn parse_integer_literal(pair: pest::iterators::Pair<Rule>) -> Literal {
+    let text = pair.as_str();
+
+    const SUFFIXES: [&str; 8] = ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"];
+
+    let suffix = SUFFIXES
+        .iter()
+        .find(|suf| text.len() > suf.len() && text.ends_with(**suf))
+        .map(|s| *s);
+
+    let (digits, suffix_enum) = match suffix {
+        Some(suf) => {
+            let digits = &text[..text.len() - suf.len()];
+            let suffix_enum = match suf {
+                "i8" => IntSuffix::I8,
+                "i16" => IntSuffix::I16,
+                "i32" => IntSuffix::I32,
+                "i64" => IntSuffix::I64,
+                "u8" => IntSuffix::U8,
+                "u16" => IntSuffix::U16,
+                "u32" => IntSuffix::U32,
+                "u64" => IntSuffix::U64,
+                _ => unreachable!(),
+            };
+            (digits, Some(suffix_enum))
+        }
+        None => (text, None),
+    };
+
+    if digits.is_empty() {
+        panic!("integer literal missing digits: {}", text);
+    }
+
+    let value = digits.parse::<u128>().unwrap_or_else(|_| panic!("invalid integer literal: {}", text));
+
+    Literal::integer_from_parts(text.to_string(), value, suffix_enum)
+}
+
 fn parse_program(pair: pest::iterators::Pair<Rule>) -> Program {
     let mut statements = Vec::new();
     
@@ -169,13 +236,18 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::literal => parse_literal(pair),
         Rule::identifier => Expression::Identifier(pair.as_str().to_string()),
         Rule::number => parse_number(pair),
-        Rule::integer => Expression::Literal(Literal::Integer(pair.as_str().parse().unwrap())),
+        Rule::integer => Expression::Literal(parse_integer_literal(pair)),
         Rule::float => Expression::Literal(Literal::Float(pair.as_str().parse().unwrap())),
         Rule::string => {
             let content = pair.as_str();
             let unquoted = &content[1..content.len()-1]; // Remove quotes
             Expression::Literal(Literal::String(unquoted.to_string()))
         },
+        Rule::char => {
+            let content = pair.as_str();
+            let ch = parse_char_literal(content);
+            Expression::Literal(Literal::Char(ch))
+        }
         Rule::boolean => Expression::Literal(Literal::Boolean(pair.as_str() == "true")),
         _ => {
             // For wrapped expressions, unwrap them
@@ -235,7 +307,7 @@ fn parse_unary(pair: pest::iterators::Pair<Rule>) -> Expression {
         }
     }
     // Fallback: just parse as expression
-    if let Some(p) = first { parse_expression(p) } else { Expression::Literal(Literal::Integer(0)) }
+    if let Some(p) = first { parse_expression(p) } else { Expression::Literal(Literal::integer_zero()) }
 }
 
 fn parse_binary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -371,12 +443,17 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Expression {
     let inner_pair = pair.into_inner().next().unwrap();
     match inner_pair.as_rule() {
-        Rule::integer => Expression::Literal(Literal::Integer(inner_pair.as_str().parse().unwrap())),
+        Rule::integer => Expression::Literal(parse_integer_literal(inner_pair)),
         Rule::float => Expression::Literal(Literal::Float(inner_pair.as_str().parse().unwrap())),
         Rule::string => {
             let content = inner_pair.as_str();
             let unquoted = &content[1..content.len() - 1];
             Expression::Literal(Literal::String(unquoted.to_string()))
+        }
+        Rule::char => {
+            let content = inner_pair.as_str();
+            let ch = parse_char_literal(content);
+            Expression::Literal(Literal::Char(ch))
         }
         Rule::boolean => Expression::Literal(Literal::Boolean(inner_pair.as_str() == "true")),
         Rule::struct_literal => {
