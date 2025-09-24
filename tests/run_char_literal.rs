@@ -54,4 +54,10 @@ fn test_char_literal() {
     let input = "'\\u0041'"; // Represents 'A'
     let result = parse(input);
     assert_eq!(result, Ok(LiteralKind::Char(0x0041)));
+}```rust
+#[test]
+fn test_char_literal() {
+    let source = "'a'";
+    let result = parse(source);
+    assert_eq!(result, Ok(Expr::Literal(LiteralKind::Char('a' as u32), span)));
 }
