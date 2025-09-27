@@ -1,31 +1,77 @@
 WHITESPACE   = _{ " " | "\t" | "\n" | "\r" }
-COMMENT      = _{ "#" ~ (!"\n" ~ ANY)* | "/*" ~ (!"*/" ~ ANY)* ~ "*/"}
+COMMENT      = _{ "#" ~ (!"\n" ~ ANY)* }
 
 identifier   = @{ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
 integer      = @{ ASCII_DIGIT+ ~ int_suffix? }
-int_suffix   = _{ "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" }
-float        = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+int_suffix   = _{ "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128" }
+float        = @{ ASCII_DIGIT+ ~ "." ~ (ASCII_DIGIT+)? ~ float_suffix? }
+float_suffix = _{ "f32" | "f64" }
 number       = { float | integer }
-string       = @{ "r"? ~ ("\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"") | ("\"" ~ (!"\"" ~ !"\n" ~ (ANY | "\\\""))* ~ "\"") }
+string       = @{ "r"? ~ ("\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"") | ("#\"" ~ (!"\"#" ~ (ANY | "\\#"))* ~ "#\"") | ("\"" ~ (!"\"" ~ !"\n" ~ (ANY | "\\\""))* ~ "\"") }
 boolean      = @{ "true" | "false" }
 
 program      = { SOI ~ statement* ~ EOI }
-statement    = { (use_statement | mod_decl | variable_decl | assignment | const_decl | impl_block | for_loop | return_statement | break_statement | expression) ~ ";"? }
+statement    = {
+    (use_statement
+    | mod_decl
+    | variable_decl
+    | assignment
+    | const_decl
+    | impl_block
+    | for_loop
+    | return_statement
+    | break_statement
+    | expression)
+    ~ ";"?
+}
 
-use_statement = { "use" ~ identifier ~ ("::" ~ (identifier | "*"))* ~ ";"? }
+for_loop     = { "for" ~ identifier ~ (":" ~ type)? ~ "in" ~ expression ~ block }
+loop         = { "loop" ~ block }
+conditional  = { "if" ~ expression ~ block ~ ("else" ~ block)? }
 
-mod_decl = { "mod" ~ identifier ~ (";" | ("{" ~ statement* ~ "}")) }
+# --- CTI EXTENSIONS (unifying all declarations) ---
 
-return_statement = { "ret" ~ expression? }
-break_statement = { "break" ~ expression? }
+attribute       = { "@" ~ identifier ~ ("(" ~ (expression ~ ("," ~ expression)*)? ~ ")")? }
+attributes      = { attribute* }
 
-impl_block    = { "impl" ~ identifier ~ ("for" ~ identifier)? ~ "{" ~ impl_methods ~ "}" }
-impl_methods  = _{ (const_decl ~ ","?)* }
-block = { "{" ~ statement* ~ "}" }
+# unified constant declaration rule
+const_decl = {
+    attributes? ~
+    ("extern" ~ string?)? ~
+    identifier ~ type_params? ~
+    (":" ~ type)? ~
+    "::" ~ const_body
+}
 
-for_loop          = { "for" ~ identifier ~ (":" ~ type)? ~ "in" ~ expression ~ block }
-loop = { "loop" ~ block }
-conditional   = { "if" ~ expression ~ block ~ ("else" ~ block)? }
+# const body now can be one of:
+const_body = {
+      sys_def
+    | compose_def
+    | table_def
+    | db_def
+    | type
+    | expression
+}
+
+# --- system definition ---
+sys_def = { "sys" ~ "(" ~ sys_params? ~ ")" ~ return_type? ~ "=>" ~ block }
+sys_params = { sys_param ~ ("," ~ sys_param)* ~ ","? }
+sys_param = { identifier ~ ":" ~ type }
+
+# --- compose definition ---
+compose_def = { "compose" ~ "{" ~ compose_entry* ~ "}" }
+compose_entry = { (identifier | tuple_chain) ~ "->" ~ (identifier | tuple_chain) ~ ","? }
+tuple_chain = { "(" ~ identifier ~ ("," ~ identifier)* ~ ")" }
+
+# --- table definition ---
+table_def = { "table" ~ "{" ~ struct_fields? ~ "}" }
+
+# --- database definition ---
+db_def = { "db" ~ "{" ~ db_entries? ~ "}" }
+db_entries = { db_entry ~ ("," ~ db_entry)* ~ ","? }
+db_entry = { identifier ~ (":" ~ identifier)? }
+
+# --- core language (unchanged below) ---
 
 expression    = { or }
 
@@ -39,31 +85,31 @@ op_add        = { "+" | "-" }
 addition      = { multiplication ~ (op_add ~ multiplication )* }
 op_mul        = { "*" | ".*" | "/" | "./" | "\\" | "%" | ".%" }
 multiplication= { with_range ~ (op_mul ~ with_range)* }
-with_range = { unary ~ (":" ~ unary ~ (":" ~ unary)?)? }
+with_range    = { unary ~ (":" ~ unary ~ (":" ~ unary)?)? }
 op_unary      = { "-" | "~" | "*" | "&" | "&mut" | "!" }
 unary         = { op_unary? ~ post_fix }
 static_path_suffix = { "::" ~ identifier }
-field_suffix = { "." ~ identifier }
-post_fix = { primary ~ (call_suffix | static_path_suffix | field_suffix | "?" | "!" | ("[" ~ (expression ~ ","?)+ ~ "]"))* }
+field_suffix  = { "." ~ identifier }
+post_fix      = { primary ~ (call_suffix | static_path_suffix | field_suffix | "?" | "!" | ("[" ~ (expression ~ ","?)+ ~ "]"))* }
 tuple_expr    = { "(" ~ expression ~ ("," ~ expression)+ ~ ","? ~ ")" }
 primary       = { number | loop | conditional | match | function | literal | block | matrix | shader | tuple_expr | identifier | "(" ~ expression ~ ")" }
 
-call_suffix = { type_args? ~ "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
-argument = { (identifier ~ ":")? ~ expression }
+call_suffix   = { type_args? ~ "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
+argument      = { (identifier ~ ":")? ~ expression }
 literal       = { integer | float | string | boolean | char | struct_literal }
 
-char         = @{ "'" ~ ( "\\" ~ ("'" | "\\" | "n" | "t" | "r" | "0" | "u" ~ "{" ~ ASCII_HEX_DIGIT+ ~ "}" ) | (!"\\" ~ !"'" ~ ANY) ) ~ "'" }
+char          = @{ "'" ~ ( "\\" ~ ("'" | "\\" | "n" | "t" | "r" | "0" | "u" ~ "{" ~ ASCII_HEX_DIGIT+ ~ "}" ) | (!"\\" ~ !"'" ~ ANY) ) ~ "'" }
 
 struct_literal = { "{" ~ (identifier ~ ":" ~ expression ~ ","?)* ~ "}" }
 
-match = { "match" ~ expression ~ "{" ~ (expression ~ "=>" ~ expression ~ ","?)+ ~ "}"}
+match         = { "match" ~ expression ~ "{" ~ (expression ~ "=>" ~ expression ~ ","?)+ ~ "}" }
 
 matrix        = { "[" ~ (row ~ ";")* ~ row ~ ";"? ~ "]" }
 row           = { (expression ~ ","?)+ }
 
-type_params = { "<" ~ identifier ~ ("," ~ identifier)* ~ ">" }
-type_args = { "<" ~ type ~ ("," ~ type)* ~ ">" }
-function = { "async"? ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
+type_params   = { "<" ~ identifier ~ ("," ~ identifier)* ~ ">" }
+type_args     = { "<" ~ type ~ ("," ~ type)* ~ ">" }
+function      = { "async"? ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
 function_params = { (function_param | ("self" | "&self" | "&mut self" | "*self")) ~ ("," ~ function_param)* ~ ","? }
 function_param = { identifier ~ (":" ~ type)? ~ ("=" ~ expression)? }
 return_type   = { "->" ~ type}
@@ -71,28 +117,28 @@ function_body = { expression | "{" ~ statement* ~ "}" }
 
 assignment_op = { "=" | "*=" | "/=" | "+=" | "-=" | ".*=" | "./=" | "\\=" }
 assignment    = { expression ~ assignment_op ~ expression }
-variable_decl  = { identifier ~ (":" ~ type)? ~ ":=" ~ expression }
-const_decl    = { ("extern" ~ string?)? ~ identifier ~ type_params? ~ (":" ~ type)? ~ "::" ~ (type | expression) }
+variable_decl = { identifier ~ (":" ~ type)? ~ ":=" ~ expression }
 
-shader   = { ("vert" | "frag" | "comp") ~ "{" ~ (const_decl | shader_field)* ~ "}" }
-shader_field = { identifier ~ ":" ~ type ~ ","? }
+shader        = { ("vert" | "frag" | "comp") ~ "{" ~ (const_decl | shader_field)* ~ "}" }
+shader_field  = { identifier ~ ":" ~ type ~ ","? }
 
-tuple_type = { "(" ~ type ~ ("," ~ type)+ ~ ","? ~ ")" }
-matrix_type = { "[" ~ type ~ ";" ~ (integer | identifier ~ ","?)* ~ "]" }
-type = { struct | enum | trait_type | pointer | optional | result | matrix_type | function_type | tuple_type | "none" | identifier ~ type_args? }
-trait_type = { "trait" ~ "{" ~ trait_items ~ "}" }
-trait_items = _{ (trait_assoc | trait_method)* }
-trait_assoc = { identifier ~ ":" ~ "type" ~ ","? }
-trait_method = { identifier ~ ":" ~ function_type ~ ","? }
+tuple_type    = { "(" ~ type ~ ("," ~ type)+ ~ ","? ~ ")" }
+matrix_type   = { "[" ~ type ~ ";" ~ (integer | identifier ~ ","?)* ~ "]" }
+type          = { struct | enum | trait_type | pointer | optional | result | matrix_type | function_type | tuple_type | "none" | identifier ~ type_args? }
+trait_type    = { "trait" ~ "{" ~ trait_items ~ "}" }
+trait_items   = _{ (trait_assoc | trait_method)* }
+trait_assoc   = { identifier ~ ":" ~ "type" ~ ","? }
+trait_method  = { identifier ~ ":" ~ function_type ~ ","? }
 
-pointer = { "&mut " ~ type | "&" ~ type | "*" ~ type }
-optional = { "?" ~ type }
-result = { "!" ~ type }
+pointer       = { "&mut " ~ type | "&" ~ type | "*" ~ type }
+optional      = { "?" ~ type }
+result        = { "!" ~ type }
 
 function_type = { "(" ~ type? ~ ("," ~ type)* ~ ","? ~ ")" ~ return_type ~ !"=>" }
 
-enum = { "enum" ~ "{" ~ enum_variants ~ "}" }
+enum          = { "enum" ~ "{" ~ enum_variants ~ "}" }
 enum_variants = _{ (identifier ~ (":" ~ type)? ~ ","?)* }
 
-struct   = { "{" ~ struct_fields ~ "}" }
+struct        = { "{" ~ struct_fields ~ "}" }
 struct_fields = _{ (identifier ~ ":" ~ type) ~ ("," ~ identifier ~ ":" ~ type)* ~ ","? }
+
