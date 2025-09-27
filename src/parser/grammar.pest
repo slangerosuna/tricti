@@ -25,16 +25,21 @@ statement    = {
     ~ ";"?
 }
 
+use_statement = { "use" ~ identifier ~ ("::" ~ (identifier | "*"))* ~ ";"? }
+mod_decl = { "mod" ~ identifier ~ (";" | ("{" ~ statement* ~ "}")) }
+return_statement = { "ret" ~ expression? }
+break_statement = { "break" ~ expression? }
+impl_block    = { "impl" ~ identifier ~ ("for" ~ identifier)? ~ "{" ~ impl_methods ~ "}" }
+impl_methods  = _{ (const_decl ~ ","?)* }
+block = { "{" ~ statement* ~ "}" }
+
 for_loop     = { "for" ~ identifier ~ (":" ~ type)? ~ "in" ~ expression ~ block }
 loop         = { "loop" ~ block }
 conditional  = { "if" ~ expression ~ block ~ ("else" ~ block)? }
 
-# --- CTI EXTENSIONS (unifying all declarations) ---
-
 attribute       = { "@" ~ identifier ~ ("(" ~ (expression ~ ("," ~ expression)*)? ~ ")")? }
 attributes      = { attribute* }
 
-# unified constant declaration rule
 const_decl = {
     attributes? ~
     ("extern" ~ string?)? ~
@@ -43,7 +48,6 @@ const_decl = {
     "::" ~ const_body
 }
 
-# const body now can be one of:
 const_body = {
       sys_def
     | compose_def
@@ -53,25 +57,21 @@ const_body = {
     | expression
 }
 
-# --- system definition ---
 sys_def = { "sys" ~ "(" ~ sys_params? ~ ")" ~ return_type? ~ "=>" ~ block }
 sys_params = { sys_param ~ ("," ~ sys_param)* ~ ","? }
-sys_param = { identifier ~ ":" ~ type }
+sys_param = { (identifier ~ ":" ~ select) | (identifier ~ ":" ~ "res" ~ type) | function_param }
 
-# --- compose definition ---
+select = { "select" ~ "(" ~ identifier ~ ":" ~ type ~ ("," ~ identifier ~ ":" ~ type)* ~ ","? ~ ")" ~ "from" ~ identifier ~ ("where" ~ expression)? }
+
 compose_def = { "compose" ~ "{" ~ compose_entry* ~ "}" }
-compose_entry = { (identifier | tuple_chain) ~ "->" ~ (identifier | tuple_chain) ~ ","? }
+compose_entry = { (identifier | tuple_chain) ~ ("->" ~ (identifier | tuple_chain))* ~ ","? }
 tuple_chain = { "(" ~ identifier ~ ("," ~ identifier)* ~ ")" }
 
-# --- table definition ---
 table_def = { "table" ~ "{" ~ struct_fields? ~ "}" }
 
-# --- database definition ---
 db_def = { "db" ~ "{" ~ db_entries? ~ "}" }
 db_entries = { db_entry ~ ("," ~ db_entry)* ~ ","? }
 db_entry = { identifier ~ (":" ~ identifier)? }
-
-# --- core language (unchanged below) ---
 
 expression    = { or }
 
