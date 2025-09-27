@@ -1,7 +1,28 @@
+WHITESPACE   = _{ " " | "\t" | "\n" | "\r" }
+COMMENT      = _{ "#" ~ (!"\n" ~ ANY)* | "/*" ~ (!"*/" ~ ANY)* ~ "*/"}
+
+identifier   = @{ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
+integer      = @{ ASCII_DIGIT+ ~ int_suffix? }
+int_suffix   = _{ "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" }
+float        = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+number       = { float | integer }
+string       = @{ "r"? ~ ("\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"") | ("\"" ~ (!"\"" ~ !"\n" ~ (ANY | "\\\""))* ~ "\"") }
 boolean      = @{ "true" | "false" }
 
 program      = { SOI ~ statement* ~ EOI }
 statement    = { (use_statement | mod_decl | variable_decl | assignment | const_decl | impl_block | for_loop | return_statement | break_statement | expression) ~ ";"? }
+
+use_statement = { "use" ~ identifier ~ ("::" ~ (identifier | "*"))* ~ ";"? }
+
+mod_decl = { "mod" ~ identifier ~ (";" | ("{" ~ statement* ~ "}")) }
+
+return_statement = { "ret" ~ expression? }
+break_statement = { "break" ~ expression? }
+
+impl_block    = { "impl" ~ identifier ~ ("for" ~ identifier)? ~ "{" ~ impl_methods ~ "}" }
+impl_methods  = _{ (const_decl ~ ","?)* }
+block = { "{" ~ statement* ~ "}" }
+
 for_loop          = { "for" ~ identifier ~ (":" ~ type)? ~ "in" ~ expression ~ block }
 loop = { "loop" ~ block }
 conditional   = { "if" ~ expression ~ block ~ ("else" ~ block)? }
@@ -75,4 +96,3 @@ enum_variants = _{ (identifier ~ (":" ~ type)? ~ ","?)* }
 
 struct   = { "{" ~ struct_fields ~ "}" }
 struct_fields = _{ (identifier ~ ":" ~ type) ~ ("," ~ identifier ~ ":" ~ type)* ~ ","? }
-
