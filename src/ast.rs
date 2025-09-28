@@ -53,6 +53,9 @@ pub enum ConstValue {
     Type(Type),
     Expression(Expression),
     TableDef(TableDef),
+    SystemDef(SystemDef),
+    ComposeDef(ComposeDef),
+    DatabaseDef(DatabaseDef),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -129,6 +132,7 @@ pub enum Expression {
     },
     Question(Box<Expression>),
     Unwrap(Box<Expression>),
+    Query(QuerySpec),
     Shader {
         shader_type: ShaderType,
         fields: Vec<ShaderField>,
@@ -334,6 +338,10 @@ pub enum Type {
         associated_types: Vec<String>,
         methods: HashMap<String, Type>, // function types
     },
+    Reference {
+        is_mutable: bool,
+        inner: Box<Type>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -356,4 +364,100 @@ pub struct TableColumn {
 pub struct TableAnnotation {
     pub name: String,
     pub args: Vec<Expression>,
+}
+
+// System Execution Model AST structures
+#[derive(Debug, Clone, PartialEq)]
+pub struct SystemDef {
+    pub name: String,
+    pub parameters: Vec<SystemParameter>,
+    pub return_type: Option<Type>,
+    pub body: Vec<Statement>,
+    pub is_async: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SystemParameter {
+    Query {
+        name: String,
+        query_spec: QuerySpec,
+    },
+    Resource {
+        param_type: String,
+        name: String,
+        resource_type: Type,
+        access: ResourceAccess,
+    },
+    Regular {
+        param_type: String,
+        name: String,
+        value_type: Type,
+        default_value: Option<Expression>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResourceAccess {
+    Immutable,    // &T
+    Mutable,      // &mut T
+    Owned,        // T
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuerySpec {
+    pub projections: Vec<FieldProjection>,
+    pub from_table: String,
+    pub where_clause: Option<Box<Expression>>,
+    pub joins: Vec<JoinClause>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldProjection {
+    pub name: String,
+    pub field_type: Option<Type>,
+    pub access: Option<ResourceAccess>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct JoinClause {
+    pub join_type: JoinType,
+    pub table: String,
+    pub condition: Box<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum JoinType {
+    Inner,
+    Left,
+    Right,
+    Full,
+}
+
+// Compose and Database definitions for completeness
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComposeDef {
+    pub entries: Vec<ComposeEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComposeEntry {
+    pub source: ComposeNode,
+    pub targets: Vec<ComposeNode>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComposeNode {
+    Single(String),
+    Tuple(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DatabaseDef {
+    pub entries: Vec<DatabaseEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DatabaseEntry {
+    pub name: String,
+    pub table_type: Option<String>,
 }

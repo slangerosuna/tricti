@@ -159,6 +159,10 @@ impl DependencyGraph {
             Expression::Question(expr) | Expression::Unwrap(expr) => {
                 Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
             }
+            Expression::Query(_) => {
+                // Query expressions might have dependencies, but for now we'll treat them as having none
+                // TODO: Implement proper dependency extraction for query expressions
+            }
             // Literals and other leaf nodes don't have dependencies
             Expression::Literal(_) | Expression::Loop { .. } | 
             Expression::Function { .. } | Expression::Shader { .. } => {}

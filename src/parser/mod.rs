@@ -183,6 +183,9 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
             }
             Rule::expression => value_pair = Some(pair),
             Rule::table_def => value_pair = Some(pair),
+            Rule::sys_def => value_pair = Some(pair),
+            Rule::compose_def => value_pair = Some(pair),
+            Rule::db_def => value_pair = Some(pair),
             _ => {}
         }
     }
@@ -192,6 +195,9 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
             Rule::r#type => ConstValue::Type(parse_type(pair)),
             Rule::expression => ConstValue::Expression(parse_expression(pair)),
             Rule::table_def => ConstValue::TableDef(parse_table_def(pair, &name)),
+            Rule::sys_def => ConstValue::SystemDef(parse_sys_def(pair, &name)),
+            Rule::compose_def => ConstValue::ComposeDef(parse_compose_def(pair)),
+            Rule::db_def => ConstValue::DatabaseDef(parse_db_def(pair)),
             _ => panic!("Unexpected const value rule: {:?}", pair.as_rule()),
         }
     } else {
@@ -262,6 +268,7 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
             Expression::Literal(Literal::Char(ch))
         }
         Rule::boolean => Expression::Literal(Literal::Boolean(pair.as_str() == "true")),
+        Rule::query_spec => Expression::Query(parse_query_spec(pair)),
         _ => {
             // For wrapped expressions, unwrap them
             let inner = pair.into_inner().next();
@@ -789,6 +796,7 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
             Rule::r#struct => parse_struct(inner_pair),
             Rule::r#enum => parse_enum(inner_pair),
             Rule::pointer => parse_pointer(inner_pair),
+            Rule::reference_type => parse_reference_type(inner_pair),
             Rule::optional => parse_optional(inner_pair),
             Rule::result => parse_result(inner_pair),
             Rule::matrix_type => parse_matrix_type(inner_pair),
@@ -1115,4 +1123,358 @@ fn parse_table_annotation(pair: pest::iterators::Pair<Rule>) -> TableAnnotation 
     }
     
     TableAnnotation { name, args }
+}
+
+// System Execution Model parsing functions
+fn parse_sys_def(pair: pest::iterators::Pair<Rule>, name: &str) -> SystemDef {
+    let mut is_async = false;
+    let mut parameters = Vec::new();
+    let mut return_type = None;
+    let mut body = Vec::new();
+    
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::sys_params => {
+                for param_pair in inner_pair.into_inner() {
+                    if param_pair.as_rule() == Rule::sys_param {
+                        parameters.push(parse_system_parameter(param_pair));
+                    }
+                }
+            }
+            Rule::return_type => {
+                for type_pair in inner_pair.into_inner() {
+                    if type_pair.as_rule() == Rule::r#type {
+                        return_type = Some(parse_type(type_pair));
+                    }
+                }
+            }
+            Rule::block => {
+                for stmt_pair in inner_pair.into_inner() {
+                    if stmt_pair.as_rule() == Rule::statement {
+                        body.push(parse_statement(stmt_pair));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    SystemDef {
+        name: name.to_string(),
+        parameters,
+        return_type,
+        body,
+        is_async,
+    }
+}
+
+fn parse_system_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter {
+    let mut inner = pair.into_inner();
+    let first = inner.next().unwrap();
+    
+    match first.as_rule() {
+        Rule::identifier => {
+            let first_word = first.as_str().to_string();
+            
+            // Check if this is a query parameter
+            if first_word == "query" {
+                let param_name = inner.next().unwrap().as_str().to_string();
+                let _colon = inner.next(); // skip colon
+                let query_spec = parse_query_spec(inner.next().unwrap());
+                return SystemParameter::Query {
+                    name: param_name,
+                    query_spec,
+                };
+            }
+            
+            // Otherwise it's either resource or regular parameter
+            let param_type = first_word;
+            let param_name = inner.next().unwrap().as_str().to_string();
+            let _colon = inner.next(); // skip colon
+            let next = inner.next().unwrap();
+            
+            if next.as_str() == "res" {
+                // Resource parameter
+                let access_pair = inner.next().unwrap();
+                let access = parse_resource_access(access_pair);
+                let type_pair = inner.next().unwrap();
+                let resource_type = parse_type(type_pair);
+                SystemParameter::Resource {
+                    param_type,
+                    name: param_name,
+                    resource_type,
+                    access,
+                }
+            } else {
+                // Regular parameter
+                let value_type = parse_type(next);
+                let default_value = inner.next().map(|expr| parse_expression(expr));
+                SystemParameter::Regular {
+                    param_type,
+                    name: param_name,
+                    value_type,
+                    default_value,
+                }
+            }
+        }
+        _ => {
+            // Handle function_param case - fallback
+            let param_name = first.as_str().to_string();
+            SystemParameter::Regular {
+                param_type: "unknown".to_string(),
+                name: param_name,
+                value_type: Type::None,
+                default_value: None,
+            }
+        }
+    }
+}
+
+fn parse_query_spec(pair: pest::iterators::Pair<Rule>) -> QuerySpec {
+    let mut projections = Vec::new();
+    let mut from_table = String::new();
+    let mut where_clause = None;
+    let mut joins = Vec::new();
+    
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::field_projections => {
+                for proj_pair in inner_pair.into_inner() {
+                    if proj_pair.as_rule() == Rule::field_projection {
+                        projections.push(parse_field_projection(proj_pair));
+                    }
+                }
+            }
+            Rule::identifier => {
+                from_table = inner_pair.as_str().to_string();
+            }
+            Rule::join_clauses => {
+                for join_pair in inner_pair.into_inner() {
+                    if join_pair.as_rule() == Rule::join_clause {
+                        joins.push(parse_join_clause(join_pair));
+                    }
+                }
+            }
+            Rule::expression => {
+                where_clause = Some(Box::new(parse_expression(inner_pair)));
+            }
+            _ => {}
+        }
+    }
+    
+    QuerySpec {
+        projections,
+        from_table,
+        where_clause,
+        joins,
+    }
+}
+
+fn parse_field_projection(pair: pest::iterators::Pair<Rule>) -> FieldProjection {
+    let mut name = String::new();
+    let mut field_type = None;
+    let mut access = None;
+    
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::identifier => {
+                name = inner_pair.as_str().to_string();
+            }
+            Rule::resource_ref => {
+                access = Some(parse_resource_access(inner_pair));
+            }
+            Rule::r#type => {
+                field_type = Some(parse_type(inner_pair));
+            }
+            _ => {}
+        }
+    }
+    
+    FieldProjection {
+        name,
+        field_type,
+        access,
+    }
+}
+
+fn parse_resource_access(pair: pest::iterators::Pair<Rule>) -> ResourceAccess {
+    match pair.as_str() {
+        "&mut" => ResourceAccess::Mutable,
+        "&" => ResourceAccess::Immutable,
+        _ => ResourceAccess::Owned,
+    }
+}
+
+fn parse_join_clause(pair: pest::iterators::Pair<Rule>) -> JoinClause {
+    let mut join_type = JoinType::Inner;
+    let mut table = String::new();
+    let mut condition = Box::new(Expression::Literal(Literal::Boolean(true)));
+    
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::join_type => {
+                join_type = parse_join_type(inner_pair);
+            }
+            Rule::identifier => {
+                table = inner_pair.as_str().to_string();
+            }
+            Rule::expression => {
+                condition = Box::new(parse_expression(inner_pair));
+            }
+            _ => {}
+        }
+    }
+    
+    JoinClause {
+        join_type,
+        table,
+        condition,
+    }
+}
+
+fn parse_join_type(pair: pest::iterators::Pair<Rule>) -> JoinType {
+    match pair.as_str() {
+        "inner" => JoinType::Inner,
+        "left" => JoinType::Left,
+        "right" => JoinType::Right,
+        "full" => JoinType::Full,
+        _ => JoinType::Inner,
+    }
+}
+
+fn parse_compose_def(pair: pest::iterators::Pair<Rule>) -> ComposeDef {
+    let mut entries = Vec::new();
+    
+    for inner_pair in pair.into_inner() {
+        if inner_pair.as_rule() == Rule::compose_entry {
+            entries.push(parse_compose_entry(inner_pair));
+        }
+    }
+    
+    ComposeDef { entries }
+}
+
+fn parse_compose_entry(pair: pest::iterators::Pair<Rule>) -> ComposeEntry {
+    let mut source = ComposeNode::Single(String::new());
+    let mut targets = Vec::new();
+    let mut is_first = true;
+    
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::identifier => {
+                let node = ComposeNode::Single(inner_pair.as_str().to_string());
+                if is_first {
+                    source = node;
+                    is_first = false;
+                } else {
+                    targets.push(node);
+                }
+            }
+            Rule::tuple_chain => {
+                let node = parse_tuple_chain(inner_pair);
+                if is_first {
+                    source = node;
+                    is_first = false;
+                } else {
+                    targets.push(node);
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    ComposeEntry { source, targets }
+}
+
+fn parse_tuple_chain(pair: pest::iterators::Pair<Rule>) -> ComposeNode {
+    let mut names = Vec::new();
+    
+    for inner_pair in pair.into_inner() {
+        if inner_pair.as_rule() == Rule::identifier {
+            names.push(inner_pair.as_str().to_string());
+        }
+    }
+    
+    ComposeNode::Tuple(names)
+}
+
+fn parse_db_def(pair: pest::iterators::Pair<Rule>) -> DatabaseDef {
+    let mut entries = Vec::new();
+    
+    for inner_pair in pair.into_inner() {
+        if inner_pair.as_rule() == Rule::db_entries {
+            for entry_pair in inner_pair.into_inner() {
+                if entry_pair.as_rule() == Rule::db_entry {
+                    entries.push(parse_db_entry(entry_pair));
+                }
+            }
+        }
+    }
+    
+    DatabaseDef { entries }
+}
+
+fn parse_db_entry(pair: pest::iterators::Pair<Rule>) -> DatabaseEntry {
+    let mut name = String::new();
+    let mut table_type = None;
+    
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::identifier => {
+                if name.is_empty() {
+                    name = inner_pair.as_str().to_string();
+                } else {
+                    table_type = Some(inner_pair.as_str().to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    DatabaseEntry { name, table_type }
+}
+
+// Helper functions for type parsing
+fn parse_reference_type(pair: pest::iterators::Pair<Rule>) -> Type {
+    let mut it = pair.into_inner();
+    // reference_type = { ("&mut" | "&") ~ type }
+    let first = it.next().unwrap();
+    let ty_pair = it.next().unwrap_or_else(|| panic!("reference missing type"));
+    
+    match first.as_str() {
+        "&mut" => Type::Reference {
+            is_mutable: true,
+            inner: Box::new(parse_type(ty_pair)),
+        },
+        "&" => Type::Reference {
+            is_mutable: false,
+            inner: Box::new(parse_type(ty_pair)),
+        },
+        _ => panic!("Unexpected reference type: {}", first.as_str()),
+    }
+}
+
+fn parse_function_param(pair: pest::iterators::Pair<Rule>) -> Parameter {
+    let mut it = pair.into_inner();
+    let name = it.next().unwrap().as_str().to_string();
+    let mut param_type: Option<Type> = None;
+    let mut default_value: Option<Expression> = None;
+    
+    for part in it {
+        match part.as_rule() {
+            Rule::r#type => {
+                param_type = Some(parse_type(part));
+            }
+            Rule::expression => {
+                default_value = Some(parse_expression(part));
+            }
+            _ => {}
+        }
+    }
+    
+    Parameter {
+        name,
+        param_type,
+        default_value,
+    }
 }

@@ -1,0 +1,7 @@
+display_apps :: sys (
+    query q: select id, name from apps where downloads > 1000,
+    gui gui_handle: res &mut Gui,
+    limit max_apps: i64 = 10
+) -> !nil {
+    return nil;
+}

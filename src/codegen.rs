@@ -8,7 +8,7 @@ use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use crate::ast::{UnaryOperator, Expression, Argument, Type, FunctionBody, Statement, Program, ConstValue, Literal, BinaryOperator, IntegerLiteral};
+use crate::ast::{UnaryOperator, Expression, Argument, Type, FunctionBody, Statement, Program, ConstValue, Literal, BinaryOperator, IntegerLiteral, SystemParameter, ResourceAccess};
 #[derive(Debug)]
 pub enum CodegenError {
     UndefinedVariable(String),
@@ -222,7 +222,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
             },
-            AstType::Pointer { .. } | AstType::RawPointer { .. } => {
+            AstType::Pointer { .. } | AstType::RawPointer { .. } | AstType::Reference { .. } => {
                 Some(self.context.ptr_type(AddressSpace::default()).into())
             }
             AstType::Optional { .. } | AstType::Result { .. } => {
@@ -5901,6 +5901,57 @@ impl<'ctx> CodeGenerator<'ctx> {
                         };
                         let f = self.module.add_function(fname, fn_type, None);
                         self.functions.insert(fname.to_string(), f);
+                    } else if let ConstValue::SystemDef(system_def) = value {
+                        // Handle system function declarations
+                        let ret_ty = system_def.return_type
+                            .as_ref()
+                            .and_then(|t| self.map_ast_type(t))
+                            .unwrap_or(self.context.i64_type().into());
+                        
+                        let param_tys_bte: Vec<BasicTypeEnum<'ctx>> = system_def.parameters
+                            .iter()
+                            .map(|p| {
+                                match p {
+                                    SystemParameter::Query { .. } => {
+                                        // Query parameters are passed as opaque pointers to query results
+                                        self.context.ptr_type(AddressSpace::default()).into()
+                                    }
+                                    SystemParameter::Resource { resource_type, access, .. } => {
+                                        match access {
+                                            ResourceAccess::Immutable | ResourceAccess::Mutable => {
+                                                // Reference parameters are passed as pointers
+                                                self.context.ptr_type(AddressSpace::default()).into()
+                                            }
+                                            ResourceAccess::Owned => {
+                                                // Owned parameters use the actual type
+                                                self.map_ast_type(resource_type)
+                                                    .unwrap_or(self.context.i64_type().into())
+                                            }
+                                        }
+                                    }
+                                    SystemParameter::Regular { value_type, .. } => {
+                                        self.map_ast_type(value_type)
+                                            .unwrap_or(self.context.i64_type().into())
+                                    }
+                                }
+                            })
+                            .collect();
+                        
+                        let param_meta: Vec<inkwell::types::BasicMetadataTypeEnum> =
+                            param_tys_bte.iter().map(|t| (*t).into()).collect();
+                        
+                        let fn_type = match ret_ty {
+                            BasicTypeEnum::IntType(it) => it.fn_type(&param_meta, false),
+                            BasicTypeEnum::FloatType(ft) => ft.fn_type(&param_meta, false),
+                            BasicTypeEnum::PointerType(pt) => pt.fn_type(&param_meta, false),
+                            BasicTypeEnum::StructType(st) => st.fn_type(&param_meta, false),
+                            _ => self.context.i64_type().fn_type(&param_meta, false),
+                        };
+                        
+                        // System functions get a `sys_` prefix
+                        let fname = format!("sys_{}", name);
+                        let f = self.module.add_function(&fname, fn_type, None);
+                        self.functions.insert(fname, f);
                     }
                 }
                 Statement::ImplBlock {
@@ -6222,6 +6273,84 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
 
                         // Restore state for next
+                        self.variables = prev_vars;
+                        self.local_types.clear();
+                        self.current_function = prev_fn;
+                    } else if let ConstValue::SystemDef(system_def) = value {
+                        // Handle system function body generation
+                        let fname = format!("sys_{}", name);
+                        let f = match self.functions.get(&fname) {
+                            Some(f) => *f,
+                            None => continue,
+                        };
+                        
+                        let entry = self.context.append_basic_block(f, "entry");
+                        self.builder.position_at_end(entry);
+                        let prev_fn = self.current_function;
+                        let prev_vars = std::mem::take(&mut self.variables);
+                        self.current_function = Some(f);
+
+                        // Bind system parameters to allocas
+                        for (i, param) in f.get_param_iter().enumerate() {
+                            if let Some(system_param) = system_def.parameters.get(i) {
+                                let (p_name, p_ty) = match system_param {
+                                    SystemParameter::Query { name, .. } => {
+                                        (name.clone(), self.context.ptr_type(AddressSpace::default()).into())
+                                    }
+                                    SystemParameter::Resource { param_type: _, name, resource_type, access } => {
+                                        let ty = match access {
+                                            ResourceAccess::Immutable | ResourceAccess::Mutable => {
+                                                self.context.ptr_type(AddressSpace::default()).into()
+                                            }
+                                            ResourceAccess::Owned => {
+                                                self.map_ast_type(resource_type).unwrap_or(self.context.i64_type().into())
+                                            }
+                                        };
+                                        (name.clone(), ty)
+                                    }
+                                    SystemParameter::Regular { param_type: _, name, value_type, .. } => {
+                                        let ty = self.map_ast_type(&value_type)
+                                            .unwrap_or(self.context.i64_type().into());
+                                        (name.clone(), ty)
+                                    }
+                                };
+                                
+                                let alloca = self.create_entry_block_alloca(&p_name, p_ty)?;
+                                self.builder
+                                    .build_store(alloca, param)
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                self.variables.insert(p_name.clone(), (alloca, p_ty));
+                            }
+                        }
+
+                        // Generate system function body
+                        for stmt in &system_def.body {
+                            self.generate_statement(stmt)?;
+                        }
+
+                        // Ensure function has return if needed
+                        let current_block = self.builder.get_insert_block();
+                        let needs_return = current_block.map_or(true, |block| block.get_terminator().is_none());
+                        if needs_return {
+                            if let Some(ret_type) = &system_def.return_type {
+                                if ret_type != &Type::None {
+                                    // Build default return value
+                                    let default_val: BasicValueEnum = match self.map_ast_type(ret_type) {
+                                        Some(BasicTypeEnum::IntType(it)) => it.const_zero().into(),
+                                        Some(BasicTypeEnum::FloatType(ft)) => ft.const_zero().into(),
+                                        Some(BasicTypeEnum::PointerType(pt)) => pt.const_zero().into(),
+                                        _ => self.context.i64_type().const_zero().into(),
+                                    };
+                                    self.try_build_return(Some(&default_val))?;
+                                }
+                            } else {
+                                // No return type specified, return i64(0)
+                                let ret_val = self.context.i64_type().const_zero();
+                                self.try_build_return(Some(&ret_val))?;
+                            }
+                        }
+
+                        // Restore context
                         self.variables = prev_vars;
                         self.local_types.clear();
                         self.current_function = prev_fn;

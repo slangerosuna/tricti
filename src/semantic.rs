@@ -366,6 +366,10 @@ impl SemanticContext {
                 order: order.clone(),
             },
             Type::Trait { .. } => ty.clone(),
+            Type::Reference { is_mutable, inner } => Type::Reference {
+                is_mutable: *is_mutable,
+                inner: Box::new(self.substitute_type(inner, params, args)),
+            },
             Type::None => ty.clone(),
         }
     }
@@ -502,6 +506,34 @@ fn collect_definitions(
                     // Insert the updated table definition into context
                     context.tables.insert(name.clone(), table_def_copy);
                 }
+                ConstValue::SystemDef(system_def) => {
+                    // Register system function signature during collection phase
+                    let sig = FunctionSignature {
+                        parameters: system_def.parameters.iter().map(|p| {
+                            match p {
+                                SystemParameter::Query { name: _, query_spec: _ } => {
+                                    Type::Identifier { name: "QueryResult".to_string(), type_args: vec![] }
+                                }
+                                SystemParameter::Resource { resource_type, access, .. } => {
+                                    match access {
+                                        ResourceAccess::Immutable => Type::Reference { is_mutable: false, inner: Box::new(resource_type.clone()) },
+                                        ResourceAccess::Mutable => Type::Reference { is_mutable: true, inner: Box::new(resource_type.clone()) },
+                                        ResourceAccess::Owned => resource_type.clone(),
+                                    }
+                                }
+                                SystemParameter::Regular { value_type, .. } => {
+                                    value_type.clone()
+                                }
+                            }
+                        }).collect(),
+                        return_type: system_def.return_type.clone().unwrap_or(Type::None),
+                        is_async: system_def.is_async,
+                    };
+                    context.define_function(name.clone(), sig);
+                }
+                ConstValue::ComposeDef(_) | ConstValue::DatabaseDef(_) => {
+                    // TODO: Add proper handling for compose and database definitions during collection
+                }
             }
         }
         Statement::ImplBlock {
@@ -565,6 +597,13 @@ fn collect_definitions(
                         }
                         ConstValue::TableDef(table_def) => {
                             validate_table_definition(table_def, context)?;
+                        }
+                        ConstValue::SystemDef(system_def) => {
+                            // Validate system function definition in impl block context
+                            validate_system_definition(system_def, context)?;
+                        }
+                        ConstValue::ComposeDef(_) | ConstValue::DatabaseDef(_) => {
+                            // TODO: Add validation for compose and database definitions
                         }
                     }
                 }
@@ -670,6 +709,13 @@ fn analyze_statement(
                 }
                 ConstValue::TableDef(table_def) => {
                     validate_table_definition(table_def, context)?;
+                }
+                ConstValue::SystemDef(system_def) => {
+                    // Perform full semantic analysis of system function
+                    analyze_system_definition(system_def, context)?;
+                }
+                ConstValue::ComposeDef(_) | ConstValue::DatabaseDef(_) => {
+                    // TODO: Add semantic analysis for compose and database definitions
                 }
             }
         }
@@ -841,6 +887,13 @@ fn analyze_statement(
                             }
                             ConstValue::TableDef(table_def) => {
                                 validate_table_definition(table_def, context)?;
+                            }
+                            ConstValue::SystemDef(system_def) => {
+                                // Validate system function in trait impl context
+                                validate_system_definition(system_def, context)?;
+                            }
+                            ConstValue::ComposeDef(_) | ConstValue::DatabaseDef(_) => {
+                                // TODO: Add validation for compose and database definitions
                             }
                         }
                     }
@@ -1427,6 +1480,15 @@ fn infer_expression_type(
                 element_type: Box::new(elem),
                 dimensions: dims,
             })
+        }
+        Expression::Query(_query_spec) => {
+            // TODO: Implement proper type inference for query expressions
+            // For now, queries return a table/result type
+            Ok(Type::Identifier { name: "QueryResult".to_string(), type_args: vec![] })
+        }
+        Expression::Shader { .. } => {
+            // Shader expressions return a shader type
+            Ok(Type::Identifier { name: "Shader".to_string(), type_args: vec![] })
         }
         _ => {
             // For other expression types, return none for now
@@ -2145,6 +2207,7 @@ fn validate_type(type_def: &Type, context: &SemanticContext) -> Result<(), Seman
         }
         Type::Pointer { pointee, .. } => validate_type(pointee, context),
         Type::RawPointer { pointee } => validate_type(pointee, context),
+        Type::Reference { inner, .. } => validate_type(inner, context),
         Type::Optional { inner } => validate_type(inner, context),
         Type::Result { inner } => validate_type(inner, context),
         Type::Tuple(types) => {
@@ -2181,4 +2244,113 @@ fn validate_type(type_def: &Type, context: &SemanticContext) -> Result<(), Seman
             Ok(())
         }
     }
+}
+
+/// Validate a system function definition
+fn validate_system_definition(
+    system_def: &SystemDef,
+    context: &mut SemanticContext,
+) -> Result<(), SemanticError> {
+    // Validate all query parameters reference valid tables
+    for param in &system_def.parameters {
+        match param {
+            SystemParameter::Query { name: _, query_spec } => {
+                // Check that the table referenced in the query exists
+                if !context.tables.contains_key(&query_spec.from_table) {
+                    return Err(SemanticError::UndefinedVariable(format!(
+                        "Table '{}' referenced in query parameter not found", 
+                        query_spec.from_table
+                    )));
+                }
+                
+                // Validate join tables exist
+                for join in &query_spec.joins {
+                    if !context.tables.contains_key(&join.table) {
+                        return Err(SemanticError::UndefinedVariable(format!(
+                            "Join table '{}' not found", join.table
+                        )));
+                    }
+                }
+                
+                // TODO: Validate field projections and where clauses
+            }
+            SystemParameter::Resource { resource_type, .. } => {
+                // TODO: Validate resource type exists and is accessible
+                let _ = resource_type; // Suppress unused warning for now
+            }
+            SystemParameter::Regular { value_type, default_value, .. } => {
+                // Validate default value type matches parameter type if both present
+                if let Some(default_expr) = default_value {
+                    let default_type = infer_expression_type(default_expr, context)?;
+                    if !types_compatible(value_type, &default_type) {
+                        return Err(SemanticError::TypeMismatch {
+                            expected: value_type.clone(),
+                            found: default_type,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Analyze a system function definition including its body
+fn analyze_system_definition(
+    system_def: &SystemDef,
+    context: &mut SemanticContext,
+) -> Result<(), SemanticError> {
+    // First validate the definition structure
+    validate_system_definition(system_def, context)?;
+    
+    // Set up parameter bindings for body analysis
+    let prev_vars = context.variables.clone();
+    let prev_ret = context.current_function_return_type.clone();
+    
+    // Bind system parameters as variables
+    for param in &system_def.parameters {
+        match param {
+            SystemParameter::Query { name, query_spec: _ } => {
+                context.define_variable(name.clone(), Type::Identifier { 
+                    name: "QueryResult".to_string(), 
+                    type_args: vec![] 
+                });
+            }
+            SystemParameter::Resource { param_type: _, name, resource_type, access } => {
+                let param_type = match access {
+                    ResourceAccess::Immutable => Type::Reference { 
+                        is_mutable: false, 
+                        inner: Box::new(resource_type.clone()) 
+                    },
+                    ResourceAccess::Mutable => Type::Reference { 
+                        is_mutable: true, 
+                        inner: Box::new(resource_type.clone()) 
+                    },
+                    ResourceAccess::Owned => resource_type.clone(),
+                };
+                context.define_variable(name.clone(), param_type);
+            }
+            SystemParameter::Regular { param_type: _, name, value_type, .. } => {
+                let ptype = value_type.clone();
+                context.define_variable(name.clone(), ptype);
+            }
+        }
+    }
+    
+    // Set expected return type
+    context.current_function_return_type = Some(
+        system_def.return_type.clone().unwrap_or(Type::None)
+    );
+    
+    // Analyze function body
+    for stmt in &system_def.body {
+        analyze_statement(stmt, context)?;
+    }
+    
+    // Restore context
+    context.variables = prev_vars;
+    context.current_function_return_type = prev_ret;
+    
+    Ok(())
 }

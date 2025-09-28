@@ -57,11 +57,23 @@ const_body = {
     | expression
 }
 
-sys_def = { "sys" ~ "(" ~ sys_params? ~ ")" ~ return_type? ~ "=>" ~ block }
+sys_def = { "async"? ~ "sys" ~ "(" ~ sys_params? ~ ")" ~ return_type? ~ "=>" ~ block }
 sys_params = { sys_param ~ ("," ~ sys_param)* ~ ","? }
-sys_param = { (identifier ~ ":" ~ select) | (identifier ~ ":" ~ "res" ~ type) | function_param }
+sys_param = { 
+    ("query" ~ identifier ~ ":" ~ query_spec) | 
+    (identifier ~ identifier ~ ":" ~ "res" ~ resource_ref ~ type) | 
+    (identifier ~ identifier ~ ":" ~ type ~ ("=" ~ expression)?) |
+    function_param 
+}
 
-select = { "select" ~ "(" ~ identifier ~ ":" ~ type ~ ("," ~ identifier ~ ":" ~ type)* ~ ","? ~ ")" ~ "from" ~ identifier ~ ("where" ~ expression)? }
+query_spec = { "select" ~ field_projections ~ "from" ~ identifier ~ join_clauses? ~ ("where" ~ expression)? }
+field_projections = { field_projection ~ ("," ~ field_projection)* ~ ","? }
+field_projection = { identifier ~ (":" ~ resource_ref? ~ type)? }
+resource_ref = { "&mut" | "&" }
+
+join_clauses = { join_clause+ }
+join_clause = { join_type ~ "join" ~ identifier ~ "on" ~ expression }
+join_type = { "inner" | "left" | "right" | "full" | "" }
 
 compose_def = { "compose" ~ "{" ~ compose_entry* ~ "}" }
 compose_entry = { (identifier | tuple_chain) ~ ("->" ~ (identifier | tuple_chain))* ~ ","? }
@@ -89,7 +101,7 @@ addition      = { multiplication ~ (op_add ~ multiplication )* }
 op_mul        = { "*" | ".*" | "/" | "./" | "\\" | "%" | ".%" }
 multiplication= { with_range ~ (op_mul ~ with_range)* }
 with_range    = { unary ~ (":" ~ unary ~ (":" ~ unary)?)? }
-op_unary      = { "-" | "~" | "*" | "&" | "&mut" | "!" }
+op_unary      = { "-" | "~" | "*" | "&mut" | "&" | "!" }
 unary         = { op_unary? ~ post_fix }
 static_path_suffix = { "::" ~ identifier }
 field_suffix  = { "." ~ identifier }
@@ -127,7 +139,8 @@ shader_field  = { identifier ~ ":" ~ type ~ ","? }
 
 tuple_type    = { "(" ~ type ~ ("," ~ type)+ ~ ","? ~ ")" }
 matrix_type   = { "[" ~ type ~ ";" ~ (integer | identifier ~ ","?)* ~ "]" }
-type          = { struct | enum | trait_type | pointer | optional | result | matrix_type | function_type | tuple_type | "none" | identifier ~ type_args? }
+type          = { struct | enum | trait_type | pointer | reference_type | optional | result | matrix_type | function_type | tuple_type | "none" | identifier ~ type_args? }
+reference_type = { ("&mut" | "&") ~ type }
 trait_type    = { "trait" ~ "{" ~ trait_items ~ "}" }
 trait_items   = _{ (trait_assoc | trait_method)* }
 trait_assoc   = { identifier ~ ":" ~ "type" ~ ","? }
