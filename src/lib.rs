@@ -4,5 +4,6 @@ pub mod computed_columns;
 pub mod parser;
 pub mod query;
 pub mod query_executor;
+pub mod scheduler;
 pub mod semantic;
 pub mod table_runtime;
