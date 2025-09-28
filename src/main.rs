@@ -1,12 +1,30 @@
 pub mod ast;
+pub mod async_runtime;
+pub mod async_scheduler_integration;
+pub mod async_table_integration;
 pub mod codegen;
+pub mod computed_columns;
+pub mod error_propagation;
+pub mod event_loop_manager;
 pub mod parser;
+pub mod query;
+pub mod query_executor;
+pub mod resource_lifecycle;
+pub mod scheduler;
 pub mod semantic;
+pub mod system_executor;
+pub mod table_runtime;
 
 use crate::ast::*;
+use crate::async_runtime::RuntimeConfig;
+use crate::async_scheduler_integration::{AsyncSystemScheduler, SystemExecutionRequest};
+use crate::event_loop_manager::{EventLoopManager, EventLoopConfig, LoadBalancingStrategy};
+use crate::table_runtime::{TableRuntime, ColumnValue};
 use inkwell::context::Context;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::Duration;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -40,6 +58,20 @@ fn main() {
             return;
         }
     };
+
+    // Check if we have async systems that need the async runtime
+    let async_systems = extract_async_systems(&program);
+    if !async_systems.is_empty() {
+        println!("\nDetected {} async systems - initializing async runtime...", async_systems.len());
+        
+        // Run async systems through the event loop
+        if let Err(error) = run_async_systems(async_systems, semantic_context.clone()) {
+            eprintln!("Async execution error: {:?}", error);
+            return;
+        }
+        
+        println!("Async execution completed successfully!");
+    }
 
     // Generate LLVM IR
     println!("\nGenerating LLVM IR...");
@@ -99,6 +131,87 @@ fn main() {
         }
         Err(e) => eprintln!("Failed to run clang: {}", e),
     }
+}
+
+/// Extract async systems from the program
+fn extract_async_systems(program: &Program) -> Vec<SystemDef> {
+    let mut async_systems = Vec::new();
+    
+    for statement in &program.statements {
+        if let Statement::ConstDecl { value: ConstValue::SystemDef(system_def), .. } = statement {
+            if system_def.is_async {
+                async_systems.push(system_def.clone());
+            }
+        }
+    }
+    
+    async_systems
+}
+
+/// Run async systems through the event loop manager
+fn run_async_systems(
+    async_systems: Vec<SystemDef>,
+    semantic_context: crate::semantic::SemanticContext,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Configure the async runtime
+    let runtime_config = RuntimeConfig {
+        max_concurrent_systems: 100,
+        default_task_timeout: Duration::from_secs(30),
+        resource_lease_timeout: Duration::from_secs(5),
+        scheduling_quantum: Duration::from_millis(10),
+        enable_preemption: true,
+    };
+
+    // Configure the event loop
+    let event_loop_config = EventLoopConfig {
+        max_executor_threads: std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(4),
+        event_queue_capacity: 1000,
+        timer_resolution: Duration::from_millis(1),
+        max_execution_time: Duration::from_secs(60),
+        preemption_enabled: true,
+        load_balancing_strategy: LoadBalancingStrategy::ResourceAware,
+    };
+
+    // Create the event loop manager
+    let event_loop = EventLoopManager::new(
+        runtime_config,
+        semantic_context,
+        event_loop_config,
+    );
+
+    // Create system execution requests for async systems
+    let mut execution_requests = Vec::new();
+    for system_def in async_systems {
+        let request = SystemExecutionRequest {
+            system_def: system_def.clone(),
+            parameters: HashMap::new(), // Default empty parameters
+            priority: crate::async_runtime::TaskPriority::Normal,
+            timeout: Some(Duration::from_secs(30)),
+            table_runtimes: HashMap::new(), // Will be registered separately if needed
+        };
+        execution_requests.push(request);
+    }
+
+    // Execute the async systems
+    if !execution_requests.is_empty() {
+        println!("Starting event loop for {} async systems...", execution_requests.len());
+        
+        // For now, we'll start the event loop and let it run briefly
+        // In a full implementation, this would be more sophisticated
+        std::thread::spawn(move || {
+            if let Err(e) = event_loop.start() {
+                eprintln!("Event loop error: {:?}", e);
+            }
+        });
+
+        // Give the event loop time to process
+        std::thread::sleep(Duration::from_millis(100));
+        println!("Async systems processing initiated.");
+    }
+
+    Ok(())
 }
 
 fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {

@@ -8,3 +8,7 @@ license = "MIT"
 inkwell = { version = "0.6.0", features = ["llvm18-1"] }
 pest = "2.7.15"
 pest_derive = "2.7.15"
+tokio = { version = "1.0", features = ["full"] }
+
+[dev-dependencies]
+tokio-test = "0.4"

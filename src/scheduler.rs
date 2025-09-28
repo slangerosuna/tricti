@@ -65,6 +65,15 @@ impl fmt::Display for SchedulerError {
 
 impl std::error::Error for SchedulerError {}
 
+/// Summary of resource usage for monitoring and debugging
+#[derive(Debug, Clone)]
+pub struct ResourceUsageSummary {
+    pub total_resources: usize,
+    pub immutable_borrows: usize,
+    pub mutable_borrows: usize,
+    pub owned_resources: usize,
+}
+
 /// Tracks resource usage by systems
 #[derive(Debug, Clone)]
 pub struct ResourceTracker {
@@ -243,13 +252,45 @@ impl ResourceTracker {
         resources.extend(self.owned_resources.keys().cloned());
         resources
     }
+
+    /// Get systems that have immutable access to a resource (safe accessor)
+    pub fn get_immutable_borrowers(&self, resource: &str) -> Option<&HashSet<String>> {
+        self.immutable_borrows.get(resource)
+    }
+
+    /// Get the system that has mutable access to a resource (safe accessor)
+    pub fn get_mutable_borrower(&self, resource: &str) -> Option<&String> {
+        self.mutable_borrows.get(resource)
+    }
+
+    /// Get the system that owns a resource (safe accessor)
+    pub fn get_resource_owner(&self, resource: &str) -> Option<&String> {
+        self.owned_resources.get(resource)
+    }
+
+    /// Check if a resource has any active borrows or ownership
+    pub fn is_resource_available(&self, resource: &str) -> bool {
+        !self.immutable_borrows.contains_key(resource) &&
+        !self.mutable_borrows.contains_key(resource) &&
+        !self.owned_resources.contains_key(resource)
+    }
+
+    /// Get summary of resource usage for monitoring
+    pub fn get_resource_summary(&self) -> ResourceUsageSummary {
+        ResourceUsageSummary {
+            total_resources: self.get_active_resources().len(),
+            immutable_borrows: self.immutable_borrows.len(),
+            mutable_borrows: self.mutable_borrows.len(),
+            owned_resources: self.owned_resources.len(),
+        }
+    }
 }
 
 /// Represents the current state of the scheduler
 #[derive(Debug, Clone)]
 pub struct SchedulerState {
     /// Resource tracker for managing borrows and ownership
-    pub resource_tracker: ResourceTracker,
+    resource_tracker: ResourceTracker,
     /// Currently executing systems
     pub executing_systems: HashSet<String>,
     /// Systems waiting to be scheduled
@@ -285,6 +326,41 @@ impl SchedulerState {
     /// Check if all systems are completed
     pub fn is_complete(&self) -> bool {
         self.executing_systems.is_empty() && self.pending_systems.is_empty()
+    }
+
+    /// Get a reference to the resource tracker (safe accessor)
+    pub fn resource_tracker(&self) -> &ResourceTracker {
+        &self.resource_tracker
+    }
+
+    /// Get a mutable reference to the resource tracker (safe accessor)
+    pub fn resource_tracker_mut(&mut self) -> &mut ResourceTracker {
+        &mut self.resource_tracker
+    }
+
+    /// Try to acquire a resource for a system, enforcing borrow safety
+    pub fn try_acquire_resource(
+        &mut self,
+        resource: &str,
+        system: &str,
+        access: &ResourceAccess,
+    ) -> Result<(), SchedulerError> {
+        self.resource_tracker.add_access(resource, system, access)
+    }
+
+    /// Release a resource from a system
+    pub fn release_resource(&mut self, resource: &str, system: &str, access: &ResourceAccess) {
+        self.resource_tracker.remove_access(resource, system, access)
+    }
+
+    /// Check if a system can access a resource
+    pub fn can_system_access_resource(
+        &self,
+        resource: &str,
+        system: &str,
+        access: &ResourceAccess,
+    ) -> Result<(), SchedulerError> {
+        self.resource_tracker.can_access_resource(resource, system, access)
     }
 }
 
@@ -1109,10 +1185,11 @@ mod tests {
         assert!(tracker.add_access("resource1", "system1", &ResourceAccess::Immutable).is_ok());
         assert!(tracker.add_access("resource1", "system2", &ResourceAccess::Immutable).is_ok());
         
-        // Check that both systems are tracked
-        assert_eq!(tracker.immutable_borrows.get("resource1").unwrap().len(), 2);
-        assert!(tracker.immutable_borrows.get("resource1").unwrap().contains("system1"));
-        assert!(tracker.immutable_borrows.get("resource1").unwrap().contains("system2"));
+        // Check that both systems are tracked using safe accessors
+        let borrowers = tracker.get_immutable_borrowers("resource1").unwrap();
+        assert_eq!(borrowers.len(), 2);
+        assert!(borrowers.contains("system1"));
+        assert!(borrowers.contains("system2"));
     }
 
     #[test]

@@ -1,9 +1,16 @@
 pub mod ast;
+pub mod async_runtime;
+pub mod async_scheduler_integration;
+pub mod async_table_integration;
 pub mod codegen;
 pub mod computed_columns;
+pub mod error_propagation;
+pub mod event_loop_manager;
 pub mod parser;
 pub mod query;
 pub mod query_executor;
+pub mod resource_lifecycle;
 pub mod scheduler;
 pub mod semantic;
+pub mod system_executor;
 pub mod table_runtime;
