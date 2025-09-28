@@ -67,7 +67,9 @@ compose_def = { "compose" ~ "{" ~ compose_entry* ~ "}" }
 compose_entry = { (identifier | tuple_chain) ~ ("->" ~ (identifier | tuple_chain))* ~ ","? }
 tuple_chain = { "(" ~ identifier ~ ("," ~ identifier)* ~ ")" }
 
-table_def = { "table" ~ "{" ~ struct_fields? ~ "}" }
+table_def = { "table" ~ "{" ~ table_fields? ~ "}" }
+table_fields = { table_field ~ ("," ~ table_field)* ~ ","? }
+table_field = { attribute* ~ identifier ~ ":" ~ type ~ ("=" ~ expression)? }
 
 db_def = { "db" ~ "{" ~ db_entries? ~ "}" }
 db_entries = { db_entry ~ ("," ~ db_entry)* ~ ","? }

@@ -486,6 +486,9 @@ fn collect_definitions(
                         context.define_variable(name.clone(), expr_type);
                     }
                 }
+                ConstValue::TableDef(_) => {
+                    // TODO: Implement table schema definition handling
+                }
             }
         }
         Statement::ImplBlock {
@@ -546,6 +549,9 @@ fn collect_definitions(
                             // associated type binding; collected during analysis phase below
                         }
                         ConstValue::Expression(_) => { /* ignore non-function expressions in impl header pass */
+                        }
+                        ConstValue::TableDef(_) => {
+                            // TODO: Implement table schema in impl context
                         }
                     }
                 }
@@ -648,6 +654,9 @@ fn analyze_statement(
                 }
                 ConstValue::Type(_) => {
                     // Type aliases/constants are handled during collection; nothing to analyze here
+                }
+                ConstValue::TableDef(_) => {
+                    // TODO: Implement table schema semantic analysis
                 }
             }
         }
@@ -816,6 +825,9 @@ fn analyze_statement(
                                 provided_methods.insert(name.clone(), sig);
                             }
                             ConstValue::Expression(_) => { /* ignore other expressions in impl items */
+                            }
+                            ConstValue::TableDef(_) => {
+                                // TODO: Handle table definitions in trait impl context
                             }
                         }
                     }

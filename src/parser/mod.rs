@@ -182,6 +182,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
                 value_pair = Some(pair);
             }
             Rule::expression => value_pair = Some(pair),
+            Rule::table_def => value_pair = Some(pair),
             _ => {}
         }
     }
@@ -190,6 +191,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
         match pair.as_rule() {
             Rule::r#type => ConstValue::Type(parse_type(pair)),
             Rule::expression => ConstValue::Expression(parse_expression(pair)),
+            Rule::table_def => ConstValue::TableDef(parse_table_def(pair, &name)),
             _ => panic!("Unexpected const value rule: {:?}", pair.as_rule()),
         }
     } else {
@@ -1022,4 +1024,79 @@ fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
         type_name,
         methods,
     }
+}
+
+fn parse_table_def(pair: pest::iterators::Pair<Rule>, table_name: &str) -> TableDef {
+    let mut columns = Vec::new();
+    
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::table_fields => {
+                for field_pair in inner_pair.into_inner() {
+                    if field_pair.as_rule() == Rule::table_field {
+                        columns.push(parse_table_field(field_pair));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    TableDef {
+        name: table_name.to_string(),
+        columns,
+    }
+}
+
+fn parse_table_field(pair: pest::iterators::Pair<Rule>) -> TableColumn {
+    let mut annotations = Vec::new();
+    let mut field_name = String::new();
+    let mut field_type = Type::None;
+    let mut default_value = None;
+    
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::attribute => {
+                annotations.push(parse_table_annotation(inner_pair));
+            }
+            Rule::identifier => {
+                if field_name.is_empty() {
+                    field_name = inner_pair.as_str().to_string();
+                }
+            }
+            Rule::r#type => {
+                field_type = parse_type(inner_pair);
+            }
+            Rule::expression => {
+                default_value = Some(parse_expression(inner_pair));
+            }
+            _ => {}
+        }
+    }
+    
+    TableColumn {
+        name: field_name,
+        column_type: field_type,
+        annotations,
+        default_value,
+    }
+}
+
+fn parse_table_annotation(pair: pest::iterators::Pair<Rule>) -> TableAnnotation {
+    let mut name = String::new();
+    let mut args = Vec::new();
+    
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::identifier => {
+                name = inner_pair.as_str().to_string();
+            }
+            Rule::expression => {
+                args.push(parse_expression(inner_pair));
+            }
+            _ => {}
+        }
+    }
+    
+    TableAnnotation { name, args }
 }

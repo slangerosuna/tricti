@@ -52,6 +52,7 @@ pub enum Statement {
 pub enum ConstValue {
     Type(Type),
     Expression(Expression),
+    TableDef(TableDef),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -333,4 +334,24 @@ pub enum Type {
         associated_types: Vec<String>,
         methods: HashMap<String, Type>, // function types
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableDef {
+    pub name: String,
+    pub columns: Vec<TableColumn>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableColumn {
+    pub name: String,
+    pub column_type: Type,
+    pub annotations: Vec<TableAnnotation>,
+    pub default_value: Option<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableAnnotation {
+    pub name: String,
+    pub args: Vec<Expression>,
 }
