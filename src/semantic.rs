@@ -19,6 +19,8 @@ pub struct SemanticContext {
     pub traits: HashMap<String, TraitInfo>,
     pub trait_impls: HashMap<String, HashMap<String, ImplInfo>>, // trait -> (type -> impl)
     pub inherent_impls: HashMap<String, ImplInfo>,               // type -> impl
+    // Table schemas
+    pub tables: HashMap<String, TableDef>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +82,7 @@ impl SemanticContext {
             traits: HashMap::new(),
             trait_impls: HashMap::new(),
             inherent_impls: HashMap::new(),
+            tables: HashMap::new(),
         };
 
         // Add built-in functions
@@ -486,8 +489,9 @@ fn collect_definitions(
                         context.define_variable(name.clone(), expr_type);
                     }
                 }
-                ConstValue::TableDef(_) => {
-                    // TODO: Implement table schema definition handling
+                ConstValue::TableDef(table_def) => {
+                    validate_table_definition(table_def, context)?;
+                    context.tables.insert(name.clone(), table_def.clone());
                 }
             }
         }
@@ -550,8 +554,8 @@ fn collect_definitions(
                         }
                         ConstValue::Expression(_) => { /* ignore non-function expressions in impl header pass */
                         }
-                        ConstValue::TableDef(_) => {
-                            // TODO: Implement table schema in impl context
+                        ConstValue::TableDef(table_def) => {
+                            validate_table_definition(table_def, context)?;
                         }
                     }
                 }
@@ -655,8 +659,8 @@ fn analyze_statement(
                 ConstValue::Type(_) => {
                     // Type aliases/constants are handled during collection; nothing to analyze here
                 }
-                ConstValue::TableDef(_) => {
-                    // TODO: Implement table schema semantic analysis
+                ConstValue::TableDef(table_def) => {
+                    validate_table_definition(table_def, context)?;
                 }
             }
         }
@@ -826,8 +830,8 @@ fn analyze_statement(
                             }
                             ConstValue::Expression(_) => { /* ignore other expressions in impl items */
                             }
-                            ConstValue::TableDef(_) => {
-                                // TODO: Handle table definitions in trait impl context
+                            ConstValue::TableDef(table_def) => {
+                                validate_table_definition(table_def, context)?;
                             }
                         }
                     }
@@ -1695,5 +1699,145 @@ fn is_numeric_type(t: &Type) -> bool {
             )
         }
         _ => false,
+    }
+}
+
+fn validate_table_definition(
+    table_def: &TableDef,
+    context: &mut SemanticContext,
+) -> Result<(), SemanticError> {
+    let mut column_names = std::collections::HashSet::new();
+    let mut primary_key_count = 0;
+
+    for column in &table_def.columns {
+        // Check for duplicate column names
+        if !column_names.insert(&column.name) {
+            return Err(SemanticError::UndefinedVariable(format!(
+                "Duplicate column name '{}' in table '{}'",
+                column.name, table_def.name
+            )));
+        }
+
+        // Validate column type exists
+        validate_type(&column.column_type, context)?;
+
+        // Validate annotations
+        for annotation in &column.annotations {
+            match annotation.name.as_str() {
+                "primary" => {
+                    primary_key_count += 1;
+                    if primary_key_count > 1 {
+                        return Err(SemanticError::UndefinedVariable(format!(
+                            "Table '{}' cannot have multiple primary keys",
+                            table_def.name
+                        )));
+                    }
+                    if !annotation.args.is_empty() {
+                        return Err(SemanticError::UndefinedVariable(format!(
+                            "@primary annotation should not have arguments"
+                        )));
+                    }
+                }
+                "autoincrement" | "indexed" | "nullable" => {
+                    // Valid annotations, no additional validation needed for now
+                }
+                "size" => {
+                    if annotation.args.len() != 1 {
+                        return Err(SemanticError::UndefinedVariable(format!(
+                            "@size annotation requires exactly one argument"
+                        )));
+                    }
+                }
+                "precision" => {
+                    if annotation.args.len() != 2 {
+                        return Err(SemanticError::UndefinedVariable(format!(
+                            "@precision annotation requires exactly two arguments"
+                        )));
+                    }
+                }
+                _ => {
+                    return Err(SemanticError::UndefinedVariable(format!(
+                        "Unknown table annotation: @{}",
+                        annotation.name
+                    )));
+                }
+            }
+        }
+
+        // Validate default value type compatibility
+        if let Some(default_expr) = &column.default_value {
+            let default_type = infer_expression_type(default_expr, context)?;
+            if !types_compatible(&column.column_type, &default_type) {
+                return Err(SemanticError::TypeMismatch {
+                    expected: column.column_type.clone(),
+                    found: default_type,
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_type(type_def: &Type, context: &SemanticContext) -> Result<(), SemanticError> {
+    match type_def {
+        Type::None => Ok(()),
+        Type::Identifier { name, type_args } => {
+            // Check if the type exists in context or is a built-in type
+            let builtin_types = [
+                "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64",
+                "f32", "f64", "bool", "String", "char"
+            ];
+            
+            if builtin_types.contains(&name.as_str()) || context.types.contains_key(name) {
+                // Validate type arguments if any
+                for arg in type_args {
+                    validate_type(arg, context)?;
+                }
+                Ok(())
+            } else {
+                Err(SemanticError::UndefinedVariable(format!(
+                    "Unknown type: {}",
+                    name
+                )))
+            }
+        }
+        Type::Pointer { pointee, .. } => validate_type(pointee, context),
+        Type::RawPointer { pointee } => validate_type(pointee, context),
+        Type::Optional { inner } => validate_type(inner, context),
+        Type::Result { inner } => validate_type(inner, context),
+        Type::Tuple(types) => {
+            for t in types {
+                validate_type(t, context)?;
+            }
+            Ok(())
+        }
+        Type::Matrix { element_type, .. } => validate_type(element_type, context),
+        Type::Function { parameters, return_type } => {
+            for param in parameters {
+                validate_type(param, context)?;
+            }
+            validate_type(return_type, context)
+        }
+        Type::Struct { fields } => {
+            for field_type in fields.values() {
+                validate_type(field_type, context)?;
+            }
+            Ok(())
+        }
+        Type::Enum { variants, .. } => {
+            for variant_type in variants.values() {
+                if let Some(t) = variant_type {
+                    validate_type(t, context)?;
+                }
+            }
+            Ok(())
+        }
+        Type::Trait { methods, .. } => {
+            for method_type in methods.values() {
+                validate_type(method_type, context)?;
+            }
+            Ok(())
+        }
     }
 }
