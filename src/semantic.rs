@@ -490,8 +490,17 @@ fn collect_definitions(
                     }
                 }
                 ConstValue::TableDef(table_def) => {
-                    validate_table_definition(table_def, context)?;
-                    context.tables.insert(name.clone(), table_def.clone());
+                    // Clone the table definition so we can infer computed column types
+                    let mut table_def_copy = table_def.clone();
+                    
+                    // Infer and set proper types for computed columns
+                    infer_computed_column_types(&mut table_def_copy, context)?;
+                    
+                    // Validate the table definition (now with properly typed computed columns)
+                    validate_table_definition(&table_def_copy, context)?;
+                    
+                    // Insert the updated table definition into context
+                    context.tables.insert(name.clone(), table_def_copy);
                 }
             }
         }
@@ -1702,6 +1711,302 @@ fn is_numeric_type(t: &Type) -> bool {
     }
 }
 
+/// Simple dependency resolution for computed columns without external dependencies
+fn compute_column_evaluation_order(table_def: &TableDef) -> Result<Vec<String>, SemanticError> {
+    use std::collections::{HashMap, HashSet, VecDeque};
+    
+    let mut dependencies: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut all_columns: HashSet<String> = HashSet::new();
+    
+    // Collect all column names
+    for column in &table_def.columns {
+        all_columns.insert(column.name.clone());
+    }
+    
+    // Extract dependencies for each computed column
+    for column in &table_def.columns {
+        if column.is_computed {
+            if let Some(expr) = &column.computed_expression {
+                let deps = extract_column_references(expr, &all_columns);
+                dependencies.insert(column.name.clone(), deps);
+            }
+        }
+    }
+    
+    // Perform topological sort using Kahn's algorithm
+    let mut in_degree: HashMap<String, usize> = HashMap::new();
+    let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
+    
+    // Initialize for all computed columns
+    for column_name in dependencies.keys() {
+        in_degree.insert(column_name.clone(), 0);
+        adjacency.insert(column_name.clone(), Vec::new());
+    }
+    
+    // Build adjacency list and calculate in-degrees
+    for (column, deps) in &dependencies {
+        for dependency in deps {
+            // Only consider dependencies on other computed columns
+            if dependencies.contains_key(dependency) {
+                adjacency.get_mut(dependency).unwrap().push(column.clone());
+                *in_degree.get_mut(column).unwrap() += 1;
+            }
+        }
+    }
+    
+    // Kahn's algorithm
+    let mut queue: VecDeque<String> = VecDeque::new();
+    let mut result: Vec<String> = Vec::new();
+    
+    // Start with nodes that have no dependencies
+    for (column, &degree) in &in_degree {
+        if degree == 0 {
+            queue.push_back(column.clone());
+        }
+    }
+    
+    while let Some(current) = queue.pop_front() {
+        result.push(current.clone());
+        
+        // Process all dependents
+        for dependent in &adjacency[&current] {
+            let degree = in_degree.get_mut(dependent).unwrap();
+            *degree -= 1;
+            if *degree == 0 {
+                queue.push_back(dependent.clone());
+            }
+        }
+    }
+    
+    // Check for circular dependencies
+    if result.len() != dependencies.len() {
+        return Err(SemanticError::UndefinedVariable(
+            "Circular dependency detected in computed columns".to_string()
+        ));
+    }
+    
+    Ok(result)
+}
+
+/// Extract column references from an expression
+fn extract_column_references(expr: &Expression, column_names: &std::collections::HashSet<String>) -> std::collections::HashSet<String> {
+    let mut references = std::collections::HashSet::new();
+    extract_column_references_recursive(expr, &mut references, column_names);
+    references
+}
+
+/// Recursively extract column references from an expression
+fn extract_column_references_recursive(
+    expr: &Expression, 
+    references: &mut std::collections::HashSet<String>,
+    column_names: &std::collections::HashSet<String>
+) {
+    match expr {
+        Expression::Identifier(name) => {
+            // Only treat identifiers as column references if they exist in the table's columns
+            if column_names.contains(name) {
+                references.insert(name.clone());
+            }
+        }
+        Expression::BinaryOp { left, right, .. } => {
+            extract_column_references_recursive(left, references, column_names);
+            extract_column_references_recursive(right, references, column_names);
+        }
+        Expression::UnaryOp { operand, .. } => {
+            extract_column_references_recursive(operand, references, column_names);
+        }
+        Expression::Call { arguments, .. } => {
+            // For function calls, only recurse into arguments to find column dependencies
+            for arg in arguments {
+                extract_column_references_recursive(&arg.value, references, column_names);
+            }
+        }
+        Expression::FieldAccess { object, .. } => {
+            extract_column_references_recursive(object, references, column_names);
+        }
+        Expression::Index { object, indices } => {
+            extract_column_references_recursive(object, references, column_names);
+            for index in indices {
+                extract_column_references_recursive(index, references, column_names);
+            }
+        }
+        Expression::If { condition, then_branch, else_branch } => {
+            extract_column_references_recursive(condition, references, column_names);
+            for stmt in then_branch {
+                extract_statement_column_references(stmt, references, column_names);
+            }
+            if let Some(else_stmts) = else_branch {
+                for stmt in else_stmts {
+                    extract_statement_column_references(stmt, references, column_names);
+                }
+            }
+        }
+        Expression::Block { statements } => {
+            for stmt in statements {
+                extract_statement_column_references(stmt, references, column_names);
+            }
+        }
+        Expression::Tuple(exprs) => {
+            for expr in exprs {
+                extract_column_references_recursive(expr, references, column_names);
+            }
+        }
+        Expression::Match { value, arms } => {
+            extract_column_references_recursive(value, references, column_names);
+            for arm in arms {
+                extract_column_references_recursive(&arm.pattern, references, column_names);
+                extract_column_references_recursive(&arm.body, references, column_names);
+            }
+        }
+        Expression::StructLiteral { fields } => {
+            for expr in fields.values() {
+                extract_column_references_recursive(expr, references, column_names);
+            }
+        }
+        Expression::Matrix { rows } => {
+            for row in rows {
+                for expr in row {
+                    extract_column_references_recursive(expr, references, column_names);
+                }
+            }
+        }
+        Expression::Range { start, end, step } => {
+            extract_column_references_recursive(start, references, column_names);
+            extract_column_references_recursive(end, references, column_names);
+            if let Some(step_expr) = step {
+                extract_column_references_recursive(step_expr, references, column_names);
+            }
+        }
+        Expression::Question(expr) | Expression::Unwrap(expr) => {
+            extract_column_references_recursive(expr, references, column_names);
+        }
+        // Literals and other leaf nodes don't have dependencies
+        _ => {}
+    }
+}
+
+/// Extract column references from a statement
+fn extract_statement_column_references(
+    stmt: &Statement, 
+    references: &mut std::collections::HashSet<String>,
+    column_names: &std::collections::HashSet<String>
+) {
+    match stmt {
+        Statement::VariableDecl { value, .. } => {
+            extract_column_references_recursive(value, references, column_names);
+        }
+        Statement::ConstDecl { value: ConstValue::Expression(expr), .. } => {
+            extract_column_references_recursive(expr, references, column_names);
+        }
+        Statement::Assignment { target, value, .. } => {
+            extract_column_references_recursive(target, references, column_names);
+            extract_column_references_recursive(value, references, column_names);
+        }
+        Statement::Expression(expr) => {
+            extract_column_references_recursive(expr, references, column_names);
+        }
+        Statement::Return(Some(expr)) | Statement::Break(Some(expr)) => {
+            extract_column_references_recursive(expr, references, column_names);
+        }
+        Statement::ForLoop { iterable, body, .. } => {
+            extract_column_references_recursive(iterable, references, column_names);
+            for stmt in body {
+                extract_statement_column_references(stmt, references, column_names);
+            }
+        }
+        _ => {} // Other statements don't contribute to dependencies
+    }
+}
+
+/// Infer and set proper types for computed columns in a table definition
+pub fn infer_computed_column_types(
+    table_def: &mut TableDef,
+    context: &mut SemanticContext,
+) -> Result<(), SemanticError> {
+    // Compute evaluation order for computed columns using dependency analysis
+    let evaluation_order = compute_column_evaluation_order(table_def)?;
+    
+    // First pass: collect all regular column types
+    let mut column_context = context.clone();
+    for column in &table_def.columns {
+        if !column.is_computed {
+            column_context.define_variable(column.name.clone(), column.column_type.clone());
+        }
+    }
+    
+    // Second pass: add all computed columns to context with placeholder types
+    // This ensures all computed columns are available for forward references
+    for column in &table_def.columns {
+        if column.is_computed {
+            // Use existing type annotation if available, otherwise use placeholder
+            let placeholder_type = if column.column_type != Type::None {
+                column.column_type.clone()
+            } else {
+                // Placeholder type for forward references
+                Type::Identifier { name: "unknown".to_string(), type_args: vec![] }
+            };
+            column_context.define_variable(column.name.clone(), placeholder_type);
+        }
+    }
+    
+    // Third pass: infer types for computed columns in dependency order
+    for column_name in &evaluation_order {
+        // Find the corresponding column in the table definition
+        if let Some(column) = table_def.columns.iter_mut().find(|col| &col.name == column_name) {
+            if let Some(computed_expr) = &column.computed_expression {
+                let inferred_type = infer_expression_type(computed_expr, &mut column_context)?;
+                
+                // Update the column type if it was Type::None
+                if column.column_type == Type::None {
+                    column.column_type = inferred_type.clone();
+                } else if !types_compatible(&column.column_type, &inferred_type) {
+                    return Err(SemanticError::TypeMismatch {
+                        expected: column.column_type.clone(),
+                        found: inferred_type,
+                    });
+                }
+                
+                // Update the context with the correctly inferred type
+                column_context.define_variable(column.name.clone(), column.column_type.clone());
+            } else {
+                return Err(SemanticError::UndefinedVariable(format!(
+                    "Computed column '{}' must have a computed expression",
+                    column.name
+                )));
+            }
+        }
+    }
+    
+    // Final pass: handle any computed columns not in the evaluation order (those with no dependencies)
+    for column in &mut table_def.columns {
+        if column.is_computed && !evaluation_order.contains(&column.name) {
+            if let Some(computed_expr) = &column.computed_expression {
+                let inferred_type = infer_expression_type(computed_expr, &mut column_context)?;
+                
+                // Update the column type if it was Type::None
+                if column.column_type == Type::None {
+                    column.column_type = inferred_type.clone();
+                } else if !types_compatible(&column.column_type, &inferred_type) {
+                    return Err(SemanticError::TypeMismatch {
+                        expected: column.column_type.clone(),
+                        found: inferred_type,
+                    });
+                }
+                
+                // Update the context with the correctly inferred type
+                column_context.define_variable(column.name.clone(), column.column_type.clone());
+            } else {
+                return Err(SemanticError::UndefinedVariable(format!(
+                    "Computed column '{}' must have a computed expression",
+                    column.name
+                )));
+            }
+        }
+    }
+    
+    Ok(())
+}
+
 fn validate_table_definition(
     table_def: &TableDef,
     context: &mut SemanticContext,
@@ -1718,8 +2023,44 @@ fn validate_table_definition(
             )));
         }
 
-        // Validate column type exists
-        validate_type(&column.column_type, context)?;
+        // For computed columns, infer type from expression; for regular columns, validate the specified type
+        if column.is_computed {
+            if let Some(computed_expr) = &column.computed_expression {
+                // For computed columns, infer the type from the expression
+                // We need to set up a context that includes all column names for type inference
+                let mut column_context = context.clone();
+                
+                // Add all table columns as variables in the context for type inference
+                for col in &table_def.columns {
+                    if !col.is_computed {
+                        column_context.define_variable(col.name.clone(), col.column_type.clone());
+                    }
+                }
+                
+                let inferred_type = infer_expression_type(computed_expr, &mut column_context)?;
+                
+                // If the column type is Type::None, we should accept the inferred type
+                // If a specific type was provided, validate compatibility
+                if column.column_type != Type::None {
+                    if !types_compatible(&column.column_type, &inferred_type) {
+                        return Err(SemanticError::TypeMismatch {
+                            expected: column.column_type.clone(),
+                            found: inferred_type,
+                        });
+                    }
+                }
+                // Note: We can't modify the column type here since we have an immutable reference
+                // The caller should handle updating the TableDef with inferred types
+            } else {
+                return Err(SemanticError::UndefinedVariable(format!(
+                    "Computed column '{}' must have a computed expression",
+                    column.name
+                )));
+            }
+        } else {
+            // For regular columns, validate the specified type
+            validate_type(&column.column_type, context)?;
+        }
 
         // Validate annotations
         for annotation in &column.annotations {

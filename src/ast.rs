@@ -348,6 +348,8 @@ pub struct TableColumn {
     pub column_type: Type,
     pub annotations: Vec<TableAnnotation>,
     pub default_value: Option<Expression>,
+    pub is_computed: bool,
+    pub computed_expression: Option<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

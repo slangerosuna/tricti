@@ -69,7 +69,8 @@ tuple_chain = { "(" ~ identifier ~ ("," ~ identifier)* ~ ")" }
 
 table_def = { "table" ~ "{" ~ table_fields? ~ "}" }
 table_fields = { table_field ~ ("," ~ table_field)* ~ ","? }
-table_field = { attribute* ~ identifier ~ ":" ~ type ~ ("=" ~ expression)? }
+table_field = { attribute* ~ identifier ~ ":" ~ (computed_field | (type ~ ("=" ~ expression)?)) }
+computed_field = { "computed" ~ "(" ~ expression ~ ")" }
 
 db_def = { "db" ~ "{" ~ db_entries? ~ "}" }
 db_entries = { db_entry ~ ("," ~ db_entry)* ~ ","? }

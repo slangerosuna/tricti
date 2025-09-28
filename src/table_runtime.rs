@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::computed_columns::*;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -9,6 +10,7 @@ pub struct TableRuntime {
     pub row_count: usize,
     pub deleted_rows: std::collections::HashSet<usize>, // Tombstones for deleted rows
     pub next_row_id: usize, // Next available row ID
+    pub computed_engine: Option<LazyEvaluationEngine>, // Lazy evaluation for computed columns
 }
 
 #[derive(Debug, Clone)]
@@ -110,7 +112,7 @@ impl ColumnData {
         Ok(())
     }
 
-    fn get_value(&self, index: usize) -> Option<ColumnValue> {
+    pub fn get_value(&self, index: usize) -> Option<ColumnValue> {
         match self {
             ColumnData::U64(vec) => vec.get(index)?.as_ref().map(|&v| ColumnValue::U64(v)),
             ColumnData::String(vec) => vec.get(index)?.as_ref().map(|v| ColumnValue::String(v.clone())),
@@ -210,6 +212,19 @@ impl TableRuntime {
             index: HashMap::new(),
         };
 
+        // Initialize computed column engine if there are computed columns
+        let computed_engine = if schema.columns.iter().any(|col| col.is_computed) {
+            Some(LazyEvaluationEngine::new(&schema).map_err(|e| {
+                TableError::TypeMismatch {
+                    column: "computed_engine".to_string(),
+                    expected: "valid computed column configuration".to_string(),
+                    found: format!("evaluation error: {:?}", e),
+                }
+            })?)
+        } else {
+            None
+        };
+
         Ok(TableRuntime {
             schema,
             storage,
@@ -217,7 +232,66 @@ impl TableRuntime {
             row_count: 0,
             deleted_rows: std::collections::HashSet::new(),
             next_row_id: 0,
+            computed_engine,
         })
+    }
+
+    /// Get the value of a column (regular or computed) for a specific row
+    pub fn get_column_value(&mut self, row_id: RowId, column_name: &str) -> Result<ColumnValue, TableError> {
+        // Check if the column is computed
+        if let Some(column) = self.schema.columns.iter().find(|col| col.name == column_name) {
+            if column.is_computed {
+                if let Some(ref mut engine) = self.computed_engine {
+                    return engine.get_computed_value(column_name, row_id, &self.storage)
+                        .map_err(|e| TableError::TypeMismatch {
+                            column: column_name.to_string(),
+                            expected: "computed value".to_string(),
+                            found: format!("evaluation error: {:?}", e),
+                        });
+                } else {
+                    return Err(TableError::TypeMismatch {
+                        column: column_name.to_string(),
+                        expected: "computed column support".to_string(),
+                        found: "no computed engine available".to_string(),
+                    });
+                }
+            }
+        }
+
+        // Get value from regular column storage
+        let column_data = self.storage.columns.get(column_name)
+            .ok_or_else(|| TableError::ColumnNotFound(column_name.to_string()))?;
+
+        column_data.get_value(row_id.0)
+            .ok_or_else(|| TableError::RowNotFound(row_id))
+    }
+
+    /// Mark a column as dirty (needs recomputation for computed columns)
+    pub fn mark_column_dirty(&mut self, column_name: &str) {
+        if let Some(ref mut engine) = self.computed_engine {
+            engine.mark_column_dirty(column_name);
+        }
+    }
+
+    /// Mark a specific row in a column as dirty
+    pub fn mark_row_dirty(&mut self, column_name: &str, row_id: RowId) {
+        if let Some(ref mut engine) = self.computed_engine {
+            engine.mark_row_dirty(column_name, row_id);
+        }
+    }
+
+    /// Check if a column is computed
+    pub fn is_computed_column(&self, column_name: &str) -> bool {
+        self.schema.columns.iter()
+            .find(|col| col.name == column_name)
+            .map_or(false, |col| col.is_computed)
+    }
+
+    /// Get cache statistics for computed columns
+    pub fn get_computed_cache_stats(&self) -> HashMap<String, usize> {
+        self.computed_engine
+            .as_ref()
+            .map_or_else(HashMap::new, |engine| engine.get_cache_stats())
     }
 
     pub fn insert_row(&mut self, row: TableRow) -> Result<RowId, TableError> {

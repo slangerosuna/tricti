@@ -1053,6 +1053,8 @@ fn parse_table_field(pair: pest::iterators::Pair<Rule>) -> TableColumn {
     let mut field_name = String::new();
     let mut field_type = Type::None;
     let mut default_value = None;
+    let mut is_computed = false;
+    let mut computed_expression = None;
     
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
@@ -1070,6 +1072,18 @@ fn parse_table_field(pair: pest::iterators::Pair<Rule>) -> TableColumn {
             Rule::expression => {
                 default_value = Some(parse_expression(inner_pair));
             }
+            Rule::computed_field => {
+                is_computed = true;
+                // Extract the expression from computed(expression)
+                for computed_inner in inner_pair.into_inner() {
+                    match computed_inner.as_rule() {
+                        Rule::expression => {
+                            computed_expression = Some(parse_expression(computed_inner));
+                        }
+                        _ => {}
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -1079,6 +1093,8 @@ fn parse_table_field(pair: pest::iterators::Pair<Rule>) -> TableColumn {
         column_type: field_type,
         annotations,
         default_value,
+        is_computed,
+        computed_expression,
     }
 }
 
