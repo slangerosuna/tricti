@@ -6,7 +6,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::targets::{InitializationConfig, Target};
-use inkwell::types::{BasicTypeEnum, FloatType, IntType, StructType};
+use inkwell::types::{BasicType, BasicTypeEnum, FloatType, IntType, StructType};
 use inkwell::values::{
     BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
     StructValue,
@@ -3480,7 +3480,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
                     }
                 }
-                self.generate_call(function, arguments)
+                self.generate_call(function, type_args, arguments)
             }
 
             _ => {
@@ -3542,6 +3542,34 @@ impl<'ctx> CodeGenerator<'ctx> {
                             "addtmp",
                         )
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    Ok(result.into())
+                } else if left.is_pointer_value() && right.is_int_value() {
+                    // Pointer arithmetic: ptr + offset
+                    let ptr = left.into_pointer_value();
+                    let offset = right.into_int_value();
+                    let result = unsafe {
+                        self.builder.build_in_bounds_gep(
+                            self.context.i8_type(), // Use i8* for byte-level pointer arithmetic
+                            ptr,
+                            &[offset],
+                            "ptradd",
+                        )
+                    }
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    Ok(result.into())
+                } else if left.is_int_value() && right.is_pointer_value() {
+                    // Pointer arithmetic: offset + ptr
+                    let offset = left.into_int_value();
+                    let ptr = right.into_pointer_value();
+                    let result = unsafe {
+                        self.builder.build_in_bounds_gep(
+                            self.context.i8_type(), // Use i8* for byte-level pointer arithmetic
+                            ptr,
+                            &[offset],
+                            "ptradd",
+                        )
+                    }
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     Ok(result.into())
                 } else {
                     Err(CodegenError::InvalidOperation(
@@ -3867,6 +3895,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn generate_call(
         &mut self,
         function: &Expression,
+        type_args: &[Type],
         arguments: &[Argument],
     ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
         match function {
@@ -4079,6 +4108,68 @@ impl<'ctx> CodeGenerator<'ctx> {
                         return Ok(elem);
                     }
                     return Ok(self.context.i64_type().const_zero().into());
+                }
+
+                // Built-in sizeof<T>() -> u64
+                if func_name == "sizeof" {
+                    if type_args.len() != 1 {
+                        return Err(CodegenError::InvalidOperation(
+                            "sizeof requires exactly one type argument".to_string(),
+                        ));
+                    }
+                    let ty = self.map_ast_type(&type_args[0]).ok_or_else(|| {
+                        CodegenError::InvalidOperation("Cannot map type for sizeof".to_string())
+                    })?;
+                    let size = ty.size_of().ok_or_else(|| {
+                        CodegenError::InvalidOperation("Cannot get size of opaque type".to_string())
+                    })?;
+                    return Ok(size.into());
+                }
+
+                // Built-in drop(value) -> none (no-op for now, but could call destructor)
+                if func_name == "drop" {
+                    // For now, just ignore the argument and return void
+                    // In a real implementation, this would call the destructor
+                    return Ok(self.context.i64_type().const_zero().into());
+                }
+
+                // Built-in __memmov(dst: *none, src: *none, size: u64) -> none
+                if func_name == "__memmov" {
+                    if arguments.len() != 3 {
+                        return Err(CodegenError::InvalidOperation(
+                            "__memmov requires 3 arguments".to_string(),
+                        ));
+                    }
+                    // For now, this is a no-op. In a real implementation, this would use memcpy
+                    return Ok(self.context.i64_type().const_zero().into());
+                }
+
+                // Built-in __builtin_clzll(n: u64) -> i32
+                if func_name == "__builtin_clzll" {
+                    if arguments.len() != 1 {
+                        return Err(CodegenError::InvalidOperation(
+                            "__builtin_clzll requires 1 argument".to_string(),
+                        ));
+                    }
+                    let arg_val = self.generate_expression(&arguments[0].value)?;
+                    let int_val = match arg_val {
+                        BasicValueEnum::IntValue(iv) => iv,
+                        _ => self.cast_to_int(arg_val, self.context.i64_type())?,
+                    };
+                    // For now, return a placeholder. In a real implementation, this would use LLVM's ctlz
+                    let clz = self.builder.build_call(
+                        self.module.get_function("__builtin_clzll").unwrap_or_else(|| {
+                            // Declare it if not found
+                            let fn_type = self.context.i32_type().fn_type(&[self.context.i64_type().into()], false);
+                            self.module.add_function("__builtin_clzll", fn_type, None)
+                        }),
+                        &[int_val.into()],
+                        "clz"
+                    ).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    if let Some(value) = clz.try_as_basic_value().left() {
+                        return Ok(value);
+                    }
+                    return Ok(self.context.i32_type().const_zero().into());
                 }
 
                 // Deterministic: exact name, with support for trait static-path calls Trait_method(x, ...)

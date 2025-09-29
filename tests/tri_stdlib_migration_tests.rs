@@ -1863,6 +1863,272 @@ mod async_runtime_tests {
         let exit_code = start();
         assert_eq!(exit_code, 0);
     }
+
+    #[test]
+    fn test_acquire_resource_for_task() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+
+        let request = ResourceRequest {
+            resource_name: "resource1".to_string(),
+            access_type: ResourceAccess::Mutable,
+            lease_duration_ms: Some(5000),
+        };
+
+        let acquired = acquire_resource_for_task(&mut runtime, task.id, request);
+        assert!(acquired);
+
+        let task = &runtime.active_tasks[0];
+        assert_eq!(task.resource_handles.len(), 1);
+        assert_eq!(task.resource_handles[0].resource_name, "resource1");
+        assert_eq!(runtime.resource_leases.len(), 1);
+    }
+
+    #[test]
+    fn test_acquire_resources_for_task() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+
+        let requests = vec![
+            ResourceRequest {
+                resource_name: "resource1".to_string(),
+                access_type: ResourceAccess::Mutable,
+                lease_duration_ms: Some(5000),
+            },
+            ResourceRequest {
+                resource_name: "resource2".to_string(),
+                access_type: ResourceAccess::Immutable,
+                lease_duration_ms: None,
+            },
+        ];
+
+        let acquired = acquire_resources_for_task(&mut runtime, task.id, requests);
+        assert!(acquired);
+
+        let task = &runtime.active_tasks[0];
+        assert_eq!(task.resource_handles.len(), 2);
+        assert_eq!(runtime.resource_leases.len(), 2);
+    }
+
+    #[test]
+    fn test_release_resource_for_task() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+
+        let request = ResourceRequest {
+            resource_name: "resource1".to_string(),
+            access_type: ResourceAccess::Mutable,
+            lease_duration_ms: Some(5000),
+        };
+
+        acquire_resource_for_task(&mut runtime, task.id, request);
+        assert_eq!(runtime.resource_leases.len(), 1);
+
+        release_resource_for_task(&mut runtime, task.id, "resource1");
+
+        let task = &runtime.active_tasks[0];
+        assert_eq!(task.resource_handles.len(), 0);
+        assert_eq!(runtime.resource_leases.len(), 0);
+    }
+
+    #[test]
+    fn test_try_acquire_resource_conflict() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+
+        let task1 = submit_task(&mut runtime, "test1".to_string(), params.clone(), TaskPriority::Normal, None);
+        let task2 = submit_task(&mut runtime, "test2".to_string(), params, TaskPriority::Normal, None);
+
+        // Task 1 acquires mutable access
+        let request1 = ResourceRequest {
+            resource_name: "resource1".to_string(),
+            access_type: ResourceAccess::Mutable,
+            lease_duration_ms: Some(5000),
+        };
+        acquire_resource_for_task(&mut runtime, task1.id, request1);
+        assert_eq!(runtime.resource_leases.len(), 1);
+
+        // Task 2 tries to acquire conflicting access
+        let request2 = ResourceRequest {
+            resource_name: "resource1".to_string(),
+            access_type: ResourceAccess::Immutable,
+            lease_duration_ms: None,
+        };
+        let acquired = acquire_resource_for_task(&mut runtime, task2.id, request2);
+        assert!(!acquired);
+
+        // Task 2 should be waiting
+        assert_eq!(runtime.resource_waiters.len(), 1);
+        assert_eq!(runtime.resource_waiters[0].task_id, task2.id);
+    }
+
+    #[test]
+    fn test_wake_waiters_for_resource() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+
+        let task1 = submit_task(&mut runtime, "test1".to_string(), params.clone(), TaskPriority::Normal, None);
+        let task2 = submit_task(&mut runtime, "test2".to_string(), params, TaskPriority::Normal, None);
+
+        // Task 1 acquires mutable access
+        let request1 = ResourceRequest {
+            resource_name: "resource1".to_string(),
+            access_type: ResourceAccess::Mutable,
+            lease_duration_ms: Some(5000),
+        };
+        acquire_resource_for_task(&mut runtime, task1.id, request1);
+
+        // Task 2 tries to acquire conflicting access and gets queued
+        let request2 = ResourceRequest {
+            resource_name: "resource1".to_string(),
+            access_type: ResourceAccess::Immutable,
+            lease_duration_ms: None,
+        };
+        acquire_resource_for_task(&mut runtime, task2.id, request2);
+        assert_eq!(runtime.resource_waiters.len(), 1);
+
+        // Release task 1's resource
+        release_resource_for_task(&mut runtime, task1.id, "resource1");
+
+        // Task 2 should now be able to acquire the resource
+        let task = &runtime.active_tasks[1]; // task2
+        assert_eq!(task.resource_handles.len(), 1);
+        assert_eq!(runtime.resource_waiters.len(), 0);
+    }
+
+    #[test]
+    fn test_register_and_take_task_waker() {
+        let mut runtime = new_async_runtime(None);
+
+        register_task_waker(&mut runtime, 42, "token123".to_string());
+        assert_eq!(runtime.wakers.len(), 1);
+        assert_eq!(runtime.wakers[0].task_id, 42);
+        assert_eq!(runtime.wakers[0].token, "token123");
+
+        let waker = take_task_waker(&mut runtime, 42);
+        assert!(waker.is_some());
+        assert_eq!(waker.unwrap().task_id, 42);
+        assert_eq!(runtime.wakers.len(), 0);
+    }
+
+    #[test]
+    fn test_wake_task() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+
+        // Suspend the task
+        let yield_point = YieldPoint::Sleeping {
+            duration_ms: 1000,
+            started_at_ms: 1000,
+        };
+        suspend_task(&mut runtime, task.id, yield_point, None);
+
+        // Register a waker
+        register_task_waker(&mut runtime, task.id, "waker_token".to_string());
+
+        // Wake the task
+        let woke = wake_task(&mut runtime, task.id);
+        assert!(woke);
+
+        let task = &runtime.active_tasks[0];
+        assert_eq!(task.state, TaskState::Pending);
+        assert_eq!(runtime.queued_task_ids, vec![task.id]);
+        assert_eq!(runtime.wakers.len(), 0);
+    }
+
+    #[test]
+    fn test_runtime_housekeeping() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+
+        // Suspend with sleep
+        let yield_point = YieldPoint::Sleeping {
+            duration_ms: 1000,
+            started_at_ms: 1000,
+        };
+        suspend_task(&mut runtime, task.id, yield_point, None);
+
+        // Run housekeeping at time 2000 (past sleep duration)
+        wake_sleeping_tasks(&mut runtime, 2000);
+
+        let task = &runtime.active_tasks[0];
+        assert_eq!(task.state, TaskState::Pending);
+    }
+
+    #[test]
+    fn test_poll_next_ready_task() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+
+        let next_task = poll_next_ready_task(&mut runtime);
+        assert!(next_task.is_some());
+        assert_eq!(next_task.unwrap().id, task.id);
+    }
+
+    #[test]
+    fn test_expire_resource_leases() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+
+        let request = ResourceRequest {
+            resource_name: "resource1".to_string(),
+            access_type: ResourceAccess::Mutable,
+            lease_duration_ms: Some(1000), // 1 second lease
+        };
+        acquire_resource_for_task(&mut runtime, task.id, request);
+
+        assert_eq!(runtime.resource_leases.len(), 1);
+
+        // Expire leases at time 2000 (past lease duration)
+        expire_resource_leases(&mut runtime, 2000);
+
+        assert_eq!(runtime.resource_leases.len(), 0);
+        let task = &runtime.active_tasks[0];
+        assert_eq!(task.resource_handles.len(), 0);
+    }
+
+    #[test]
+    fn test_check_task_timeouts() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, Some(1000));
+
+        // Check timeouts at time 2000 (past timeout)
+        check_task_timeouts(&mut runtime, 2000);
+
+        assert_eq!(runtime.active_tasks.len(), 0);
+        assert_eq!(runtime.completed_tasks.len(), 1);
+        assert!(matches!(runtime.completed_tasks[0].state, TaskState::Failed { .. }));
+    }
+
+    #[test]
+    fn test_runtime_next_deadline_ms() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, Some(5000));
+
+        let deadline = runtime_next_deadline_ms(&runtime);
+        assert_eq!(deadline, Some(6000)); // created_at_ms (1000) + timeout_ms (5000)
+    }
+
+    #[test]
+    fn test_next_ready_task() {
+        let mut runtime = new_async_runtime(None);
+        let params = empty_parameter_bag();
+        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+
+        let next_task = next_ready_task(&mut runtime);
+        assert!(next_task.is_some());
+        assert_eq!(next_task.unwrap().id, task.id);
+        assert_eq!(runtime.queued_task_ids.len(), 0);
+    }
 }
 
 // Tests for advanced enum-based error and result types from stdlib/core/

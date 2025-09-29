@@ -1,0 +1,592 @@
+# Collection types for the TriCTI stdlib
+# Provides common data structures for storing and manipulating collections of values
+
+use prelude
+
+Vec<T> :: {
+    data: *T,
+    len: u64,
+    capacity: u64,
+}
+
+impl<T> Vec<T> {
+    new :: () -> Vec<T> => {
+        Vec<T> {
+            data: unsafe { none as ?*T as *T },
+            len: 0,
+            capacity: 0,
+        }
+    }
+
+    // next power of two >= n (returns 1 for n == 0)
+    // undefined for n = u64::MAX. this is ok because that exceeds the 64-bit addressing scheme anyways
+    @allow(dead_code) # because the part after the @ifdef is unreachable if it's defined
+    ceil_power_2 :: (n: u64) -> u64 => {
+        if n == 0 { ret 1 }
+
+        @ifdef(__builtin_clzll) {
+            ret 1u64 << (64 - __builtin_clzll(n - 1))
+        }
+
+        m := n - 1
+
+        m = m or (m >> 1)
+        m = m or (m >> 2)
+        m = m or (m >> 4)
+        m = m or (m >> 8)
+        m = m or (m >> 16)
+        m = m or (m >> 32)
+
+        ret m + 1
+    }
+
+    with_capacity :: (capacity: u64) -> Vec<T> => {
+        cap := ceil_power_2(capacity)
+        data := unsafe { alloc(sizeof<T>() * cap) as *T}
+
+        Vec<T> {
+            data: data,
+            len: 0,
+            capacity: cap,
+        }
+    }
+
+    // Set capacity to exactly `capacity`. Supports shrinking and growing.
+    // If capacity > current, allocates a new buffer, moves existing elements via __memmov,
+    // and updates the pointer. If capacity < len, drops elements above new capacity
+    // (calls destructors) before resizing.
+    set_capacity :: (&mut self, capacity: u64) => {
+        if capacity == self.capacity { ret }
+
+        if capacity < self.len {
+            for i in capacity:self.len {
+                unsafe {
+                    drop(*(self.data + i))
+                }
+            }
+            self.len = capacity
+        }
+
+        if capacity == 0 {
+            // free old storage and set to none
+            if self.data != none {
+                unsafe { dealloc(self.data as *none) }
+            }
+            self.data = unsafe { none }
+            self.capacity = 0
+            ret
+        }
+
+        // Allocate new buffer
+        var new_data := unsafe { alloc(sizeof<T>() * capacity) } as *T
+
+        if self.len > 0 {
+            // move existing elements (raw memory) into new buffer
+            // prefer a builtin memmove if available
+            @ifdef(__memmov) {
+                unsafe { __memmov(new_data as *none, self.data as *none, self.len * sizeof<T>()) }
+            } @else {
+                // fallback: element-wise move (may call T's move semantics)
+                for i in 0:self.len {
+                    unsafe {
+                        *(new_data + i) = *(self.data + i)
+                    }
+                }
+            }
+        }
+
+        // free old buffer
+        if self.data != none {
+            unsafe { dealloc(self.data as *none) }
+        }
+
+        self.data = new_data
+        self.capacity = capacity
+    }
+
+    // ensure capacity grows to at least `capacity` using ceil_power_2
+    extend_capacity :: (&mut self, capacity: u64) => {
+        target := ceil_power_2(capacity)
+        if target <= self.capacity { ret }
+        self.set_capacity(target)
+    }
+
+    push :: (&mut self, value: T) => {
+        if self.len >= self.capacity {
+            next := if self.capacity == 0 { 1 } else { self.capacity * 2 }
+            self.extend_capacity(next)
+        }
+
+        unsafe {
+            *(self.data + self.len) = value
+        }
+        self.len += 1
+    }
+
+    pop :: (&mut self) -> ?T => {
+        if self.len == 0 { ret none }
+        self.len -= 1
+        value := unsafe { *(self.data + self.len) }
+
+        some value
+    }
+
+    get :: (&self, index: u64) -> ?T => {
+        if index >= self.len { ret none }
+        some unsafe { *(self.data + index) }
+    }
+
+    set :: (&mut self, index: u64, value: T) -> bool => {
+        if index >= self.len { ret false }
+        unsafe { *(self.data + index) = value }
+        true
+    }
+
+    len :: (&self) -> u64 => { self.len }
+    is_empty :: (&self) -> bool => { self.len == 0 }
+}
+
+impl Drop for Vec<T>
+    free :: (self) => {
+        if self.data == none { ret }
+
+        // drop all elements
+        for i in 0:self.len {
+            unsafe { drop(*(self.data + i)) }
+        }
+
+        unsafe { dealloc(self.data as *none) }
+        self.data = unsafe { none }
+        self.len = 0
+        self.capacity = 0
+    }
+}
+
+LinkedList<T> :: {
+    head: ?*LinkedListNode<T>,
+    tail: ?&LinkedListNode<T>,
+    len: i64,
+}
+
+LinkedListNode<T> :: {
+    value: T,
+    next: ?*LinkedListNode<T>,
+    prev: ?&LinkedListNode<T>,
+}
+
+impl<T> LinkedList<T> {
+    new :: () -> LinkedList<T> => {
+        {
+            head: none,
+            tail: none,
+            len: 0,
+        }
+    }
+
+    push_back :: (&mut self, value: T) -> none => {
+        node := {
+            value: value,
+            next: none,
+            prev: self.tail,
+        }
+
+        match self.tail {
+            some tail_node => {
+                tail_node.next = some node
+            }
+            none => {
+                self.head = some node
+            }
+        }
+
+        self.tail = some node
+        self.len = self.len + 1
+    }
+
+    push_front :: (&mut self, value: T) -> none => {
+        node := {
+            value: value,
+            next: self.head,
+            prev: none,
+        }
+
+        match self.head {
+            some head_node => {
+                head_node.prev = some node
+            }
+            none => {
+                self.tail = some node
+            }
+        }
+
+        self.head = some node
+        self.len = self.len + 1
+    }
+
+    pop_back :: (&mut self) -> ?T => {
+        match self.tail {
+            some tail_node => {
+                value := tail_node.value
+
+                match tail_node.prev {
+                    some prev_node => {
+                        prev_node.next = none
+                        self.tail = some prev_node
+                    }
+                    none => {
+                        self.head = none
+                        self.tail = none
+                    }
+                }
+
+                self.len = self.len - 1
+                some value
+            }
+            none => none
+        }
+    }
+
+    pop_front :: (&mut self) -> ?T => {
+        match self.head {
+            some head_node => {
+                value := head_node.value
+
+                match head_node.next {
+                    some next_node => {
+                        next_node.prev = none
+                        self.head = some next_node
+                    }
+                    none => {
+                        self.head = none
+                        self.tail = none
+                    }
+                }
+
+                self.len = self.len - 1
+                some value
+            }
+            none => none
+        }
+    }
+
+    front :: (&self) -> ?T => {
+        match self.head {
+            some node => some node.value
+            none => none
+        }
+    }
+
+    back :: (&self) -> ?T => {
+        match self.tail {
+            some node => some node.value
+            none => none
+        }
+    }
+
+    len :: (&self) -> i64 => {
+        self.len
+    }
+
+    is_empty :: (&self) -> bool => {
+        self.len == 0
+    }
+}
+
+# =============================================================================
+# HASHMAP - Hash table map
+# =============================================================================
+
+HashMap<K, V> :: {
+    buckets: [HashMapBucket<K, V>],
+    len: i64,
+    capacity: i64,
+}
+
+HashMapBucket<K, V> :: {
+    entries: [HashMapEntry<K, V>],
+}
+
+HashMapEntry<K, V> :: {
+    key: K,
+    value: V,
+    hash: i64,
+}
+
+impl<K, V> HashMap<K, V> {
+    new :: () -> HashMap<K, V> => {
+        {
+            buckets: [],
+            len: 0,
+            capacity: 16, # Default capacity
+        }
+    }
+
+    insert :: (&mut self, key: K, value: V) -> ?V => {
+        # Placeholder - would compute hash and insert/replace
+        # For now, just track length
+        old_value := self.get(key)
+        self.len = self.len + 1
+        old_value
+    }
+
+    get :: (&self, key: K) -> ?V => {
+        # Placeholder - would compute hash and lookup
+        none
+    }
+
+    remove :: (&mut self, key: K) -> ?V => {
+        # Placeholder - would compute hash and remove
+        if self.len > 0 {
+            self.len = self.len - 1
+            # Return some dummy value for skeleton
+            none
+        } else {
+            none
+        }
+    }
+
+    contains_key :: (&self, key: K) -> bool => {
+        self.get(key).is_some()
+    }
+
+    len :: (&self) -> i64 => {
+        self.len
+    }
+
+    is_empty :: (&self) -> bool => {
+        self.len == 0
+    }
+
+    clear :: (&mut self) -> none => {
+        self.buckets = []
+        self.len = 0
+    }
+}
+
+# =============================================================================
+# BTREEMAP - B-tree map (ordered map)
+# =============================================================================
+
+BTreeMap<K, V> :: {
+    root: ?BTreeNode<K, V>,
+    len: i64,
+    height: i64,
+}
+
+BTreeNode<K, V> :: {
+    keys: [K],
+    values: [V],
+    children: [BTreeNode<K, V>],
+    is_leaf: bool,
+}
+
+impl<K, V> BTreeMap<K, V> {
+    new :: () -> BTreeMap<K, V> => {
+        {
+            root: none,
+            len: 0,
+            height: 0,
+        }
+    }
+
+    insert :: (&mut self, key: K, value: V) -> ?V => {
+        # Placeholder - would perform B-tree insertion
+        old_value := self.get(key)
+        self.len = self.len + 1
+        old_value
+    }
+
+    get :: (&self, key: K) -> ?V => {
+        # Placeholder - would perform B-tree search
+        none
+    }
+
+    remove :: (&mut self, key: K) -> ?V => {
+        # Placeholder - would perform B-tree deletion
+        if self.len > 0 {
+            self.len = self.len - 1
+            none
+        } else {
+            none
+        }
+    }
+
+    contains_key :: (&self, key: K) -> bool => {
+        self.get(key).is_some()
+    }
+
+    len :: (&self) -> i64 => {
+        self.len
+    }
+
+    is_empty :: (&self) -> bool => {
+        self.len == 0
+    }
+
+    first_key :: (&self) -> ?K => {
+        # Placeholder - would find minimum key
+        none
+    }
+
+    last_key :: (&self) -> ?K => {
+        # Placeholder - would find maximum key
+        none
+    }
+}
+
+# =============================================================================
+# HASHSET - Hash table set
+# =============================================================================
+
+HashSet<T> :: {
+    map: HashMap<T, bool>,
+}
+
+impl<T> HashSet<T> {
+    new :: () -> HashSet<T> => {
+        {
+            map: HashMap::new(),
+        }
+    }
+
+    insert :: (&mut self, value: T) -> bool => {
+        old_value := self.map.insert(value, true)
+        old_value.is_none()
+    }
+
+    contains :: (&self, value: T) -> bool => {
+        self.map.contains_key(value)
+    }
+
+    remove :: (&mut self, value: T) -> bool => {
+        old_value := self.map.remove(value)
+        old_value.is_some()
+    }
+
+    len :: (&self) -> i64 => {
+        self.map.len()
+    }
+
+    is_empty :: (&self) -> bool => {
+        self.map.is_empty()
+    }
+
+    clear :: (&mut self) -> none => {
+        self.map.clear()
+    }
+}
+
+# =============================================================================
+# BTREESET - B-tree set (ordered set)
+# =============================================================================
+
+BTreeSet<T> :: {
+    map: BTreeMap<T, bool>,
+}
+
+impl<T> BTreeSet<T> {
+    new :: () -> BTreeSet<T> => {
+        {
+            map: BTreeMap::new(),
+        }
+    }
+
+    insert :: (&mut self, value: T) -> bool => {
+        old_value := self.map.insert(value, true)
+        old_value.is_none()
+    }
+
+    contains :: (&self, value: T) -> bool => {
+        self.map.contains_key(value)
+    }
+
+    remove :: (&mut self, value: T) -> bool => {
+        old_value := self.map.remove(value)
+        old_value.is_some()
+    }
+
+    len :: (&self) -> i64 => {
+        self.map.len()
+    }
+
+    is_empty :: (&self) -> bool => {
+        self.map.is_empty()
+    }
+
+    first :: (&self) -> ?T => {
+        self.map.first_key()
+    }
+
+    last :: (&self) -> ?T => {
+        self.map.last_key()
+    }
+
+}
+
+# =============================================================================
+# BINARYMAP - Binary search tree map
+# =============================================================================
+
+BinaryMap<K, V> :: {
+    root: ?BinaryNode<K, V>,
+    len: i64,
+}
+
+BinaryNode<K, V> :: {
+    key: K,
+    value: V,
+    left: ?BinaryNode<K, V>,
+    right: ?BinaryNode<K, V>,
+}
+
+impl<K, V> BinaryMap<K, V> {
+    new :: () -> BinaryMap<K, V> => {
+        {
+            root: none,
+            len: 0,
+        }
+    }
+
+    insert :: (&mut self, key: K, value: V) -> ?V => {
+        # Placeholder - would perform BST insertion
+        old_value := self.get(key)
+        self.len = self.len + 1
+        old_value
+    }
+
+    get :: (&self, key: K) -> ?V => {
+        # Placeholder - would perform BST search
+        none
+    }
+
+    remove :: (&mut self, key: K) -> ?V => {
+        # Placeholder - would perform BST deletion
+        if self.len > 0 {
+            self.len = self.len - 1
+            none
+        } else {
+            none
+        }
+    }
+
+    contains_key :: (&self, key: K) -> bool => {
+        self.get(key).is_some()
+    }
+
+    len :: (&self) -> i64 => {
+        self.len
+    }
+
+    is_empty :: (&self) -> bool => {
+        self.len == 0
+    }
+
+    min_key :: (&self) -> ?K => {
+        # Placeholder - would find leftmost node
+        none
+    }
+
+    max_key :: (&self) -> ?K => {
+        # Placeholder - would find rightmost node
+        none
+    }

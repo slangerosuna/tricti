@@ -748,8 +748,9 @@ fn collect_definitions(
                             ..
                         }) => {
                             // Prepend implicit receiver parameter of type &type_name for inherent methods
+                            // Skip for static methods (those with no parameters)
                             let mut params: Vec<Type> = Vec::new();
-                            if trait_name.is_none() {
+                            if trait_name.is_none() && !parameters.is_empty() {
                                 params.push(Type::Pointer {
                                     is_mutable: false,
                                     pointee: Box::new(Type::Identifier {

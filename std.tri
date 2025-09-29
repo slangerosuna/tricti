@@ -1,4 +1,6 @@
 # std facade to include stdlib modules
+use core::collections;
+
 mod rt
 mod prelude
 mod runtime_async

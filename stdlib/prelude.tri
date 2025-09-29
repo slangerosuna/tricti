@@ -2,8 +2,8 @@
 # Re-export core functions/types that user code may `use` later.
 
 # Import modern enum-based error and result types from core modules
-use core/errors
-use core/result
+use core::errors
+use core::result
 
 # Re-export the modern types for convenience
 pub use StdError

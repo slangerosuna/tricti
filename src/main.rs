@@ -41,11 +41,23 @@ fn main() {
     println!("Using source file: {}", path);
     let file_content = std::fs::read_to_string(path).expect("Failed to read source file");
 
+    // Load stdlib
+    let stdlib_path = std::env::current_dir().unwrap().join("std.tri");
+    let stdlib_content = std::fs::read_to_string(&stdlib_path).expect("Failed to read stdlib file");
+    let stdlib_program = parser::parse(stdlib_content);
+    let stdlib_program = expand_modules(stdlib_program, &std::env::current_dir().unwrap());
+
     // Parse the program
     println!("Parsing...");
     let mut program = parser::parse(file_content);
     // Expand external modules declared as `mod name;` by reading name.pn
     program = expand_modules(program, &std::env::current_dir().unwrap());
+
+    // Prepend stdlib to the program
+    let mut combined_statements = stdlib_program.statements;
+    combined_statements.extend(program.statements);
+    program.statements = combined_statements;
+
     println!("AST: {:#?}", program);
 
     // Perform semantic analysis
@@ -232,8 +244,12 @@ fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
                 let mut tried: Vec<PathBuf> = Vec::new();
                 let p1 = base_dir.join(format!("{}.pn", name));
                 tried.push(p1.clone());
-                let p2 = base_dir.join("src").join(format!("{}.pn", name));
+                let p2 = base_dir.join(format!("{}.tri", name));
                 tried.push(p2.clone());
+                let p3 = base_dir.join("src").join(format!("{}.pn", name));
+                tried.push(p3.clone());
+                let p4 = base_dir.join("src").join(format!("{}.tri", name));
+                tried.push(p4.clone());
                 let content_opt = tried
                     .into_iter()
                     .find_map(|p| std::fs::read_to_string(&p).ok());
@@ -255,12 +271,18 @@ fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
                     let mut tried: Vec<PathBuf> = Vec::new();
                     // Try exact joined path under base, src, stdlib
                     tried.push(base_dir.join(format!("{}.pn", joined)));
+                    tried.push(base_dir.join(format!("{}.tri", joined)));
                     tried.push(base_dir.join("src").join(format!("{}.pn", joined)));
+                    tried.push(base_dir.join("src").join(format!("{}.tri", joined)));
                     tried.push(base_dir.join("stdlib").join(format!("{}.pn", joined)));
+                    tried.push(base_dir.join("stdlib").join(format!("{}.tri", joined)));
                     // Try single-segment name fallback
                     tried.push(base_dir.join(format!("{}.pn", name)));
+                    tried.push(base_dir.join(format!("{}.tri", name)));
                     tried.push(base_dir.join("src").join(format!("{}.pn", name)));
+                    tried.push(base_dir.join("src").join(format!("{}.tri", name)));
                     tried.push(base_dir.join("stdlib").join(format!("{}.pn", name)));
+                    tried.push(base_dir.join("stdlib").join(format!("{}.tri", name)));
                     let content_opt = tried
                         .into_iter()
                         .find_map(|p| std::fs::read_to_string(&p).ok());

@@ -749,18 +749,310 @@ pub fn clear_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u
     }
 }
 
-/// Poll for the next ready task (placeholder implementation)
-fn poll_next_ready_task(runtime: &mut AsyncRuntimeState) -> Option<&AsyncTask> {
+/// Acquire a resource for a task
+pub fn acquire_resource_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, request: ResourceRequest) -> bool {
+    try_acquire_resource(runtime, task_id, &request.resource_name, request.access_type, request.lease_duration_ms, true)
+}
+
+/// Acquire multiple resources for a task (all-or-nothing)
+pub fn acquire_resources_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, requests: Vec<ResourceRequest>) -> bool {
+    if requests.is_empty() {
+        return true;
+    }
+
+    let mut acquired_names: Vec<String> = Vec::new();
+
+    for request in &requests {
+        let success = try_acquire_resource(runtime, task_id, &request.resource_name, request.access_type.clone(), request.lease_duration_ms, true);
+        if !success {
+            for name in &acquired_names {
+                release_resource_for_task(runtime, task_id, name);
+            }
+            return false;
+        }
+        acquired_names.push(request.resource_name.clone());
+    }
+
+    true
+}
+
+/// Release a resource held by a task
+pub fn release_resource_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, resource_name: &str) {
+    // Remove resource lease
+    runtime.resource_leases.retain(|lease| !(lease.task_id == task_id && lease.resource_name == resource_name));
+
+    // Wake waiting tasks
+    wake_waiters_for_resource(runtime, resource_name);
+
+    // Remove resource handle from task
+    if let Some(task_idx) = runtime.active_tasks.iter().position(|task| task.id == task_id) {
+        let task = &mut runtime.active_tasks[task_idx];
+        if let Some(handle_idx) = task.resource_handles.iter().position(|handle| handle.resource_name == resource_name) {
+            task.resource_handles.remove(handle_idx);
+        }
+    }
+}
+
+/// Release all resources held by a task
+pub fn release_task_resources(runtime: &mut AsyncRuntimeState, task: &AsyncTask) {
+    for handle in &task.resource_handles {
+        runtime.resource_leases.retain(|lease| !(lease.task_id == task.id && lease.resource_name == handle.resource_name));
+        wake_waiters_for_resource(runtime, &handle.resource_name);
+    }
+}
+
+/// Try to acquire a resource for a task
+pub fn try_acquire_resource(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    resource_name: &str,
+    access_type: ResourceAccess,
+    lease_duration_ms: Option<i64>,
+    enqueue_on_conflict: bool,
+) -> bool {
+    let task_idx = match runtime.active_tasks.iter().position(|task| task.id == task_id) {
+        Some(idx) => idx,
+        None => return false,
+    };
+
+    let task = &runtime.active_tasks[task_idx];
+
+    // Check if task already has this resource
+    if task.resource_handles.iter().any(|handle| handle.resource_name == resource_name) {
+        return true;
+    }
+
+    // Check for conflicts with existing leases
+    let conflict = runtime.resource_leases.iter().any(|lease| {
+        lease.resource_name == resource_name
+            && lease.task_id != task_id
+            && resource_access_conflict(&lease.access_type, &access_type)
+    });
+
+    if conflict {
+        if enqueue_on_conflict {
+            let existing_waiter = runtime.resource_waiters.iter().any(|waiter| waiter.task_id == task_id && waiter.resource_name == resource_name);
+            if !existing_waiter {
+                let waiter = ResourceWaiter {
+                    resource_name: resource_name.to_string(),
+                    task_id,
+                    access_type,
+                    requested_at_ms: now_ms(),
+                    lease_duration_ms,
+                };
+
+                runtime.resource_waiters.push(waiter);
+                runtime.resource_summary.resource_contentions += 1;
+            }
+        }
+        return false;
+    }
+
+    let timestamp = now_ms();
+
+    // Add resource handle to task
+    let handle = ResourceHandle {
+        resource_name: resource_name.to_string(),
+        access_type: access_type.clone(),
+        acquired_at_ms: timestamp,
+        lease_duration_ms,
+    };
+
+    let task = &mut runtime.active_tasks[task_idx];
+    task.resource_handles.push(handle);
+
+    // Add resource lease
+    let lease_record = ActiveResourceLease {
+        resource_name: resource_name.to_string(),
+        task_id,
+        access_type,
+        acquired_at_ms: timestamp,
+        lease_duration_ms,
+    };
+
+    runtime.resource_leases.push(lease_record);
+
+    true
+}
+
+/// Wake tasks waiting for a resource
+pub fn wake_waiters_for_resource(runtime: &mut AsyncRuntimeState, resource_name: &str) {
+    let mut idx = 0;
+    while idx < runtime.resource_waiters.len() {
+        if runtime.resource_waiters[idx].resource_name != resource_name {
+            idx += 1;
+            continue;
+        }
+
+        // Extract waiter info before modifying runtime
+        let waiter_task_id = runtime.resource_waiters[idx].task_id;
+        let waiter_resource_name = runtime.resource_waiters[idx].resource_name.clone();
+        let waiter_access_type = runtime.resource_waiters[idx].access_type.clone();
+        let waiter_lease_duration_ms = runtime.resource_waiters[idx].lease_duration_ms;
+
+        let acquired = try_acquire_resource(
+            runtime,
+            waiter_task_id,
+            &waiter_resource_name,
+            waiter_access_type,
+            waiter_lease_duration_ms,
+            false,
+        );
+
+        if acquired {
+            runtime.resource_waiters.remove(idx);
+            let _ = resume_task(runtime, waiter_task_id);
+        } else {
+            idx += 1;
+        }
+    }
+}
+
+/// Register a task waker for async notifications
+pub fn register_task_waker(runtime: &mut AsyncRuntimeState, task_id: u64, token: String) {
+    let waker = TaskWaker { task_id, token };
+
+    if let Some(pos) = runtime.wakers.iter().position(|w| w.task_id == task_id) {
+        runtime.wakers[pos] = waker;
+    } else {
+        runtime.wakers.push(waker);
+    }
+}
+
+/// Take a task waker (removes it from runtime)
+pub fn take_task_waker(runtime: &mut AsyncRuntimeState, task_id: u64) -> Option<TaskWaker> {
+    if let Some(pos) = runtime.wakers.iter().position(|waker| waker.task_id == task_id) {
+        Some(runtime.wakers.remove(pos))
+    } else {
+        None
+    }
+}
+
+/// Wake a task using its registered waker
+pub fn wake_task(runtime: &mut AsyncRuntimeState, task_id: u64) -> bool {
+    let _ = take_task_waker(runtime, task_id);
+    resume_task(runtime, task_id).resumed
+}
+
+/// Perform runtime housekeeping tasks
+pub fn runtime_housekeeping(runtime: &mut AsyncRuntimeState) {
+    let now = now_ms();
+    wake_sleeping_tasks(runtime, now);
+    expire_resource_leases(runtime, now);
+    check_task_timeouts(runtime, now);
+}
+
+/// Poll for the next ready task to execute
+pub fn poll_next_ready_task(runtime: &mut AsyncRuntimeState) -> Option<&AsyncTask> {
+    runtime_housekeeping(runtime);
+
+    let running = count_running_tasks(&runtime.active_tasks);
+    if running >= runtime.config.max_concurrent_systems {
+        return None;
+    }
+
+    next_ready_task(runtime)
+}
+
+/// Wake tasks that have finished sleeping
+pub fn wake_sleeping_tasks(runtime: &mut AsyncRuntimeState, now_ms: i64) {
+    let task_ids_to_resume: Vec<u64> = runtime.active_tasks.iter().filter_map(|task| {
+        if let TaskState::Suspended { yield_point: YieldPoint::Sleeping { duration_ms, started_at_ms }, .. } = &task.state {
+            if now_ms >= started_at_ms + duration_ms {
+                Some(task.id)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }).collect();
+
+    for task_id in task_ids_to_resume {
+        let _ = resume_task(runtime, task_id);
+    }
+}
+
+/// Expire resource leases that have timed out
+pub fn expire_resource_leases(runtime: &mut AsyncRuntimeState, now_ms: i64) {
+    let mut idx = 0;
+    while idx < runtime.resource_leases.len() {
+        let lease = &runtime.resource_leases[idx];
+        let should_expire = if let Some(duration_ms) = lease.lease_duration_ms {
+            now_ms >= lease.acquired_at_ms + duration_ms
+        } else {
+            false
+        };
+
+        if should_expire {
+            let task_id = lease.task_id;
+            let resource_name = lease.resource_name.clone();
+            release_resource_for_task(runtime, task_id, &resource_name);
+        } else {
+            idx += 1;
+        }
+    }
+}
+
+/// Check for tasks that have timed out and fail them
+pub fn check_task_timeouts(runtime: &mut AsyncRuntimeState, now_ms: i64) {
+    let mut idx = 0;
+    while idx < runtime.active_tasks.len() {
+        let task = &runtime.active_tasks[idx];
+        let should_timeout = if let Some(timeout_ms) = task.timeout_ms {
+            now_ms >= task.created_at_ms + timeout_ms
+        } else {
+            false
+        };
+
+        if should_timeout {
+            let task_id = task.id;
+            let timeout_value = task.timeout_ms.unwrap();
+            let error = AsyncExecutionError::Timeout {
+                system: task.system_name.clone(),
+                duration_ms: timeout_value,
+            };
+            fail_task(runtime, task_id, error);
+        } else {
+            idx += 1;
+        }
+    }
+}
+
+/// Get the next deadline for runtime housekeeping
+pub fn runtime_next_deadline_ms(runtime: &AsyncRuntimeState) -> Option<i64> {
+    let mut deadline = None;
+
+    for task in &runtime.active_tasks {
+        if let Some(timeout_ms) = task.timeout_ms {
+            let candidate = task.created_at_ms + timeout_ms;
+            deadline = min_option_i64(deadline, candidate);
+        }
+
+        if let TaskState::Suspended { yield_point: YieldPoint::Sleeping { duration_ms, started_at_ms }, .. } = &task.state {
+            let candidate = started_at_ms + duration_ms;
+            deadline = min_option_i64(deadline, candidate);
+        }
+    }
+
+    for lease in &runtime.resource_leases {
+        if let Some(duration_ms) = lease.lease_duration_ms {
+            let candidate = lease.acquired_at_ms + duration_ms;
+            deadline = min_option_i64(deadline, candidate);
+        }
+    }
+
+    deadline
+}
+
+/// Get the next ready task from the queue
+pub fn next_ready_task(runtime: &mut AsyncRuntimeState) -> Option<&AsyncTask> {
     if runtime.queued_task_ids.is_empty() {
         return None;
     }
 
-    let task_id = runtime.queued_task_ids[0];
-    runtime.active_tasks.iter().find(|task| task.id == task_id)
-}
+    let task_id = runtime.queued_task_ids.remove(0);
+    runtime.resource_summary.queued_tasks = (runtime.resource_summary.queued_tasks - 1).max(0);
 
-/// Release resources held by a task (placeholder implementation)
-fn release_task_resources(runtime: &mut AsyncRuntimeState, task: &AsyncTask) {
-    // Remove resource leases for this task
-    runtime.resource_leases.retain(|lease| lease.task_id != task.id);
+    runtime.active_tasks.iter().find(|task| task.id == task_id)
 }
