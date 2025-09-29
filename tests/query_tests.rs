@@ -14,25 +14,23 @@ mod tests {
             columns: vec![
                 TableColumn {
                     name: "id".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "u64".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
                     },
-                    annotations: vec![
-                        TableAnnotation {
-                            name: "primary".to_string(),
-                            args: vec![],
-                        }
-                    ],
+                    annotations: vec![TableAnnotation {
+                        name: "primary".to_string(),
+                        args: vec![],
+                    }],
                     default_value: None,
                     is_computed: false,
                     computed_expression: None,
                 },
                 TableColumn {
                     name: "name".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "String".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
                     default_value: None,
@@ -41,9 +39,9 @@ mod tests {
                 },
                 TableColumn {
                     name: "age".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "u64".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
                     default_value: None,
@@ -52,9 +50,9 @@ mod tests {
                 },
                 TableColumn {
                     name: "active".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "bool".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "bool".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
                     default_value: Some(Expression::Literal(Literal::Boolean(true))),
@@ -71,25 +69,23 @@ mod tests {
             columns: vec![
                 TableColumn {
                     name: "id".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "u64".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
                     },
-                    annotations: vec![
-                        TableAnnotation {
-                            name: "primary".to_string(),
-                            args: vec![],
-                        }
-                    ],
+                    annotations: vec![TableAnnotation {
+                        name: "primary".to_string(),
+                        args: vec![],
+                    }],
                     default_value: None,
                     is_computed: false,
                     computed_expression: None,
                 },
                 TableColumn {
                     name: "user_id".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "u64".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
                     default_value: None,
@@ -98,9 +94,9 @@ mod tests {
                 },
                 TableColumn {
                     name: "amount".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "f64".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "f64".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
                     default_value: None,
@@ -135,19 +131,26 @@ mod tests {
             FieldProjection::column("id".to_string()),
             FieldProjection::column("name".to_string()),
         ];
-        
-        let where_clause = Some(WhereClause::new(
-            Expression::BinaryOp {
-                left: Box::new(Expression::Identifier("age".to_string())),
-                operator: BinaryOperator::Greater,
-                right: Box::new(Expression::Literal(Literal::integer_from_parts("25".to_string(), 25, None))),
-            }
-        ));
+
+        let where_clause = Some(WhereClause::new(Expression::BinaryOp {
+            left: Box::new(Expression::Identifier("age".to_string())),
+            operator: BinaryOperator::Greater,
+            right: Box::new(Expression::Literal(Literal::integer_from_parts(
+                "25".to_string(),
+                25,
+                None,
+            ))),
+        }));
 
         let query = QueryPlan::select("Users".to_string(), projection, where_clause);
 
         match query {
-            QueryPlan::Select { table_name, projection, where_clause, .. } => {
+            QueryPlan::Select {
+                table_name,
+                projection,
+                where_clause,
+                ..
+            } => {
                 assert_eq!(table_name, "Users");
                 assert_eq!(projection.len(), 2);
                 assert_eq!(projection[0].source_column, "id");
@@ -178,8 +181,12 @@ mod tests {
             Expression::BinaryOp {
                 left: Box::new(Expression::Identifier("age".to_string())),
                 operator: BinaryOperator::Add,
-                right: Box::new(Expression::Literal(Literal::integer_from_parts("1".to_string(), 1, None))),
-            }
+                right: Box::new(Expression::Literal(Literal::integer_from_parts(
+                    "1".to_string(),
+                    1,
+                    None,
+                ))),
+            },
         );
         assert_eq!(computed_proj.source_column, "age");
         assert!(computed_proj.transformation.is_some());
@@ -206,7 +213,10 @@ mod tests {
 
     #[test]
     fn test_join_plan_creation() {
-        let left_projection = vec![FieldProjection::column("id".to_string()), FieldProjection::column("name".to_string())];
+        let left_projection = vec![
+            FieldProjection::column("id".to_string()),
+            FieldProjection::column("name".to_string()),
+        ];
         let right_projection = vec![FieldProjection::column("amount".to_string())];
         let join_condition = JoinCondition::eq("id".to_string(), "user_id".to_string());
 
@@ -220,14 +230,14 @@ mod tests {
         );
 
         match join_query {
-            QueryPlan::Join { 
-                left_table, 
-                right_table, 
-                join_type, 
+            QueryPlan::Join {
+                left_table,
+                right_table,
+                join_type,
                 join_condition: condition,
                 left_projection: left_proj,
                 right_projection: right_proj,
-                .. 
+                ..
             } => {
                 assert_eq!(left_table, "Users");
                 assert_eq!(right_table, "Orders");
@@ -251,7 +261,11 @@ mod tests {
         assert_eq!(eq_join.operator, BinaryOperator::Equal);
 
         // Test custom join condition
-        let custom_join = JoinCondition::new("age".to_string(), "min_age".to_string(), BinaryOperator::GreaterEqual);
+        let custom_join = JoinCondition::new(
+            "age".to_string(),
+            "min_age".to_string(),
+            BinaryOperator::GreaterEqual,
+        );
         assert_eq!(custom_join.left_column, "age");
         assert_eq!(custom_join.right_column, "min_age");
         assert_eq!(custom_join.operator, BinaryOperator::GreaterEqual);
@@ -265,8 +279,22 @@ mod tests {
         ];
 
         let schema = vec![
-            ResultColumn::new("id".to_string(), Type::Identifier { name: "u64".to_string(), type_args: vec![] }, Some("Users".to_string())),
-            ResultColumn::new("name".to_string(), Type::Identifier { name: "String".to_string(), type_args: vec![] }, Some("Users".to_string())),
+            ResultColumn::new(
+                "id".to_string(),
+                Type::Identifier {
+                    name: "u64".to_string(),
+                    type_args: vec![],
+                },
+                Some("Users".to_string()),
+            ),
+            ResultColumn::new(
+                "name".to_string(),
+                Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                },
+                Some("Users".to_string()),
+            ),
         ];
 
         let result = QueryResult::new(rows.clone(), schema.clone());
@@ -287,7 +315,9 @@ mod tests {
         let mut query = QueryPlan::select(
             "Users".to_string(),
             vec![FieldProjection::column("name".to_string())],
-            Some(WhereClause::new(Expression::Literal(Literal::Boolean(true)))),
+            Some(WhereClause::new(Expression::Literal(Literal::Boolean(
+                true,
+            )))),
         );
 
         // Apply optimization
@@ -304,29 +334,38 @@ mod tests {
     #[test]
     fn test_query_executor_creation() {
         let mut executor = QueryExecutor::new();
-        
+
         // Create and register a table
         let schema = create_test_table_schema();
         let table = TableRuntime::new(schema).expect("Failed to create table");
         executor.register_table("Users".to_string(), table);
 
         // Verify table is registered (we can't directly access internal HashMap, but this tests the registration)
-        assert_eq!(std::mem::size_of_val(&executor), std::mem::size_of::<QueryExecutor>());
+        assert_eq!(
+            std::mem::size_of_val(&executor),
+            std::mem::size_of::<QueryExecutor>()
+        );
     }
 
     #[test]
     fn test_simple_select_execution() {
         let mut executor = QueryExecutor::new();
-        
+
         // Set up table with test data
         let schema = create_test_table_schema();
         let mut table = TableRuntime::new(schema).expect("Failed to create table");
-        
+
         // Insert test data
-        table.insert_row(create_test_user(1, "Alice", 30, true)).unwrap();
-        table.insert_row(create_test_user(2, "Bob", 25, false)).unwrap();
-        table.insert_row(create_test_user(3, "Charlie", 35, true)).unwrap();
-        
+        table
+            .insert_row(create_test_user(1, "Alice", 30, true))
+            .unwrap();
+        table
+            .insert_row(create_test_user(2, "Bob", 25, false))
+            .unwrap();
+        table
+            .insert_row(create_test_user(3, "Charlie", 35, true))
+            .unwrap();
+
         executor.register_table("Users".to_string(), table);
 
         // Execute simple SELECT * query
@@ -349,16 +388,22 @@ mod tests {
     #[test]
     fn test_select_with_where_clause() {
         let mut executor = QueryExecutor::new();
-        
+
         // Set up table with test data
         let schema = create_test_table_schema();
         let mut table = TableRuntime::new(schema).expect("Failed to create table");
-        
+
         // Insert test data
-        table.insert_row(create_test_user(1, "Alice", 30, true)).unwrap();
-        table.insert_row(create_test_user(2, "Bob", 25, false)).unwrap();
-        table.insert_row(create_test_user(3, "Charlie", 35, true)).unwrap();
-        
+        table
+            .insert_row(create_test_user(1, "Alice", 30, true))
+            .unwrap();
+        table
+            .insert_row(create_test_user(2, "Bob", 25, false))
+            .unwrap();
+        table
+            .insert_row(create_test_user(3, "Charlie", 35, true))
+            .unwrap();
+
         executor.register_table("Users".to_string(), table);
 
         // Execute SELECT with WHERE clause
@@ -367,13 +412,11 @@ mod tests {
             FieldProjection::column("name".to_string()),
         ];
 
-        let where_clause = Some(WhereClause::new(
-            Expression::BinaryOp {
-                left: Box::new(Expression::Identifier("active".to_string())),
-                operator: BinaryOperator::Equal,
-                right: Box::new(Expression::Literal(Literal::Boolean(true))),
-            }
-        ));
+        let where_clause = Some(WhereClause::new(Expression::BinaryOp {
+            left: Box::new(Expression::Identifier("active".to_string())),
+            operator: BinaryOperator::Equal,
+            right: Box::new(Expression::Literal(Literal::Boolean(true))),
+        }));
 
         let query = QueryPlan::select("Users".to_string(), projection, where_clause);
         let result = executor.execute(query).expect("Failed to execute query");
@@ -396,16 +439,22 @@ mod tests {
     #[test]
     fn test_select_with_numeric_where_clause() {
         let mut executor = QueryExecutor::new();
-        
+
         // Set up table with test data
         let schema = create_test_table_schema();
         let mut table = TableRuntime::new(schema).expect("Failed to create table");
-        
+
         // Insert test data
-        table.insert_row(create_test_user(1, "Alice", 30, true)).unwrap();
-        table.insert_row(create_test_user(2, "Bob", 25, false)).unwrap();
-        table.insert_row(create_test_user(3, "Charlie", 35, true)).unwrap();
-        
+        table
+            .insert_row(create_test_user(1, "Alice", 30, true))
+            .unwrap();
+        table
+            .insert_row(create_test_user(2, "Bob", 25, false))
+            .unwrap();
+        table
+            .insert_row(create_test_user(3, "Charlie", 35, true))
+            .unwrap();
+
         executor.register_table("Users".to_string(), table);
 
         // Execute SELECT with numeric WHERE clause (age > 28)
@@ -414,13 +463,15 @@ mod tests {
             FieldProjection::column("age".to_string()),
         ];
 
-        let where_clause = Some(WhereClause::new(
-            Expression::BinaryOp {
-                left: Box::new(Expression::Identifier("age".to_string())),
-                operator: BinaryOperator::Greater,
-                right: Box::new(Expression::Literal(Literal::integer_from_parts("28".to_string(), 28, None))),
-            }
-        ));
+        let where_clause = Some(WhereClause::new(Expression::BinaryOp {
+            left: Box::new(Expression::Identifier("age".to_string())),
+            operator: BinaryOperator::Greater,
+            right: Box::new(Expression::Literal(Literal::integer_from_parts(
+                "28".to_string(),
+                28,
+                None,
+            ))),
+        }));
 
         let query = QueryPlan::select("Users".to_string(), projection, where_clause);
         let result = executor.execute(query).expect("Failed to execute query");
@@ -442,15 +493,19 @@ mod tests {
     #[test]
     fn test_field_projection() {
         let mut executor = QueryExecutor::new();
-        
+
         // Set up table with test data
         let schema = create_test_table_schema();
         let mut table = TableRuntime::new(schema).expect("Failed to create table");
-        
+
         // Insert test data
-        table.insert_row(create_test_user(1, "Alice", 30, true)).unwrap();
-        table.insert_row(create_test_user(2, "Bob", 25, false)).unwrap();
-        
+        table
+            .insert_row(create_test_user(1, "Alice", 30, true))
+            .unwrap();
+        table
+            .insert_row(create_test_user(2, "Bob", 25, false))
+            .unwrap();
+
         executor.register_table("Users".to_string(), table);
 
         // Execute SELECT with only specific columns
@@ -481,22 +536,36 @@ mod tests {
     #[test]
     fn test_inner_join_execution() {
         let mut executor = QueryExecutor::new();
-        
+
         // Set up Users table
         let users_schema = create_test_table_schema();
-        let mut users_table = TableRuntime::new(users_schema).expect("Failed to create users table");
-        users_table.insert_row(create_test_user(1, "Alice", 30, true)).unwrap();
-        users_table.insert_row(create_test_user(2, "Bob", 25, false)).unwrap();
-        users_table.insert_row(create_test_user(3, "Charlie", 35, true)).unwrap();
-        
+        let mut users_table =
+            TableRuntime::new(users_schema).expect("Failed to create users table");
+        users_table
+            .insert_row(create_test_user(1, "Alice", 30, true))
+            .unwrap();
+        users_table
+            .insert_row(create_test_user(2, "Bob", 25, false))
+            .unwrap();
+        users_table
+            .insert_row(create_test_user(3, "Charlie", 35, true))
+            .unwrap();
+
         // Set up Orders table
         let orders_schema = create_orders_table_schema();
-        let mut orders_table = TableRuntime::new(orders_schema).expect("Failed to create orders table");
-        orders_table.insert_row(create_test_order(101, 1, 100.50)).unwrap(); // Alice's order
-        orders_table.insert_row(create_test_order(102, 2, 75.25)).unwrap();  // Bob's order
-        orders_table.insert_row(create_test_order(103, 1, 200.00)).unwrap(); // Alice's second order
-        // Note: Charlie (user_id 3) has no orders
-        
+        let mut orders_table =
+            TableRuntime::new(orders_schema).expect("Failed to create orders table");
+        orders_table
+            .insert_row(create_test_order(101, 1, 100.50))
+            .unwrap(); // Alice's order
+        orders_table
+            .insert_row(create_test_order(102, 2, 75.25))
+            .unwrap(); // Bob's order
+        orders_table
+            .insert_row(create_test_order(103, 1, 200.00))
+            .unwrap(); // Alice's second order
+                       // Note: Charlie (user_id 3) has no orders
+
         executor.register_table("Users".to_string(), users_table);
         executor.register_table("Orders".to_string(), orders_table);
 
@@ -520,7 +589,9 @@ mod tests {
             right_projection,
         );
 
-        let result = executor.execute(query).expect("Failed to execute join query");
+        let result = executor
+            .execute(query)
+            .expect("Failed to execute join query");
 
         // Should return 3 rows (Alice appears twice because she has 2 orders, Bob once, Charlie excluded)
         assert_eq!(result.len(), 3);
@@ -547,21 +618,33 @@ mod tests {
     #[test]
     fn test_left_outer_join_execution() {
         let mut executor = QueryExecutor::new();
-        
+
         // Set up Users table
         let users_schema = create_test_table_schema();
-        let mut users_table = TableRuntime::new(users_schema).expect("Failed to create users table");
-        users_table.insert_row(create_test_user(1, "Alice", 30, true)).unwrap();
-        users_table.insert_row(create_test_user(2, "Bob", 25, false)).unwrap();
-        users_table.insert_row(create_test_user(3, "Charlie", 35, true)).unwrap();
-        
+        let mut users_table =
+            TableRuntime::new(users_schema).expect("Failed to create users table");
+        users_table
+            .insert_row(create_test_user(1, "Alice", 30, true))
+            .unwrap();
+        users_table
+            .insert_row(create_test_user(2, "Bob", 25, false))
+            .unwrap();
+        users_table
+            .insert_row(create_test_user(3, "Charlie", 35, true))
+            .unwrap();
+
         // Set up Orders table
         let orders_schema = create_orders_table_schema();
-        let mut orders_table = TableRuntime::new(orders_schema).expect("Failed to create orders table");
-        orders_table.insert_row(create_test_order(101, 1, 100.50)).unwrap(); // Alice's order
-        orders_table.insert_row(create_test_order(102, 2, 75.25)).unwrap();  // Bob's order
-        // Note: Charlie (user_id 3) has no orders
-        
+        let mut orders_table =
+            TableRuntime::new(orders_schema).expect("Failed to create orders table");
+        orders_table
+            .insert_row(create_test_order(101, 1, 100.50))
+            .unwrap(); // Alice's order
+        orders_table
+            .insert_row(create_test_order(102, 2, 75.25))
+            .unwrap(); // Bob's order
+                       // Note: Charlie (user_id 3) has no orders
+
         executor.register_table("Users".to_string(), users_table);
         executor.register_table("Orders".to_string(), orders_table);
 
@@ -585,7 +668,9 @@ mod tests {
             right_projection,
         );
 
-        let result = executor.execute(query).expect("Failed to execute left outer join query");
+        let result = executor
+            .execute(query)
+            .expect("Failed to execute left outer join query");
 
         // Should return 3 rows (all users: Alice, Bob, Charlie)
         assert_eq!(result.len(), 3);
@@ -614,9 +699,9 @@ mod tests {
 
         let projection = vec![FieldProjection::column("id".to_string())];
         let query = QueryPlan::select("NonExistent".to_string(), projection, None);
-        
+
         let result = executor.execute(query);
-        
+
         match result {
             Err(QueryError::TableNotFound(table_name)) => {
                 assert_eq!(table_name, "NonExistent");
@@ -628,7 +713,7 @@ mod tests {
     #[test]
     fn test_column_not_found_error() {
         let mut executor = QueryExecutor::new();
-        
+
         let schema = create_test_table_schema();
         let table = TableRuntime::new(schema).expect("Failed to create table");
         executor.register_table("Users".to_string(), table);
@@ -636,9 +721,9 @@ mod tests {
         // Try to select a non-existent column
         let projection = vec![FieldProjection::column("non_existent_column".to_string())];
         let query = QueryPlan::select("Users".to_string(), projection, None);
-        
+
         let result = executor.execute(query);
-        
+
         match result {
             Err(QueryError::ColumnNotFound { table, column }) => {
                 assert_eq!(table, "Users");
@@ -651,26 +736,34 @@ mod tests {
     #[test]
     fn test_query_statistics() {
         let mut executor = QueryExecutor::new();
-        
+
         let schema = create_test_table_schema();
         let mut table = TableRuntime::new(schema).expect("Failed to create table");
-        
+
         // Insert test data
-        table.insert_row(create_test_user(1, "Alice", 30, true)).unwrap();
-        table.insert_row(create_test_user(2, "Bob", 25, false)).unwrap();
-        table.insert_row(create_test_user(3, "Charlie", 35, true)).unwrap();
-        
+        table
+            .insert_row(create_test_user(1, "Alice", 30, true))
+            .unwrap();
+        table
+            .insert_row(create_test_user(2, "Bob", 25, false))
+            .unwrap();
+        table
+            .insert_row(create_test_user(3, "Charlie", 35, true))
+            .unwrap();
+
         executor.register_table("Users".to_string(), table);
 
         // Execute query with filtering
         let projection = vec![FieldProjection::column("name".to_string())];
-        let where_clause = Some(WhereClause::new(
-            Expression::BinaryOp {
-                left: Box::new(Expression::Identifier("age".to_string())),
-                operator: BinaryOperator::Greater,
-                right: Box::new(Expression::Literal(Literal::integer_from_parts("28".to_string(), 28, None))),
-            }
-        ));
+        let where_clause = Some(WhereClause::new(Expression::BinaryOp {
+            left: Box::new(Expression::Identifier("age".to_string())),
+            operator: BinaryOperator::Greater,
+            right: Box::new(Expression::Literal(Literal::integer_from_parts(
+                "28".to_string(),
+                28,
+                None,
+            ))),
+        }));
 
         let query = QueryPlan::select("Users".to_string(), projection, where_clause);
         let result = executor.execute(query).expect("Failed to execute query");

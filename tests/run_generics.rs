@@ -52,7 +52,11 @@ fn run_generic_identity_e2e() {
         }
     "#;
 
-    let stdout = compile_and_run(src, "tests/tmp_generic_identity.o", "tests/tmp_generic_identity.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_generic_identity.o",
+        "tests/tmp_generic_identity.out",
+    );
     assert_eq!(stdout, ["true\n", "42\n"].concat());
 }
 

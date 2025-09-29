@@ -100,4 +100,3 @@ fn slice_bool_helpers() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(stdout, "4\nfalse\ntrue\nfalse\n");
 }
-

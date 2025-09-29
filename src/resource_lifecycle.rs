@@ -1,5 +1,5 @@
-use crate::async_runtime::{AsyncExecutionError, TaskId};
 use crate::ast::{ResourceAccess, SystemDef};
+use crate::async_runtime::{AsyncExecutionError, TaskId};
 use crate::scheduler::SchedulerError;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, RwLock, Weak};
@@ -165,12 +165,16 @@ impl ResourceLifecycleManager {
         lease_duration: Option<Duration>,
     ) -> Result<AcquisitionResult, AsyncExecutionError> {
         let lease_duration = lease_duration.unwrap_or(self.policies.default_lease_duration);
-        
+
         // Check if resource can be acquired
-        let can_acquire = self.check_acquisition_feasibility(&resource_name, &access_type).await?;
-        
+        let can_acquire = self
+            .check_acquisition_feasibility(&resource_name, &access_type)
+            .await?;
+
         if !can_acquire {
-            return Ok(self.calculate_wait_time(&resource_name, &access_type).await?);
+            return Ok(self
+                .calculate_wait_time(&resource_name, &access_type)
+                .await?);
         }
 
         // Check for potential deadlocks
@@ -209,7 +213,8 @@ impl ResourceLifecycleManager {
         }
 
         // Update dependency graph
-        self.update_resource_dependencies(&resource_name, task_id).await?;
+        self.update_resource_dependencies(&resource_name, task_id)
+            .await?;
 
         Ok(AcquisitionResult::Acquired(lease))
     }
@@ -251,7 +256,8 @@ impl ResourceLifecycleManager {
         }
 
         // Update dependency graph
-        self.remove_resource_dependencies(&resource_name, task_id).await?;
+        self.remove_resource_dependencies(&resource_name, task_id)
+            .await?;
 
         // Emit lifecycle event
         self.emit_lifecycle_event(LifecycleEvent::ResourceReleased {
@@ -271,14 +277,16 @@ impl ResourceLifecycleManager {
     ) -> Result<Vec<String>, AsyncExecutionError> {
         let resources_to_release: Vec<String> = {
             let leases = self.active_leases.read().unwrap();
-            leases.values()
+            leases
+                .values()
                 .filter(|lease| lease.task_id == task_id)
                 .map(|lease| lease.resource_name.clone())
                 .collect()
         };
 
         for resource_name in &resources_to_release {
-            self.release_resource(resource_name.clone(), task_id, reason.clone()).await?;
+            self.release_resource(resource_name.clone(), task_id, reason.clone())
+                .await?;
         }
 
         Ok(resources_to_release)
@@ -291,7 +299,7 @@ impl ResourceLifecycleManager {
         access_type: &ResourceAccess,
     ) -> Result<bool, AsyncExecutionError> {
         let leases = self.active_leases.read().unwrap();
-        
+
         if let Some(existing_lease) = leases.get(resource_name) {
             match (&existing_lease.access_type, access_type) {
                 (ResourceAccess::Immutable, ResourceAccess::Immutable) => Ok(true),
@@ -312,11 +320,12 @@ impl ResourceLifecycleManager {
         access_type: &ResourceAccess,
     ) -> Result<AcquisitionResult, AsyncExecutionError> {
         let leases = self.active_leases.read().unwrap();
-        
+
         if let Some(existing_lease) = leases.get(resource_name) {
-            let remaining_time = existing_lease.lease_duration
+            let remaining_time = existing_lease
+                .lease_duration
                 .saturating_sub(existing_lease.acquired_at.elapsed());
-            
+
             Ok(AcquisitionResult::WaitRequired {
                 estimated_wait_time: remaining_time,
                 blocking_tasks: vec![existing_lease.task_id],
@@ -337,11 +346,13 @@ impl ResourceLifecycleManager {
     ) -> Result<Option<Vec<String>>, AsyncExecutionError> {
         // Simplified deadlock detection using cycle detection
         let graph = self.resource_graph.read().unwrap();
-        
+
         // Check if adding this resource would create a cycle
         if let Some(dependencies) = graph.dependencies.get(resource_name) {
             for dep in dependencies {
-                if let Some(cycle) = self.find_cycle_to_task(dep, task_id, &graph, &mut HashSet::new()) {
+                if let Some(cycle) =
+                    self.find_cycle_to_task(dep, task_id, &graph, &mut HashSet::new())
+                {
                     return Ok(Some(cycle));
                 }
             }
@@ -384,10 +395,16 @@ impl ResourceLifecycleManager {
         task_id: TaskId,
     ) -> Result<(), AsyncExecutionError> {
         let mut graph = self.resource_graph.write().unwrap();
-        
+
         // Add resource to graph if not present
-        graph.dependencies.entry(resource_name.to_string()).or_insert_with(HashSet::new);
-        graph.dependents.entry(resource_name.to_string()).or_insert_with(HashSet::new);
+        graph
+            .dependencies
+            .entry(resource_name.to_string())
+            .or_insert_with(HashSet::new);
+        graph
+            .dependents
+            .entry(resource_name.to_string())
+            .or_insert_with(HashSet::new);
 
         Ok(())
     }
@@ -399,7 +416,7 @@ impl ResourceLifecycleManager {
         task_id: TaskId,
     ) -> Result<(), AsyncExecutionError> {
         let mut graph = self.resource_graph.write().unwrap();
-        
+
         // Remove dependencies
         if let Some(dependencies) = graph.dependencies.get_mut(resource_name) {
             dependencies.clear();
@@ -423,7 +440,8 @@ impl ResourceLifecycleManager {
 
         for (resource_name, task_id) in expired_leases {
             if self.policies.auto_release_on_timeout {
-                self.release_resource(resource_name.clone(), task_id, ReleaseReason::LeaseExpired).await?;
+                self.release_resource(resource_name.clone(), task_id, ReleaseReason::LeaseExpired)
+                    .await?;
                 events.push(LifecycleEvent::LeaseExpired {
                     resource_name,
                     task_id,
@@ -455,12 +473,16 @@ impl ResourceLifecycleManager {
     }
 
     /// Calculate average lease duration
-    fn calculate_average_lease_duration(&self, leases: &HashMap<String, ResourceLease>) -> Duration {
+    fn calculate_average_lease_duration(
+        &self,
+        leases: &HashMap<String, ResourceLease>,
+    ) -> Duration {
         if leases.is_empty() {
             return Duration::from_secs(0);
         }
 
-        let total_duration: Duration = leases.values()
+        let total_duration: Duration = leases
+            .values()
             .map(|lease| lease.acquired_at.elapsed())
             .sum();
 
@@ -486,11 +508,13 @@ impl ResourceDependencyGraph {
 
     /// Add a dependency relationship
     pub fn add_dependency(&mut self, resource: String, dependency: String) {
-        self.dependencies.entry(resource.clone())
+        self.dependencies
+            .entry(resource.clone())
             .or_insert_with(HashSet::new)
             .insert(dependency.clone());
-        
-        self.dependents.entry(dependency)
+
+        self.dependents
+            .entry(dependency)
             .or_insert_with(HashSet::new)
             .insert(resource);
     }
@@ -500,7 +524,7 @@ impl ResourceDependencyGraph {
         if let Some(deps) = self.dependencies.get_mut(resource) {
             deps.remove(dependency);
         }
-        
+
         if let Some(dependents) = self.dependents.get_mut(dependency) {
             dependents.remove(resource);
         }
@@ -572,7 +596,7 @@ impl LeaseTimeoutManager {
             }
             index += 1;
         }
-        
+
         self.timeouts.insert(index, timeout);
     }
 

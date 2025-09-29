@@ -1,14 +1,16 @@
+use crate::ast::{ResourceAccess, SystemDef, SystemParameter};
 use crate::async_runtime::{
-    AsyncSystemRuntime, AsyncExecutionError, SystemFuture, SystemExecutionResult, 
-    TaskId, TaskPriority, RuntimeConfig
+    AsyncExecutionError, AsyncResult, AsyncSystemRuntime, CompletedTaskInfo, RuntimeConfig,
+    SystemExecutionResult, SystemFuture, TaskId, TaskPriority,
 };
-use crate::scheduler::{SystemScheduler, SchedulerError, ConflictType, ResourceTracker};
-use crate::system_executor::{SystemStateMachine, SystemStateMachineBuilder, SystemStateMachineExecutor};
-use crate::ast::{SystemDef, SystemParameter, ResourceAccess};
-use crate::table_runtime::{TableRuntime, ColumnValue};
+use crate::scheduler::{ConflictType, ResourceTracker, SchedulerError, SystemScheduler};
 use crate::semantic::SemanticContext;
-use std::collections::{HashMap, VecDeque, HashSet};
-use std::sync::{Arc, Mutex, RwLock};
+use crate::system_executor::{
+    SystemStateMachine, SystemStateMachineBuilder, SystemStateMachineExecutor,
+};
+use crate::table_runtime::{ColumnValue, TableRuntime};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Integrated async scheduler that combines async runtime with borrow safety analysis
@@ -19,8 +21,6 @@ pub struct AsyncSystemScheduler {
     safety_scheduler: Arc<Mutex<SystemScheduler>>,
     /// State machine builder
     state_machine_builder: SystemStateMachineBuilder,
-    /// Active state machine executors
-    executors: Arc<RwLock<HashMap<TaskId, SystemStateMachineExecutor>>>,
     /// Dependency graph for system execution order
     dependency_graph: Arc<Mutex<DependencyGraph>>,
     /// Conflict resolution cache
@@ -117,10 +117,7 @@ pub struct SchedulingStats {
 
 impl AsyncSystemScheduler {
     /// Create a new integrated async scheduler
-    pub fn new(
-        runtime_config: RuntimeConfig,
-        semantic_context: SemanticContext,
-    ) -> Self {
+    pub fn new(runtime_config: RuntimeConfig, semantic_context: SemanticContext) -> Self {
         let async_runtime = Arc::new(AsyncSystemRuntime::new(runtime_config));
         let safety_scheduler = Arc::new(Mutex::new(SystemScheduler::new()));
         let state_machine_builder = SystemStateMachineBuilder::new(semantic_context);
@@ -129,7 +126,6 @@ impl AsyncSystemScheduler {
             async_runtime,
             safety_scheduler,
             state_machine_builder,
-            executors: Arc::new(RwLock::new(HashMap::new())),
             dependency_graph: Arc::new(Mutex::new(DependencyGraph::new())),
             conflict_cache: Arc::new(Mutex::new(HashMap::new())),
             stats: Arc::new(Mutex::new(SchedulingStats::default())),
@@ -142,27 +138,27 @@ impl AsyncSystemScheduler {
         systems: Vec<SystemExecutionRequest>,
     ) -> Result<Vec<SystemFuture<SystemExecutionResult>>, AsyncExecutionError> {
         let mut futures = Vec::new();
-        
+
         // Analyze conflicts and dependencies
         let schedule = self.analyze_and_schedule(&systems).await?;
-        
+
         // Execute systems according to the schedule
         for batch in schedule.execution_batches {
             let mut batch_futures = Vec::new();
-            
+
             for request in batch.systems {
                 let future = self.schedule_single_system(request).await?;
                 batch_futures.push(future);
             }
-            
+
             // Wait for batch completion if required
             if batch.wait_for_completion {
                 self.wait_for_batch_completion(&batch_futures).await?;
             }
-            
+
             futures.extend(batch_futures);
         }
-        
+
         Ok(futures)
     }
 
@@ -181,12 +177,13 @@ impl AsyncSystemScheduler {
         self.check_resource_conflicts(&request).await?;
 
         // Build state machine for the system
-        let state_machine = self.state_machine_builder
+        let state_machine = self
+            .state_machine_builder
             .build_state_machine(&request.system_def, request.parameters.clone())?;
 
         // Create executor for the state machine
         let mut executor = SystemStateMachineExecutor::new();
-        
+
         // Register tables with executor
         for (table_name, table_runtime) in &request.table_runtimes {
             executor.register_table(table_name.clone(), table_runtime.clone());
@@ -202,11 +199,9 @@ impl AsyncSystemScheduler {
 
         let task_id = future.task_id();
 
-        // Register executor
-        {
-            let mut executors = self.executors.write().unwrap();
-            executors.insert(task_id, executor);
-        }
+        // Attach execution plan so the runtime can drive the state machine
+        self.async_runtime
+            .attach_execution_plan(task_id, state_machine, executor)?;
 
         // Update dependency graph
         self.update_dependency_graph(task_id, &request).await?;
@@ -220,13 +215,15 @@ impl AsyncSystemScheduler {
         systems: &[SystemExecutionRequest],
     ) -> Result<ExecutionSchedule, AsyncExecutionError> {
         let start_time = Instant::now();
-        
+
         // Build conflict matrix
         let conflict_matrix = self.build_conflict_matrix(systems).await?;
-        
+
         // Resolve conflicts and create batches
-        let execution_batches = self.resolve_conflicts_and_batch(systems, &conflict_matrix).await?;
-        
+        let execution_batches = self
+            .resolve_conflicts_and_batch(systems, &conflict_matrix)
+            .await?;
+
         // Update statistics
         {
             let mut stats = self.stats.lock().unwrap();
@@ -247,14 +244,16 @@ impl AsyncSystemScheduler {
     ) -> Result<ConflictMatrix, AsyncExecutionError> {
         let n = systems.len();
         let mut matrix = ConflictMatrix::new(n);
-        
+
         for i in 0..n {
             for j in (i + 1)..n {
-                let conflict_type = self.analyze_system_conflict(&systems[i], &systems[j]).await?;
+                let conflict_type = self
+                    .analyze_system_conflict(&systems[i], &systems[j])
+                    .await?;
                 matrix.set_conflict(i, j, conflict_type);
             }
         }
-        
+
         Ok(matrix)
     }
 
@@ -268,14 +267,14 @@ impl AsyncSystemScheduler {
         // In a real implementation, this would use proper conflict detection
         let system1_resources = self.extract_system_resources(system1);
         let system2_resources = self.extract_system_resources(system2);
-        
+
         // Check for resource overlap
         for resource in &system1_resources {
             if system2_resources.contains(resource) {
                 return Ok(ConflictType::ReadWrite); // Simplified conflict type
             }
         }
-        
+
         Ok(ConflictType::None)
     }
 
@@ -287,28 +286,28 @@ impl AsyncSystemScheduler {
     ) -> Result<Vec<ExecutionBatch>, AsyncExecutionError> {
         let mut batches = Vec::new();
         let mut unscheduled: HashSet<usize> = (0..systems.len()).collect();
-        
+
         while !unscheduled.is_empty() {
             let mut current_batch = Vec::new();
             let mut batch_resources: HashSet<String> = HashSet::new();
-            
+
             // Find systems that can execute concurrently
             let mut to_remove = Vec::new();
-            
+
             for &i in &unscheduled {
                 let system = &systems[i];
                 let system_resources = self.extract_system_resources(system);
-                
+
                 // Check if this system conflicts with current batch
                 let mut has_conflict = false;
-                
+
                 for &j in &current_batch {
                     if conflict_matrix.has_conflict(i, j) != ConflictType::None {
                         has_conflict = true;
                         break;
                     }
                 }
-                
+
                 // Check resource conflicts
                 if !has_conflict {
                     for resource in &system_resources {
@@ -319,45 +318,45 @@ impl AsyncSystemScheduler {
                         }
                     }
                 }
-                
+
                 if !has_conflict {
                     current_batch.push(i);
                     batch_resources.extend(system_resources);
                     to_remove.push(i);
                 }
             }
-            
+
             // Remove scheduled systems from unscheduled set
             for i in to_remove {
                 unscheduled.remove(&i);
             }
-            
+
             // Create execution batch
             let batch_systems: Vec<SystemExecutionRequest> = current_batch
                 .into_iter()
                 .map(|i| systems[i].clone())
                 .collect();
-                
+
             batches.push(ExecutionBatch {
                 systems: batch_systems,
                 wait_for_completion: true, // Wait for batch completion by default
                 estimated_duration: Duration::from_secs(5), // Placeholder
             });
         }
-        
+
         Ok(batches)
     }
 
     /// Extract resources used by a system
     fn extract_system_resources(&self, system: &SystemExecutionRequest) -> Vec<String> {
         let mut resources = Vec::new();
-        
+
         for param in &system.system_def.parameters {
             if let SystemParameter::Resource { name, .. } = param {
                 resources.push(name.clone());
             }
         }
-        
+
         resources
     }
 
@@ -378,30 +377,33 @@ impl AsyncSystemScheduler {
         request: &SystemExecutionRequest,
     ) -> Result<(), AsyncExecutionError> {
         let mut graph = self.dependency_graph.lock().unwrap();
-        
+
         // Add task to system mapping
-        graph.system_tasks
+        graph
+            .system_tasks
             .entry(request.system_def.name.clone())
             .or_insert_with(Vec::new)
             .push(task_id);
-        
+
         // Initialize dependencies
         graph.task_dependencies.insert(task_id, HashSet::new());
-        
+
         // Update resource usage
         for param in &request.system_def.parameters {
             if let SystemParameter::Resource { name, access, .. } = param {
-                let usage_info = graph.resource_usage
-                    .entry(name.clone())
-                    .or_insert_with(|| ResourceUsageInfo {
-                        resource_name: name.clone(),
-                        current_readers: HashSet::new(),
-                        current_writer: None,
-                        pending_readers: VecDeque::new(),
-                        pending_writers: VecDeque::new(),
-                        access_history: Vec::new(),
-                    });
-                
+                let usage_info =
+                    graph
+                        .resource_usage
+                        .entry(name.clone())
+                        .or_insert_with(|| ResourceUsageInfo {
+                            resource_name: name.clone(),
+                            current_readers: HashSet::new(),
+                            current_writer: None,
+                            pending_readers: VecDeque::new(),
+                            pending_writers: VecDeque::new(),
+                            access_history: Vec::new(),
+                        });
+
                 match access {
                     ResourceAccess::Immutable => {
                         if usage_info.current_writer.is_none() {
@@ -411,18 +413,20 @@ impl AsyncSystemScheduler {
                         }
                     }
                     ResourceAccess::Mutable | ResourceAccess::Owned => {
-                        if usage_info.current_writer.is_none() && usage_info.current_readers.is_empty() {
+                        if usage_info.current_writer.is_none()
+                            && usage_info.current_readers.is_empty()
+                        {
                             usage_info.current_writer = Some(task_id);
                         } else {
                             usage_info.pending_writers.push_back(task_id);
                         }
                     }
                 }
-                
+
                 usage_info.access_history.push(access.clone());
             }
         }
-        
+
         Ok(())
     }
 
@@ -438,9 +442,7 @@ impl AsyncSystemScheduler {
 
     /// Estimate total execution time
     fn estimate_total_execution_time(&self, batches: &[ExecutionBatch]) -> Duration {
-        batches.iter()
-            .map(|batch| batch.estimated_duration)
-            .sum()
+        batches.iter().map(|batch| batch.estimated_duration).sum()
     }
 
     /// Get current scheduling statistics
@@ -457,13 +459,13 @@ impl AsyncSystemScheduler {
     pub async fn run_scheduler_loop(&self) -> Result<(), AsyncExecutionError> {
         loop {
             // Execute pending tasks
-            let has_work = self.async_runtime.tick()?;
-            
+            let has_work = self.tick_runtime()?;
+
             if !has_work {
                 // No work to do, sleep briefly
                 std::thread::sleep(Duration::from_millis(10));
             }
-            
+
             // Check for completed tasks and update dependencies
             self.update_completed_tasks().await?;
         }
@@ -474,6 +476,40 @@ impl AsyncSystemScheduler {
         // This would check for completed tasks and update the dependency graph
         // For now, this is a placeholder
         Ok(())
+    }
+
+    /// Execute one scheduling tick, returning whether any work was performed.
+    pub fn tick_runtime(&self) -> AsyncResult<bool> {
+        self.async_runtime.tick()
+    }
+
+    /// Drain completed tasks from the async runtime for downstream processing.
+    pub fn drain_completed_tasks(&self) -> Vec<CompletedTaskInfo> {
+        self.async_runtime.drain_completed_tasks()
+    }
+
+    /// Record completion statistics and clear scheduler bookkeeping for the given task.
+    pub fn record_task_completion(&self, completion: &CompletedTaskInfo) {
+        {
+            let mut stats = self.stats.lock().unwrap();
+            if completion.result.is_ok() {
+                stats.successful_executions += 1;
+            } else {
+                stats.failed_executions += 1;
+            }
+        }
+
+        // Remove task from dependency graph bookkeeping if present.
+        let mut graph = self.dependency_graph.lock().unwrap();
+        graph.task_dependencies.remove(&completion.task_id);
+        if let Some(system_def) = completion.system_def.as_ref().map(|def| def.name.clone()) {
+            if let Some(tasks) = graph.system_tasks.get_mut(&system_def) {
+                tasks.retain(|id| id != &completion.task_id);
+                if tasks.is_empty() {
+                    graph.system_tasks.remove(&system_def);
+                }
+            }
+        }
     }
 }
 

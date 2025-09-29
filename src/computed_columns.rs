@@ -34,49 +34,52 @@ impl DependencyGraph {
     pub fn build_from_table(table: &TableDef) -> Result<Self, DependencyError> {
         let mut graph = Self::new();
         let mut all_column_names: HashSet<String> = HashSet::new();
-        
+
         // Collect all column names (regular + computed)
         for column in &table.columns {
             all_column_names.insert(column.name.clone());
         }
-        
+
         // Analyze each computed column
         for column in &table.columns {
             if column.is_computed {
                 if let Some(expr) = &column.computed_expression {
                     let dependencies = Self::extract_column_dependencies(expr, &all_column_names)?;
-                    
+
                     // Note: No need to validate dependencies anymore since we only extract valid column references
-                    
+
                     graph.dependencies.insert(
                         column.name.clone(),
                         ComputedColumnDependency {
                             column_name: column.name.clone(),
                             depends_on: dependencies,
                             expression: expr.clone(),
-                        }
+                        },
                     );
                 }
             }
         }
-        
+
         // Build evaluation order using topological sort
         graph.evaluation_order = graph.topological_sort()?;
-        
+
         Ok(graph)
     }
 
     /// Extract column names referenced in an expression
-    fn extract_column_dependencies(expr: &Expression, column_names: &HashSet<String>) -> Result<HashSet<String>, DependencyError> {
+    fn extract_column_dependencies(
+        expr: &Expression,
+        column_names: &HashSet<String>,
+    ) -> Result<HashSet<String>, DependencyError> {
         let mut dependencies = HashSet::new();
         Self::extract_dependencies_recursive(expr, &mut dependencies, column_names)?;
         Ok(dependencies)
     }
 
     fn extract_dependencies_recursive(
-        expr: &Expression, 
+        expr: &Expression,
         dependencies: &mut HashSet<String>,
-        column_names: &HashSet<String>
+        column_names: &HashSet<String>,
     ) -> Result<(), DependencyError> {
         match expr {
             Expression::Identifier(name) => {
@@ -93,7 +96,11 @@ impl DependencyGraph {
             Expression::UnaryOp { operand, .. } => {
                 Self::extract_dependencies_recursive(operand, dependencies, column_names)?;
             }
-            Expression::Call { function, arguments, .. } => {
+            Expression::Call {
+                function,
+                arguments,
+                ..
+            } => {
                 // For function calls, don't recurse into the function identifier (it's not a column dependency)
                 // Only recurse into arguments to find column dependencies
                 for arg in arguments {
@@ -109,7 +116,11 @@ impl DependencyGraph {
                     Self::extract_dependencies_recursive(index, dependencies, column_names)?;
                 }
             }
-            Expression::If { condition, then_branch, else_branch } => {
+            Expression::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 Self::extract_dependencies_recursive(condition, dependencies, column_names)?;
                 for stmt in then_branch {
                     Self::extract_statement_dependencies(stmt, dependencies, column_names)?;
@@ -164,22 +175,27 @@ impl DependencyGraph {
                 // TODO: Implement proper dependency extraction for query expressions
             }
             // Literals and other leaf nodes don't have dependencies
-            Expression::Literal(_) | Expression::Loop { .. } | 
-            Expression::Function { .. } | Expression::Shader { .. } => {}
+            Expression::Literal(_)
+            | Expression::Loop { .. }
+            | Expression::Function { .. }
+            | Expression::Shader { .. } => {}
         }
         Ok(())
     }
 
     fn extract_statement_dependencies(
-        stmt: &Statement, 
+        stmt: &Statement,
         dependencies: &mut HashSet<String>,
-        column_names: &HashSet<String>
+        column_names: &HashSet<String>,
     ) -> Result<(), DependencyError> {
         match stmt {
             Statement::VariableDecl { value, .. } => {
                 Self::extract_dependencies_recursive(value, dependencies, column_names)?;
             }
-            Statement::ConstDecl { value: ConstValue::Expression(expr), .. } => {
+            Statement::ConstDecl {
+                value: ConstValue::Expression(expr),
+                ..
+            } => {
                 Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
             }
             Statement::Assignment { target, value, .. } => {
@@ -207,13 +223,13 @@ impl DependencyGraph {
     fn topological_sort(&self) -> Result<Vec<String>, DependencyError> {
         let mut in_degree: HashMap<String, usize> = HashMap::new();
         let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
-        
+
         // Initialize all computed columns
         for column_name in self.dependencies.keys() {
             in_degree.insert(column_name.clone(), 0);
             adjacency.insert(column_name.clone(), Vec::new());
         }
-        
+
         // Build adjacency list and calculate in-degrees
         for (column, deps) in &self.dependencies {
             for dependency in &deps.depends_on {
@@ -224,21 +240,21 @@ impl DependencyGraph {
                 }
             }
         }
-        
+
         // Kahn's algorithm for topological sorting
         let mut queue: VecDeque<String> = VecDeque::new();
         let mut result: Vec<String> = Vec::new();
-        
+
         // Start with nodes that have no dependencies
         for (column, &degree) in &in_degree {
             if degree == 0 {
                 queue.push_back(column.clone());
             }
         }
-        
+
         while let Some(current) = queue.pop_front() {
             result.push(current.clone());
-            
+
             // Process all dependents
             for dependent in &adjacency[&current] {
                 let degree = in_degree.get_mut(dependent).unwrap();
@@ -248,7 +264,7 @@ impl DependencyGraph {
                 }
             }
         }
-        
+
         // Check for circular dependencies
         if result.len() != self.dependencies.len() {
             // Find the nodes involved in the cycle
@@ -260,13 +276,15 @@ impl DependencyGraph {
             }
             return Err(DependencyError::CircularDependency(cycle_nodes));
         }
-        
+
         Ok(result)
     }
 
     /// Get the dependencies for a specific column
     pub fn get_dependencies(&self, column_name: &str) -> Option<&HashSet<String>> {
-        self.dependencies.get(column_name).map(|dep| &dep.depends_on)
+        self.dependencies
+            .get(column_name)
+            .map(|dep| &dep.depends_on)
     }
 
     /// Check if a column is computed
@@ -317,7 +335,7 @@ impl From<DependencyError> for EvaluationError {
 impl LazyEvaluationEngine {
     pub fn new(table: &TableDef) -> Result<Self, EvaluationError> {
         let dependency_graph = DependencyGraph::build_from_table(table)?;
-        
+
         Ok(Self {
             dependency_graph,
             cached_values: HashMap::new(),
@@ -336,10 +354,11 @@ impl LazyEvaluationEngine {
         // Check if value is cached and not dirty
         if let Some(column_cache) = self.cached_values.get(column_name) {
             if let Some(cached_value) = column_cache.get(&row_id) {
-                let is_dirty = self.dirty_rows
+                let is_dirty = self
+                    .dirty_rows
                     .get(column_name)
                     .map_or(false, |dirty_set| dirty_set.contains(&row_id));
-                
+
                 if !is_dirty && !self.dirty_columns.contains(column_name) {
                     return Ok(cached_value.clone());
                 }
@@ -371,13 +390,18 @@ impl LazyEvaluationEngine {
         row_id: RowId,
         table_data: &ColumnarStorage,
     ) -> Result<ColumnValue, EvaluationError> {
-        let expression = self.dependency_graph
+        let expression = self
+            .dependency_graph
             .dependencies
             .get(column_name)
-            .ok_or_else(|| EvaluationError::ExpressionEvaluationError(
-                format!("Column '{}' is not a computed column", column_name)
-            ))?
-            .expression.clone();
+            .ok_or_else(|| {
+                EvaluationError::ExpressionEvaluationError(format!(
+                    "Column '{}' is not a computed column",
+                    column_name
+                ))
+            })?
+            .expression
+            .clone();
 
         self.evaluate_expression(&expression, row_id, table_data)
     }
@@ -390,13 +414,15 @@ impl LazyEvaluationEngine {
         table_data: &ColumnarStorage,
     ) -> Result<ColumnValue, EvaluationError> {
         match expr {
-            Expression::Literal(literal) => {
-                Ok(self.literal_to_column_value(literal)?)
-            }
+            Expression::Literal(literal) => Ok(self.literal_to_column_value(literal)?),
             Expression::Identifier(column_name) => {
                 self.get_column_value(column_name, row_id, table_data)
             }
-            Expression::BinaryOp { left, operator, right } => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
                 let left_val = self.evaluate_expression(left, row_id, table_data)?;
                 let right_val = self.evaluate_expression(right, row_id, table_data)?;
                 self.apply_binary_operator(&left_val, operator, &right_val)
@@ -405,11 +431,13 @@ impl LazyEvaluationEngine {
                 let operand_val = self.evaluate_expression(operand, row_id, table_data)?;
                 self.apply_unary_operator(operator, &operand_val)
             }
-            Expression::Call { function, arguments, .. } => {
-                self.evaluate_function_call(function, arguments, row_id, table_data)
-            }
+            Expression::Call {
+                function,
+                arguments,
+                ..
+            } => self.evaluate_function_call(function, arguments, row_id, table_data),
             _ => Err(EvaluationError::ExpressionEvaluationError(
-                "Unsupported expression type in computed column".to_string()
+                "Unsupported expression type in computed column".to_string(),
             )),
         }
     }
@@ -427,15 +455,13 @@ impl LazyEvaluationEngine {
         }
 
         // Get value from regular column storage
-        let column_data = table_data.columns.get(column_name)
-            .ok_or_else(|| EvaluationError::MissingDependencyValue(
-                column_name.to_string(), row_id
-            ))?;
+        let column_data = table_data.columns.get(column_name).ok_or_else(|| {
+            EvaluationError::MissingDependencyValue(column_name.to_string(), row_id)
+        })?;
 
-        column_data.get_value(row_id.0)
-            .ok_or_else(|| EvaluationError::MissingDependencyValue(
-                column_name.to_string(), row_id
-            ))
+        column_data
+            .get_value(row_id.0)
+            .ok_or_else(|| EvaluationError::MissingDependencyValue(column_name.to_string(), row_id))
     }
 
     /// Convert a literal to a column value
@@ -457,23 +483,22 @@ impl LazyEvaluationEngine {
         right: &ColumnValue,
     ) -> Result<ColumnValue, EvaluationError> {
         match (left, right) {
-            (ColumnValue::U64(l), ColumnValue::U64(r)) => {
-                match operator {
-                    BinaryOperator::Add => Ok(ColumnValue::U64(l + r)),
-                    BinaryOperator::Sub => Ok(ColumnValue::U64(l - r)),
-                    BinaryOperator::Mul => Ok(ColumnValue::U64(l * r)),
-                    BinaryOperator::Div => Ok(ColumnValue::U64(l / r)),
-                    BinaryOperator::Equal => Ok(ColumnValue::Bool(l == r)),
-                    BinaryOperator::NotEqual => Ok(ColumnValue::Bool(l != r)),
-                    BinaryOperator::Less => Ok(ColumnValue::Bool(l < r)),
-                    BinaryOperator::LessEqual => Ok(ColumnValue::Bool(l <= r)),
-                    BinaryOperator::Greater => Ok(ColumnValue::Bool(l > r)),
-                    BinaryOperator::GreaterEqual => Ok(ColumnValue::Bool(l >= r)),
-                    _ => Err(EvaluationError::ExpressionEvaluationError(
-                        format!("Unsupported operator {:?} for u64 values", operator)
-                    )),
-                }
-            }
+            (ColumnValue::U64(l), ColumnValue::U64(r)) => match operator {
+                BinaryOperator::Add => Ok(ColumnValue::U64(l + r)),
+                BinaryOperator::Sub => Ok(ColumnValue::U64(l - r)),
+                BinaryOperator::Mul => Ok(ColumnValue::U64(l * r)),
+                BinaryOperator::Div => Ok(ColumnValue::U64(l / r)),
+                BinaryOperator::Equal => Ok(ColumnValue::Bool(l == r)),
+                BinaryOperator::NotEqual => Ok(ColumnValue::Bool(l != r)),
+                BinaryOperator::Less => Ok(ColumnValue::Bool(l < r)),
+                BinaryOperator::LessEqual => Ok(ColumnValue::Bool(l <= r)),
+                BinaryOperator::Greater => Ok(ColumnValue::Bool(l > r)),
+                BinaryOperator::GreaterEqual => Ok(ColumnValue::Bool(l >= r)),
+                _ => Err(EvaluationError::ExpressionEvaluationError(format!(
+                    "Unsupported operator {:?} for u64 values",
+                    operator
+                ))),
+            },
             (ColumnValue::F64(l_bits), ColumnValue::F64(r_bits)) => {
                 let l = f64::from_bits(*l_bits);
                 let r = f64::from_bits(*r_bits);
@@ -488,35 +513,35 @@ impl LazyEvaluationEngine {
                     BinaryOperator::LessEqual => Ok(ColumnValue::Bool(l <= r)),
                     BinaryOperator::Greater => Ok(ColumnValue::Bool(l > r)),
                     BinaryOperator::GreaterEqual => Ok(ColumnValue::Bool(l >= r)),
-                    _ => Err(EvaluationError::ExpressionEvaluationError(
-                        format!("Unsupported operator {:?} for f64 values", operator)
-                    )),
+                    _ => Err(EvaluationError::ExpressionEvaluationError(format!(
+                        "Unsupported operator {:?} for f64 values",
+                        operator
+                    ))),
                 }
             }
-            (ColumnValue::String(l), ColumnValue::String(r)) => {
-                match operator {
-                    BinaryOperator::Add => Ok(ColumnValue::String(format!("{}{}", l, r))),
-                    BinaryOperator::Equal => Ok(ColumnValue::Bool(l == r)),
-                    BinaryOperator::NotEqual => Ok(ColumnValue::Bool(l != r)),
-                    _ => Err(EvaluationError::ExpressionEvaluationError(
-                        format!("Unsupported operator {:?} for string values", operator)
-                    )),
-                }
-            }
-            (ColumnValue::Bool(l), ColumnValue::Bool(r)) => {
-                match operator {
-                    BinaryOperator::And => Ok(ColumnValue::Bool(*l && *r)),
-                    BinaryOperator::Or => Ok(ColumnValue::Bool(*l || *r)),
-                    BinaryOperator::Equal => Ok(ColumnValue::Bool(l == r)),
-                    BinaryOperator::NotEqual => Ok(ColumnValue::Bool(l != r)),
-                    _ => Err(EvaluationError::ExpressionEvaluationError(
-                        format!("Unsupported operator {:?} for boolean values", operator)
-                    )),
-                }
-            }
-            _ => Err(EvaluationError::TypeMismatchError(
-                format!("Cannot apply operator {:?} to values {:?} and {:?}", operator, left, right)
-            )),
+            (ColumnValue::String(l), ColumnValue::String(r)) => match operator {
+                BinaryOperator::Add => Ok(ColumnValue::String(format!("{}{}", l, r))),
+                BinaryOperator::Equal => Ok(ColumnValue::Bool(l == r)),
+                BinaryOperator::NotEqual => Ok(ColumnValue::Bool(l != r)),
+                _ => Err(EvaluationError::ExpressionEvaluationError(format!(
+                    "Unsupported operator {:?} for string values",
+                    operator
+                ))),
+            },
+            (ColumnValue::Bool(l), ColumnValue::Bool(r)) => match operator {
+                BinaryOperator::And => Ok(ColumnValue::Bool(*l && *r)),
+                BinaryOperator::Or => Ok(ColumnValue::Bool(*l || *r)),
+                BinaryOperator::Equal => Ok(ColumnValue::Bool(l == r)),
+                BinaryOperator::NotEqual => Ok(ColumnValue::Bool(l != r)),
+                _ => Err(EvaluationError::ExpressionEvaluationError(format!(
+                    "Unsupported operator {:?} for boolean values",
+                    operator
+                ))),
+            },
+            _ => Err(EvaluationError::TypeMismatchError(format!(
+                "Cannot apply operator {:?} to values {:?} and {:?}",
+                operator, left, right
+            ))),
         }
     }
 
@@ -535,12 +560,11 @@ impl LazyEvaluationEngine {
                 let val = f64::from_bits(*bits);
                 Ok(ColumnValue::F64((-val).to_bits()))
             }
-            (UnaryOperator::Not, ColumnValue::Bool(val)) => {
-                Ok(ColumnValue::Bool(!val))
-            }
-            _ => Err(EvaluationError::ExpressionEvaluationError(
-                format!("Unsupported unary operator {:?} for value {:?}", operator, operand)
-            )),
+            (UnaryOperator::Not, ColumnValue::Bool(val)) => Ok(ColumnValue::Bool(!val)),
+            _ => Err(EvaluationError::ExpressionEvaluationError(format!(
+                "Unsupported unary operator {:?} for value {:?}",
+                operator, operand
+            ))),
         }
     }
 
@@ -557,24 +581,26 @@ impl LazyEvaluationEngine {
                 "len" => {
                     if arguments.len() != 1 {
                         return Err(EvaluationError::ExpressionEvaluationError(
-                            "len() function expects exactly one argument".to_string()
+                            "len() function expects exactly one argument".to_string(),
                         ));
                     }
-                    let arg_val = self.evaluate_expression(&arguments[0].value, row_id, table_data)?;
+                    let arg_val =
+                        self.evaluate_expression(&arguments[0].value, row_id, table_data)?;
                     match arg_val {
                         ColumnValue::String(s) => Ok(ColumnValue::U64(s.len() as u64)),
                         _ => Err(EvaluationError::TypeMismatchError(
-                            "len() function expects a string argument".to_string()
+                            "len() function expects a string argument".to_string(),
                         )),
                     }
                 }
                 "abs" => {
                     if arguments.len() != 1 {
                         return Err(EvaluationError::ExpressionEvaluationError(
-                            "abs() function expects exactly one argument".to_string()
+                            "abs() function expects exactly one argument".to_string(),
                         ));
                     }
-                    let arg_val = self.evaluate_expression(&arguments[0].value, row_id, table_data)?;
+                    let arg_val =
+                        self.evaluate_expression(&arguments[0].value, row_id, table_data)?;
                     match arg_val {
                         ColumnValue::F64(bits) => {
                             let val = f64::from_bits(bits);
@@ -582,17 +608,18 @@ impl LazyEvaluationEngine {
                         }
                         ColumnValue::U64(val) => Ok(ColumnValue::U64(val)), // Already positive
                         _ => Err(EvaluationError::TypeMismatchError(
-                            "abs() function expects a numeric argument".to_string()
+                            "abs() function expects a numeric argument".to_string(),
                         )),
                     }
                 }
-                _ => Err(EvaluationError::ExpressionEvaluationError(
-                    format!("Unknown function: {}", func_name)
-                )),
+                _ => Err(EvaluationError::ExpressionEvaluationError(format!(
+                    "Unknown function: {}",
+                    func_name
+                ))),
             }
         } else {
             Err(EvaluationError::ExpressionEvaluationError(
-                "Function calls must use identifier expressions".to_string()
+                "Function calls must use identifier expressions".to_string(),
             ))
         }
     }
@@ -600,7 +627,7 @@ impl LazyEvaluationEngine {
     /// Mark a column as dirty (needs recomputation)
     pub fn mark_column_dirty(&mut self, column_name: &str) {
         self.dirty_columns.insert(column_name.to_string());
-        
+
         // Also mark all dependent columns as dirty
         let dependents = self.dependency_graph.get_dependents(column_name);
         for dependent in dependents {
@@ -614,7 +641,7 @@ impl LazyEvaluationEngine {
             .entry(column_name.to_string())
             .or_insert_with(HashSet::new)
             .insert(row_id);
-        
+
         // Also mark dependent columns and rows as dirty
         let dependents = self.dependency_graph.get_dependents(column_name);
         for dependent in dependents {
@@ -630,7 +657,7 @@ impl LazyEvaluationEngine {
         self.cached_values.clear();
         self.dirty_columns.clear();
         self.dirty_rows.clear();
-        
+
         // Mark all computed columns as dirty
         for column_name in self.dependency_graph.dependencies.keys() {
             self.dirty_columns.insert(column_name.clone());
@@ -676,7 +703,10 @@ mod tests {
             columns: vec![
                 TableColumn {
                     name: "quantity".to_string(),
-                    column_type: Type::Identifier { name: "u64".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -684,7 +714,10 @@ mod tests {
                 },
                 TableColumn {
                     name: "unit_price".to_string(),
-                    column_type: Type::Identifier { name: "f64".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "f64".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -708,7 +741,7 @@ mod tests {
         let graph = DependencyGraph::build_from_table(&table).unwrap();
         assert_eq!(graph.dependencies.len(), 1);
         assert!(graph.dependencies.contains_key("subtotal"));
-        
+
         let subtotal_deps = graph.get_dependencies("subtotal").unwrap();
         assert_eq!(subtotal_deps.len(), 2);
         assert!(subtotal_deps.contains("quantity"));

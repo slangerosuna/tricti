@@ -1,11 +1,18 @@
-use crate::ast::{SystemDef, SystemParameter, ResourceAccess, Type, Expression, Statement};
+use crate::ast::{Expression, ResourceAccess, Statement, SystemDef, SystemParameter, Type};
 use crate::scheduler::{ResourceTracker, SchedulerError, SystemScheduler};
-use crate::table_runtime::{TableRuntime, TableError, ColumnValue, RowId};
+use crate::system_executor::{ExecutionStepResult, SystemStateMachine, SystemStateMachineExecutor};
+use crate::table_runtime::{ColumnValue, RowId, TableError, TableRuntime};
+#[cfg(feature = "tri-runtime")]
+use crate::tri_runtime_bridge::{
+    TriAsyncExecutionError, TriBridgeError, TriParameterBag, TriParameterValue, TriResourceAccess,
+    TriRuntimeBridge, TriSystemExecutionResult, TriSystemTaskRequest, TriTaskOutcome,
+    TriTaskPriority, TriYieldPoint,
+};
 use std::collections::{HashMap, VecDeque};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex, RwLock};
 use std::task::{Context, Poll, Waker};
-use std::pin::Pin;
-use std::future::Future;
 use std::time::{Duration, Instant};
 
 /// Result type for async system execution
@@ -86,7 +93,7 @@ impl<T> SystemFuture<T> {
             let mut lock = self.result.lock().unwrap();
             *lock = Some(result);
         }
-        
+
         // Wake up the future
         if let Ok(mut waker_lock) = self.waker.lock() {
             if let Some(waker) = waker_lock.take() {
@@ -196,6 +203,28 @@ pub struct AsyncSystemTask {
     pub dependencies: Vec<TaskId>,
 }
 
+#[derive(Debug, Clone)]
+pub struct CompletedTaskInfo {
+    pub task_id: TaskId,
+    pub system_def: Option<SystemDef>,
+    pub parameters: Option<HashMap<String, ColumnValue>>,
+    pub priority: TaskPriority,
+    pub result: AsyncResult<SystemExecutionResult>,
+}
+
+#[derive(Debug)]
+struct SystemExecutionHandle {
+    state_machine: SystemStateMachine,
+    executor: SystemStateMachineExecutor,
+}
+
+#[cfg_attr(not(feature = "tri-runtime"), allow(dead_code))]
+enum TaskStepOutcome {
+    NeedsContinuation,
+    Completed(SystemExecutionResult),
+    Waiting(Option<YieldPoint>),
+}
+
 /// Priority levels for task scheduling
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TaskPriority {
@@ -230,8 +259,12 @@ pub struct AsyncSystemRuntime {
     completed_tasks: Arc<Mutex<HashMap<TaskId, AsyncResult<SystemExecutionResult>>>>,
     /// Wakers for pending futures
     wakers: Arc<Mutex<HashMap<TaskId, Waker>>>,
+    /// Registered execution plans for tasks
+    execution_handles: Arc<Mutex<HashMap<TaskId, SystemExecutionHandle>>>,
     /// Runtime configuration
     config: RuntimeConfig,
+    #[cfg(feature = "tri-runtime")]
+    tri_bridge: Option<Arc<Mutex<TriRuntimeBridge>>>,
 }
 
 /// Configuration for the async runtime
@@ -259,6 +292,15 @@ impl Default for RuntimeConfig {
 impl AsyncSystemRuntime {
     /// Create a new async system runtime
     pub fn new(config: RuntimeConfig) -> Self {
+        #[cfg(feature = "tri-runtime")]
+        let tri_bridge = {
+            let mut bridge = TriRuntimeBridge::new();
+            if let Err(err) = bridge.bootstrap() {
+                panic!("Failed to bootstrap Tri runtime bridge: {}", err);
+            }
+            Some(Arc::new(Mutex::new(bridge)))
+        };
+
         Self {
             task_queue: Arc::new(Mutex::new(VecDeque::new())),
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -267,7 +309,10 @@ impl AsyncSystemRuntime {
             table_runtimes: Arc::new(RwLock::new(HashMap::new())),
             completed_tasks: Arc::new(Mutex::new(HashMap::new())),
             wakers: Arc::new(Mutex::new(HashMap::new())),
+            execution_handles: Arc::new(Mutex::new(HashMap::new())),
             config,
+            #[cfg(feature = "tri-runtime")]
+            tri_bridge,
         }
     }
 
@@ -275,6 +320,32 @@ impl AsyncSystemRuntime {
     pub fn register_table(&self, name: String, table_runtime: TableRuntime) {
         let mut tables = self.table_runtimes.write().unwrap();
         tables.insert(name, Arc::new(Mutex::new(table_runtime)));
+    }
+
+    /// Attach the lowered execution plan for a task so the runtime can drive it.
+    pub fn attach_execution_plan(
+        &self,
+        task_id: TaskId,
+        state_machine: SystemStateMachine,
+        executor: SystemStateMachineExecutor,
+    ) -> AsyncResult<()> {
+        let mut handles = self.execution_handles.lock().unwrap();
+        if handles.contains_key(&task_id) {
+            return Err(AsyncExecutionError::SystemError {
+                system: "async_runtime".to_string(),
+                message: format!("Execution plan already registered for task {:?}", task_id),
+            });
+        }
+
+        handles.insert(
+            task_id,
+            SystemExecutionHandle {
+                state_machine,
+                executor,
+            },
+        );
+
+        Ok(())
     }
 
     /// Submit a system for async execution
@@ -286,9 +357,14 @@ impl AsyncSystemRuntime {
         timeout: Option<Duration>,
     ) -> AsyncResult<SystemFuture<SystemExecutionResult>> {
         let task_id = TaskId::new();
-        
+
         // Validate system can be executed
         self.validate_system_execution(&system_def, &parameters)?;
+
+        let task_timeout = timeout.unwrap_or(self.config.default_task_timeout);
+
+        #[cfg(feature = "tri-runtime")]
+        let tri_parameters = convert_parameters_to_tri(&parameters);
 
         // Create task
         let task = AsyncSystemTask {
@@ -298,7 +374,7 @@ impl AsyncSystemRuntime {
             state: SystemExecutionState::Pending,
             resource_handles: HashMap::new(),
             priority,
-            timeout: timeout.or(Some(self.config.default_task_timeout)),
+            timeout: Some(task_timeout),
             created_at: Instant::now(),
             dependencies: Vec::new(),
         };
@@ -309,7 +385,23 @@ impl AsyncSystemRuntime {
             active_tasks.insert(task_id, task);
         }
 
-        // Add to queue
+        // Inform the Tri runtime bridge when enabled; otherwise queue locally
+        #[cfg(feature = "tri-runtime")]
+        if let Some(bridge) = &self.tri_bridge {
+            let mut bridge = bridge.lock().unwrap();
+            let request = TriSystemTaskRequest {
+                system_name: system_def.name.clone(),
+                parameters: tri_parameters,
+                priority: TriTaskPriority::from(priority),
+                timeout: Some(task_timeout),
+                host_task_id: Some(task_id.0),
+            };
+            bridge
+                .submit_system_task(request)
+                .map_err(|err| map_bridge_error("submit_system_task", err))?;
+        }
+
+        #[cfg(not(feature = "tri-runtime"))]
         {
             let mut queue = self.task_queue.lock().unwrap();
             queue.push_back(task_id);
@@ -323,20 +415,23 @@ impl AsyncSystemRuntime {
     /// Cancel a running task
     pub fn cancel_task(&self, task_id: TaskId) -> AsyncResult<()> {
         let mut active_tasks = self.active_tasks.write().unwrap();
-        
+
         if let Some(task) = active_tasks.get_mut(&task_id) {
             // Release any held resources
             self.release_task_resources(task)?;
-            
+
             task.state = SystemExecutionState::Cancelled {
                 cancelled_at: Instant::now(),
             };
 
             // Complete the future
             if let Ok(mut completed) = self.completed_tasks.lock() {
-                completed.insert(task_id, Err(AsyncExecutionError::Cancelled {
-                    system: task.system_def.name.clone(),
-                }));
+                completed.insert(
+                    task_id,
+                    Err(AsyncExecutionError::Cancelled {
+                        system: task.system_def.name.clone(),
+                    }),
+                );
             }
 
             // Wake up waiting future
@@ -357,6 +452,69 @@ impl AsyncSystemRuntime {
 
     /// Execute the next ready task
     pub fn tick(&self) -> AsyncResult<bool> {
+        #[cfg(feature = "tri-runtime")]
+        if let Some(bridge) = &self.tri_bridge {
+            let dispatch = {
+                let mut bridge = bridge.lock().unwrap();
+                bridge
+                    .begin_next_task()
+                    .map_err(|err| map_bridge_error("begin_next_task", err))?
+            };
+
+            if let Some(context) = dispatch {
+                let task_id = TaskId(context.task.id);
+
+                loop {
+                    match self.execute_task_step(task_id) {
+                        Ok(TaskStepOutcome::NeedsContinuation) => {
+                            continue;
+                        }
+                        Ok(TaskStepOutcome::Completed(result)) => {
+                            let tri_result = convert_system_execution_result(&result);
+                            let mut bridge = bridge.lock().unwrap();
+                            bridge
+                                .apply_task_outcome(
+                                    task_id.0,
+                                    TriTaskOutcome::Completed { result: tri_result },
+                                )
+                                .map_err(|err| map_bridge_error("apply_task_outcome", err))?;
+                            break;
+                        }
+                        Ok(TaskStepOutcome::Waiting(yield_point)) => {
+                            if let Some(yield_point) = yield_point {
+                                let tri_result = TriSystemExecutionResult::Partial {
+                                    intermediate_state: Vec::new(),
+                                    next_yield_point: convert_yield_point(&yield_point),
+                                };
+                                let mut bridge = bridge.lock().unwrap();
+                                bridge
+                                    .apply_task_outcome(
+                                        task_id.0,
+                                        TriTaskOutcome::Completed { result: tri_result },
+                                    )
+                                    .map_err(|err| map_bridge_error("apply_task_outcome", err))?;
+                            }
+                            break;
+                        }
+                        Err(error) => {
+                            let tri_error = convert_async_error(&error);
+                            self.fail_task(task_id, error.clone())?;
+                            let mut bridge = bridge.lock().unwrap();
+                            bridge
+                                .apply_task_outcome(
+                                    task_id.0,
+                                    TriTaskOutcome::Failed { error: tri_error },
+                                )
+                                .map_err(|err| map_bridge_error("apply_task_outcome", err))?;
+                            break;
+                        }
+                    }
+                }
+
+                return Ok(true);
+            }
+        }
+
         // Get next ready task
         let task_id = {
             let mut queue = self.task_queue.lock().unwrap();
@@ -367,79 +525,114 @@ impl AsyncSystemRuntime {
             return Ok(false); // No tasks ready
         };
 
-        // Execute the task
         match self.execute_task_step(task_id) {
-            Ok(should_continue) => {
-                if should_continue {
-                    // Re-queue for continuation
-                    let mut queue = self.task_queue.lock().unwrap();
-                    queue.push_back(task_id);
-                }
+            Ok(TaskStepOutcome::NeedsContinuation) => {
+                let mut queue = self.task_queue.lock().unwrap();
+                queue.push_back(task_id);
                 Ok(true)
             }
+            Ok(TaskStepOutcome::Completed(_)) => Ok(true),
+            Ok(TaskStepOutcome::Waiting(_)) => Ok(true),
             Err(err) => {
-                // Mark task as failed
-                self.fail_task(task_id, err)?;
+                self.fail_task(task_id, err.clone())?;
                 Ok(true)
             }
         }
     }
 
     /// Execute a single step of a task
-    fn execute_task_step(&self, task_id: TaskId) -> AsyncResult<bool> {
-        let mut active_tasks = self.active_tasks.write().unwrap();
-        let task = active_tasks.get_mut(&task_id)
-            .ok_or_else(|| AsyncExecutionError::SystemError {
-                system: "unknown".to_string(),
-                message: format!("Task {:?} not found", task_id),
-            })?;
+    fn execute_task_step(&self, task_id: TaskId) -> AsyncResult<TaskStepOutcome> {
+        let mut completion_to_record: Option<SystemExecutionResult> = None;
 
-        // Check timeout
-        if let Some(timeout) = task.timeout {
-            if task.created_at.elapsed() > timeout {
-                return Err(AsyncExecutionError::Timeout {
-                    system: task.system_def.name.clone(),
-                    duration: timeout,
-                });
-            }
-        }
+        let outcome =
+            {
+                let mut active_tasks = self.active_tasks.write().unwrap();
+                let task = active_tasks.get_mut(&task_id).ok_or_else(|| {
+                    AsyncExecutionError::SystemError {
+                        system: "async_runtime".to_string(),
+                        message: format!("Task {:?} not found", task_id),
+                    }
+                })?;
 
-        match &task.state {
-            SystemExecutionState::Pending => {
-                // Acquire resources and start execution
-                self.acquire_task_resources(task)?;
-                task.state = SystemExecutionState::Running {
-                    started_at: Instant::now(),
-                };
-                Ok(true) // Continue execution
-            }
-            SystemExecutionState::Running { .. } => {
-                // Execute system body
-                let result = self.execute_system_body(&task.system_def, &task.parameters)?;
-                
-                // Complete the task
-                task.state = SystemExecutionState::Completed {
-                    result: result.clone(),
-                    completed_at: Instant::now(),
-                };
-
-                // Store result and wake future
-                self.complete_task(task_id, Ok(result))?;
-                Ok(false) // Task completed
-            }
-            SystemExecutionState::Suspended { yield_point, .. } => {
-                // Check if we can resume from yield point
-                if self.can_resume_from_yield_point(yield_point)? {
-                    task.state = SystemExecutionState::Running {
-                        started_at: Instant::now(),
-                    };
-                    Ok(true) // Continue execution
-                } else {
-                    Ok(false) // Still suspended
+                if let Some(timeout) = task.timeout {
+                    if task.created_at.elapsed() > timeout {
+                        return Err(AsyncExecutionError::Timeout {
+                            system: task.system_def.name.clone(),
+                            duration: timeout,
+                        });
+                    }
                 }
-            }
-            _ => Ok(false), // Task is completed/failed/cancelled
+
+                let system_name = task.system_def.name.clone();
+
+                match &mut task.state {
+                    SystemExecutionState::Pending => {
+                        self.acquire_task_resources(task)?;
+                        task.state = SystemExecutionState::Running {
+                            started_at: Instant::now(),
+                        };
+                        TaskStepOutcome::NeedsContinuation
+                    }
+                    SystemExecutionState::Running { .. } => {
+                        let execution_result = {
+                            let mut handles = self.execution_handles.lock().unwrap();
+                            let handle = handles.get_mut(&task_id).ok_or_else(|| {
+                                AsyncExecutionError::SystemError {
+                                    system: system_name.clone(),
+                                    message: format!(
+                                        "No execution plan registered for task {:?}",
+                                        task_id
+                                    ),
+                                }
+                            })?;
+
+                            handle.executor.execute_step(&mut handle.state_machine)?
+                        };
+
+                        match execution_result {
+                            ExecutionStepResult::Continue => TaskStepOutcome::NeedsContinuation,
+                            ExecutionStepResult::Yield(yield_point) => {
+                                let yield_point_clone = yield_point.clone();
+                                task.state = SystemExecutionState::Suspended {
+                                    yield_point: yield_point_clone.clone(),
+                                    suspended_at: Instant::now(),
+                                };
+                                TaskStepOutcome::Waiting(Some(yield_point_clone))
+                            }
+                            ExecutionStepResult::Completed(result) => {
+                                let result_clone = result.clone();
+                                task.state = SystemExecutionState::Completed {
+                                    result: result_clone.clone(),
+                                    completed_at: Instant::now(),
+                                };
+                                completion_to_record = Some(result_clone.clone());
+                                TaskStepOutcome::Completed(result_clone)
+                            }
+                        }
+                    }
+                    SystemExecutionState::Suspended { yield_point, .. } => {
+                        if self.can_resume_from_yield_point(yield_point)? {
+                            task.state = SystemExecutionState::Running {
+                                started_at: Instant::now(),
+                            };
+                            TaskStepOutcome::NeedsContinuation
+                        } else {
+                            TaskStepOutcome::Waiting(Some(yield_point.clone()))
+                        }
+                    }
+                    SystemExecutionState::Completed { result, .. } => {
+                        TaskStepOutcome::Completed(result.clone())
+                    }
+                    SystemExecutionState::Failed { .. }
+                    | SystemExecutionState::Cancelled { .. } => TaskStepOutcome::Waiting(None),
+                }
+            };
+
+        if let Some(result) = completion_to_record {
+            self.complete_task(task_id, Ok(result))?;
         }
+
+        Ok(outcome)
     }
 
     /// Validate that a system can be executed with given parameters
@@ -485,12 +678,12 @@ impl AsyncSystemRuntime {
     /// Acquire resources needed for task execution
     fn acquire_task_resources(&self, task: &mut AsyncSystemTask) -> AsyncResult<()> {
         let mut resource_tracker = self.resource_tracker.lock().unwrap();
-        
+
         for param in &task.system_def.parameters {
             if let SystemParameter::Resource { name, access, .. } = param {
                 // Check if resource can be acquired
                 resource_tracker.can_access_resource(name, &task.system_def.name, access)?;
-                
+
                 // Acquire the resource
                 let handle = ResourceHandle {
                     resource_name: name.clone(),
@@ -498,72 +691,84 @@ impl AsyncSystemRuntime {
                     acquired_at: Instant::now(),
                     lease_duration: Some(self.config.resource_lease_timeout),
                 };
-                
+
                 task.resource_handles.insert(name.clone(), handle);
-                
+
                 // Update resource tracker
                 match access {
                     ResourceAccess::Immutable => {
-                        resource_tracker.add_access(name, &task.system_def.name, &ResourceAccess::Immutable)?;
+                        resource_tracker.add_access(
+                            name,
+                            &task.system_def.name,
+                            &ResourceAccess::Immutable,
+                        )?;
                     }
                     ResourceAccess::Mutable => {
-                        resource_tracker.add_access(name, &task.system_def.name, &ResourceAccess::Mutable)?;
+                        resource_tracker.add_access(
+                            name,
+                            &task.system_def.name,
+                            &ResourceAccess::Mutable,
+                        )?;
                     }
                     ResourceAccess::Owned => {
-                        resource_tracker.add_access(name, &task.system_def.name, &ResourceAccess::Owned)?;
+                        resource_tracker.add_access(
+                            name,
+                            &task.system_def.name,
+                            &ResourceAccess::Owned,
+                        )?;
                     }
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Release resources held by a task
     fn release_task_resources(&self, task: &AsyncSystemTask) -> AsyncResult<()> {
         let mut resource_tracker = self.resource_tracker.lock().unwrap();
-        
+
         for (resource_name, handle) in &task.resource_handles {
             match handle.access_type {
                 ResourceAccess::Immutable => {
-                    resource_tracker.remove_access(resource_name, &task.system_def.name, &ResourceAccess::Immutable);
+                    resource_tracker.remove_access(
+                        resource_name,
+                        &task.system_def.name,
+                        &ResourceAccess::Immutable,
+                    );
                 }
                 ResourceAccess::Mutable => {
-                    resource_tracker.remove_access(resource_name, &task.system_def.name, &ResourceAccess::Mutable);
+                    resource_tracker.remove_access(
+                        resource_name,
+                        &task.system_def.name,
+                        &ResourceAccess::Mutable,
+                    );
                 }
                 ResourceAccess::Owned => {
-                    resource_tracker.remove_access(resource_name, &task.system_def.name, &ResourceAccess::Owned);
+                    resource_tracker.remove_access(
+                        resource_name,
+                        &task.system_def.name,
+                        &ResourceAccess::Owned,
+                    );
                 }
             }
         }
-        
-        Ok(())
-    }
 
-    /// Execute the body of a system (placeholder for now)
-    fn execute_system_body(
-        &self,
-        system_def: &SystemDef,
-        parameters: &HashMap<String, ColumnValue>,
-    ) -> AsyncResult<SystemExecutionResult> {
-        // This is a simplified implementation
-        // In a full implementation, this would interpret the system body statements
-        
-        // For now, just return a success result
-        Ok(SystemExecutionResult::Success {
-            return_value: None,
-            resources_modified: Vec::new(),
-            tables_modified: Vec::new(),
-        })
+        Ok(())
     }
 
     /// Check if a task can resume from a yield point
     fn can_resume_from_yield_point(&self, yield_point: &YieldPoint) -> AsyncResult<bool> {
         match yield_point {
-            YieldPoint::AwaitingResource { resource_name, access_type } => {
+            YieldPoint::AwaitingResource {
+                resource_name,
+                access_type,
+            } => {
                 let resource_tracker = self.resource_tracker.lock().unwrap();
                 // Check if resource is available
-                Ok(resource_tracker.can_access_resource(resource_name, "temp", access_type).is_ok())
+                Ok(resource_tracker
+                    .can_access_resource(resource_name, "temp", access_type)
+                    .is_ok())
             }
             YieldPoint::AwaitingTableQuery { .. } => {
                 // For now, assume table queries complete immediately
@@ -573,15 +778,20 @@ impl AsyncSystemRuntime {
                 let completed = self.completed_tasks.lock().unwrap();
                 Ok(completed.contains_key(task_id))
             }
-            YieldPoint::Sleeping { duration, started_at } => {
-                Ok(started_at.elapsed() >= *duration)
-            }
+            YieldPoint::Sleeping {
+                duration,
+                started_at,
+            } => Ok(started_at.elapsed() >= *duration),
             _ => Ok(true), // Other yield points can resume immediately for now
         }
     }
 
     /// Complete a task with a result
-    fn complete_task(&self, task_id: TaskId, result: AsyncResult<SystemExecutionResult>) -> AsyncResult<()> {
+    fn complete_task(
+        &self,
+        task_id: TaskId,
+        result: AsyncResult<SystemExecutionResult>,
+    ) -> AsyncResult<()> {
         // Store the result
         {
             let mut completed = self.completed_tasks.lock().unwrap();
@@ -602,13 +812,18 @@ impl AsyncSystemRuntime {
             }
         }
 
+        {
+            let mut handles = self.execution_handles.lock().unwrap();
+            handles.remove(&task_id);
+        }
+
         Ok(())
     }
 
     /// Mark a task as failed
     fn fail_task(&self, task_id: TaskId, error: AsyncExecutionError) -> AsyncResult<()> {
         let mut active_tasks = self.active_tasks.write().unwrap();
-        
+
         if let Some(task) = active_tasks.get_mut(&task_id) {
             task.state = SystemExecutionState::Failed {
                 error: error.clone(),
@@ -622,6 +837,47 @@ impl AsyncSystemRuntime {
         // Complete with error
         self.complete_task(task_id, Err(error))?;
         Ok(())
+    }
+
+    /// Drain completed task results along with metadata for higher-level managers.
+    pub fn drain_completed_tasks(&self) -> Vec<CompletedTaskInfo> {
+        let mut completed = self.completed_tasks.lock().unwrap();
+        if completed.is_empty() {
+            return Vec::new();
+        }
+
+        let drained_capacity = completed.len();
+        let mut active_tasks = self.active_tasks.write().unwrap();
+        let mut drained = Vec::with_capacity(drained_capacity);
+
+        for (task_id, result) in completed.drain() {
+            if let Some(task) = active_tasks.remove(&task_id) {
+                let AsyncSystemTask {
+                    system_def,
+                    parameters,
+                    priority,
+                    ..
+                } = task;
+
+                drained.push(CompletedTaskInfo {
+                    task_id,
+                    system_def: Some(system_def),
+                    parameters: Some(parameters),
+                    priority,
+                    result,
+                });
+            } else {
+                drained.push(CompletedTaskInfo {
+                    task_id,
+                    system_def: None,
+                    parameters: None,
+                    priority: TaskPriority::Normal,
+                    result,
+                });
+            }
+        }
+
+        drained
     }
 
     /// Get statistics about the runtime
@@ -656,7 +912,19 @@ impl AsyncSystemRuntime {
 /// Required for cloning the runtime (simplified)
 impl Clone for AsyncSystemRuntime {
     fn clone(&self) -> Self {
-        Self::new(self.config.clone())
+        Self {
+            task_queue: Arc::new(Mutex::new(VecDeque::new())),
+            active_tasks: Arc::new(RwLock::new(HashMap::new())),
+            resource_tracker: Arc::new(Mutex::new(ResourceTracker::new())),
+            scheduler: Arc::new(Mutex::new(SystemScheduler::new())),
+            table_runtimes: Arc::new(RwLock::new(HashMap::new())),
+            completed_tasks: Arc::new(Mutex::new(HashMap::new())),
+            wakers: Arc::new(Mutex::new(HashMap::new())),
+            execution_handles: Arc::new(Mutex::new(HashMap::new())),
+            config: self.config.clone(),
+            #[cfg(feature = "tri-runtime")]
+            tri_bridge: self.tri_bridge.clone(),
+        }
     }
 }
 
@@ -674,3 +942,167 @@ pub struct RuntimeStats {
 
 // These methods have been removed as they bypass borrow safety guarantees
 // Use ResourceTracker::add_access and ResourceTracker::remove_access instead
+
+#[cfg(feature = "tri-runtime")]
+fn map_bridge_error(operation: &str, err: TriBridgeError) -> AsyncExecutionError {
+    AsyncExecutionError::SystemError {
+        system: format!("tri_runtime_bridge::{}", operation),
+        message: err.to_string(),
+    }
+}
+
+#[cfg(feature = "tri-runtime")]
+fn convert_parameters_to_tri(parameters: &HashMap<String, ColumnValue>) -> TriParameterBag {
+    let values = parameters
+        .iter()
+        .map(|(name, value)| TriParameterValue {
+            name: name.clone(),
+            payload: column_value_to_string(value),
+        })
+        .collect();
+
+    TriParameterBag { values }
+}
+
+#[cfg(feature = "tri-runtime")]
+fn convert_system_execution_result(result: &SystemExecutionResult) -> TriSystemExecutionResult {
+    match result {
+        SystemExecutionResult::Success {
+            return_value,
+            resources_modified,
+            tables_modified,
+        } => TriSystemExecutionResult::Success {
+            return_value: return_value
+                .as_ref()
+                .map(|value| column_value_to_string(value)),
+            resources_modified: resources_modified.clone(),
+            tables_modified: tables_modified.clone(),
+        },
+        SystemExecutionResult::Partial {
+            intermediate_state,
+            next_yield_point,
+        } => {
+            let intermediate_state = intermediate_state
+                .iter()
+                .map(|(name, value)| TriParameterValue {
+                    name: name.clone(),
+                    payload: column_value_to_string(value),
+                })
+                .collect();
+
+            TriSystemExecutionResult::Partial {
+                intermediate_state,
+                next_yield_point: convert_yield_point(next_yield_point),
+            }
+        }
+    }
+}
+
+#[cfg(feature = "tri-runtime")]
+fn convert_async_error(error: &AsyncExecutionError) -> TriAsyncExecutionError {
+    match error {
+        AsyncExecutionError::ResourceConflict {
+            system,
+            resource,
+            reason,
+        } => TriAsyncExecutionError::ResourceConflict {
+            system: system.clone(),
+            resource: resource.clone(),
+            reason: reason.clone(),
+        },
+        AsyncExecutionError::SchedulingError(err) => TriAsyncExecutionError::SchedulingError {
+            message: format!("{:?}", err),
+        },
+        AsyncExecutionError::TableError(err) => TriAsyncExecutionError::TableError {
+            message: format!("{:?}", err),
+        },
+        AsyncExecutionError::SystemError { system, message } => {
+            TriAsyncExecutionError::SystemError {
+                system: system.clone(),
+                message: message.clone(),
+            }
+        }
+        AsyncExecutionError::Timeout { system, duration } => TriAsyncExecutionError::Timeout {
+            system: system.clone(),
+            duration_ms: duration_to_millis_i64(*duration),
+        },
+        AsyncExecutionError::Cancelled { system } => TriAsyncExecutionError::Cancelled {
+            system: system.clone(),
+        },
+        AsyncExecutionError::ResourceLifecycleError {
+            resource,
+            phase,
+            reason,
+        } => TriAsyncExecutionError::ResourceLifecycleError {
+            resource: resource.clone(),
+            phase: phase.clone(),
+            reason: reason.clone(),
+        },
+    }
+}
+
+#[cfg(feature = "tri-runtime")]
+fn convert_yield_point(yield_point: &YieldPoint) -> TriYieldPoint {
+    match yield_point {
+        YieldPoint::AwaitingResource {
+            resource_name,
+            access_type,
+        } => TriYieldPoint::AwaitingResource {
+            resource_name: resource_name.clone(),
+            access_type: convert_resource_access(access_type),
+        },
+        YieldPoint::AwaitingTableQuery {
+            table_name,
+            query_type,
+        } => TriYieldPoint::AwaitingTableQuery {
+            table_name: table_name.clone(),
+            query_type: query_type.clone(),
+        },
+        YieldPoint::AwaitingSystemCompletion {
+            system_name,
+            task_id,
+        } => TriYieldPoint::AwaitingSystemCompletion {
+            system_name: system_name.clone(),
+            task_id: task_id.0,
+        },
+        YieldPoint::AwaitingSignal { signal_name } => TriYieldPoint::AwaitingSignal {
+            signal_name: signal_name.clone(),
+        },
+        YieldPoint::Sleeping {
+            duration,
+            started_at,
+        } => TriYieldPoint::Sleeping {
+            duration_ms: duration_to_millis_i64(*duration),
+            started_at_ms: instant_to_millis_since_start(*started_at),
+        },
+    }
+}
+
+#[cfg(feature = "tri-runtime")]
+fn convert_resource_access(access: &ResourceAccess) -> TriResourceAccess {
+    match access {
+        ResourceAccess::Immutable => TriResourceAccess::Immutable,
+        ResourceAccess::Mutable => TriResourceAccess::Mutable,
+        ResourceAccess::Owned => TriResourceAccess::Owned,
+    }
+}
+
+#[cfg(feature = "tri-runtime")]
+fn column_value_to_string(value: &ColumnValue) -> String {
+    match value {
+        ColumnValue::U64(v) => v.to_string(),
+        ColumnValue::String(v) => v.clone(),
+        ColumnValue::Bool(v) => v.to_string(),
+        ColumnValue::F64(bits) => f64::from_bits(*bits).to_string(),
+    }
+}
+
+#[cfg(feature = "tri-runtime")]
+fn duration_to_millis_i64(duration: Duration) -> i64 {
+    duration.as_millis().min(i64::MAX as u128) as i64
+}
+
+#[cfg(feature = "tri-runtime")]
+fn instant_to_millis_since_start(started_at: Instant) -> i64 {
+    started_at.elapsed().as_millis().min(i64::MAX as u128) as i64
+}

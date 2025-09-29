@@ -4,11 +4,16 @@ use peano::parser;
 use peano::semantic::{analyze_program, SemanticError};
 use std::process::Command;
 
-fn clang_available() -> bool { Command::new("clang").arg("--version").output().is_ok() }
+fn clang_available() -> bool {
+    Command::new("clang").arg("--version").output().is_ok()
+}
 
 #[test]
 fn trait_impl_static_dispatch_runs() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         my_iterator :: trait {
             T: type,
@@ -54,7 +59,10 @@ fn trait_impl_static_dispatch_runs() {
 
 #[test]
 fn trait_static_dispatch_e2e() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         point :: { x: i64 }
     ValLike :: trait { val: (&point) -> i64, }
@@ -92,7 +100,10 @@ fn trait_static_dispatch_e2e() {
 
 #[test]
 fn trait_static_path_call_e2e() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         point :: { x: i64 }
         ValLike :: trait { val: (&point) -> i64, }
@@ -148,7 +159,11 @@ fn ambiguous_trait_method_errors() {
     let program = parser::parse(src);
     let err = analyze_program(&program).expect_err("expected ambiguity error");
     match err {
-        SemanticError::AmbiguousMethod { type_name, method, traits } => {
+        SemanticError::AmbiguousMethod {
+            type_name,
+            method,
+            traits,
+        } => {
             assert_eq!(type_name, "T");
             assert_eq!(method, "foo");
             assert_eq!(traits.len(), 2);

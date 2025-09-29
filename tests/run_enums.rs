@@ -4,7 +4,9 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-fn clang_available() -> bool { Command::new("clang").arg("--version").output().is_ok() }
+fn clang_available() -> bool {
+    Command::new("clang").arg("--version").output().is_ok()
+}
 
 fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
     let program = parser::parse(src.to_string());
@@ -14,12 +16,19 @@ fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
     let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
     gen.generate_program(&program).expect("codegen");
 
-    if Path::new(obj).exists() { let _ = fs::remove_file(obj); }
-    if Path::new(exe).exists() { let _ = fs::remove_file(exe); }
+    if Path::new(obj).exists() {
+        let _ = fs::remove_file(obj);
+    }
+    if Path::new(exe).exists() {
+        let _ = fs::remove_file(exe);
+    }
 
     gen.write_object_file(obj).expect("write obj");
 
-    let status = Command::new("clang").args(["-o", exe, obj]).status().expect("link");
+    let status = Command::new("clang")
+        .args(["-o", exe, obj])
+        .status()
+        .expect("link");
     assert!(status.success(), "link failed");
 
     let out = Command::new(exe).output().expect("run");
@@ -29,7 +38,10 @@ fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
 
 #[test]
 fn enum_as_i64_tag_basics() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         Color :: enum { Red, Green, Blue }
         main :: () => {
@@ -43,7 +55,10 @@ fn enum_as_i64_tag_basics() {
 
 #[test]
 fn enum_variant_static_path_lowering() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         Color :: enum { Red, Green, Blue }
         main :: () => {
@@ -51,13 +66,20 @@ fn enum_variant_static_path_lowering() {
             println(c)
         }
     "#;
-    let stdout = compile_and_run(src, "tests/tmp_enum_variant.o", "tests/tmp_enum_variant.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_enum_variant.o",
+        "tests/tmp_enum_variant.out",
+    );
     assert_eq!(stdout, "1\n");
 }
 
 #[test]
 fn enum_match_basic() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         Color :: enum { Red, Green, Blue }
         main :: () => {
@@ -72,7 +94,10 @@ fn enum_match_basic() {
 
 #[test]
 fn enum_match_destructure() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         Color :: enum { Red, Green: i64, Blue }
         main :: () => {
@@ -91,7 +116,10 @@ fn enum_match_destructure() {
 
 #[test]
 fn enum_match_wildcard_default() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         Color :: enum { Red, Green, Blue }
         main :: () => {
@@ -100,13 +128,20 @@ fn enum_match_wildcard_default() {
             println(v)
         }
     "#;
-    let stdout = compile_and_run(src, "tests/tmp_enum_match_wc.o", "tests/tmp_enum_match_wc.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_enum_match_wc.o",
+        "tests/tmp_enum_match_wc.out",
+    );
     assert_eq!(stdout, "99\n");
 }
 
 #[test]
 fn enum_payload_basic() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         Color :: enum { Red, Green: i64, Blue }
         main :: () => {
@@ -115,6 +150,10 @@ fn enum_payload_basic() {
             println(v)
         }
     "#;
-    let stdout = compile_and_run(src, "tests/tmp_enum_payload.o", "tests/tmp_enum_payload.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_enum_payload.o",
+        "tests/tmp_enum_payload.out",
+    );
     assert_eq!(stdout, "100\n");
 }

@@ -451,7 +451,9 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let inner_pair = pair.into_inner().next().unwrap();
     match inner_pair.as_rule() {
-        Rule::block => Expression::Block { statements: parse_block(inner_pair) },
+        Rule::block => Expression::Block {
+            statements: parse_block(inner_pair),
+        },
         Rule::function => parse_function(inner_pair),
         Rule::conditional => parse_if_expression(inner_pair),
         Rule::r#match => parse_match_expression(inner_pair),
@@ -1036,7 +1038,7 @@ fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
 
 fn parse_table_def(pair: pest::iterators::Pair<Rule>, table_name: &str) -> TableDef {
     let mut columns = Vec::new();
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::table_fields => {
@@ -1049,7 +1051,7 @@ fn parse_table_def(pair: pest::iterators::Pair<Rule>, table_name: &str) -> Table
             _ => {}
         }
     }
-    
+
     TableDef {
         name: table_name.to_string(),
         columns,
@@ -1063,7 +1065,7 @@ fn parse_table_field(pair: pest::iterators::Pair<Rule>) -> TableColumn {
     let mut default_value = None;
     let mut is_computed = false;
     let mut computed_expression = None;
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::attribute => {
@@ -1095,7 +1097,7 @@ fn parse_table_field(pair: pest::iterators::Pair<Rule>) -> TableColumn {
             _ => {}
         }
     }
-    
+
     TableColumn {
         name: field_name,
         column_type: field_type,
@@ -1109,7 +1111,7 @@ fn parse_table_field(pair: pest::iterators::Pair<Rule>) -> TableColumn {
 fn parse_table_annotation(pair: pest::iterators::Pair<Rule>) -> TableAnnotation {
     let mut name = String::new();
     let mut args = Vec::new();
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::identifier => {
@@ -1121,7 +1123,7 @@ fn parse_table_annotation(pair: pest::iterators::Pair<Rule>) -> TableAnnotation 
             _ => {}
         }
     }
-    
+
     TableAnnotation { name, args }
 }
 
@@ -1131,7 +1133,7 @@ fn parse_sys_def(pair: pest::iterators::Pair<Rule>, name: &str) -> SystemDef {
     let mut parameters = Vec::new();
     let mut return_type = None;
     let mut body = Vec::new();
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::sys_params => {
@@ -1158,7 +1160,7 @@ fn parse_sys_def(pair: pest::iterators::Pair<Rule>, name: &str) -> SystemDef {
             _ => {}
         }
     }
-    
+
     SystemDef {
         name: name.to_string(),
         parameters,
@@ -1171,11 +1173,11 @@ fn parse_sys_def(pair: pest::iterators::Pair<Rule>, name: &str) -> SystemDef {
 fn parse_system_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter {
     let mut inner = pair.into_inner();
     let first = inner.next().unwrap();
-    
+
     match first.as_rule() {
         Rule::identifier => {
             let first_word = first.as_str().to_string();
-            
+
             // Check if this is a query parameter
             if first_word == "query" {
                 let param_name = inner.next().unwrap().as_str().to_string();
@@ -1186,13 +1188,13 @@ fn parse_system_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter 
                     query_spec,
                 };
             }
-            
+
             // Otherwise it's either resource or regular parameter
             let param_type = first_word;
             let param_name = inner.next().unwrap().as_str().to_string();
             let _colon = inner.next(); // skip colon
             let next = inner.next().unwrap();
-            
+
             if next.as_str() == "res" {
                 // Resource parameter
                 let access_pair = inner.next().unwrap();
@@ -1235,7 +1237,7 @@ fn parse_query_spec(pair: pest::iterators::Pair<Rule>) -> QuerySpec {
     let mut from_table = String::new();
     let mut where_clause = None;
     let mut joins = Vec::new();
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::field_projections => {
@@ -1261,7 +1263,7 @@ fn parse_query_spec(pair: pest::iterators::Pair<Rule>) -> QuerySpec {
             _ => {}
         }
     }
-    
+
     QuerySpec {
         projections,
         from_table,
@@ -1274,7 +1276,7 @@ fn parse_field_projection(pair: pest::iterators::Pair<Rule>) -> FieldProjection 
     let mut name = String::new();
     let mut field_type = None;
     let mut access = None;
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::identifier => {
@@ -1289,7 +1291,7 @@ fn parse_field_projection(pair: pest::iterators::Pair<Rule>) -> FieldProjection 
             _ => {}
         }
     }
-    
+
     FieldProjection {
         name,
         field_type,
@@ -1309,7 +1311,7 @@ fn parse_join_clause(pair: pest::iterators::Pair<Rule>) -> JoinClause {
     let mut join_type = JoinType::Inner;
     let mut table = String::new();
     let mut condition = Box::new(Expression::Literal(Literal::Boolean(true)));
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::join_type => {
@@ -1324,7 +1326,7 @@ fn parse_join_clause(pair: pest::iterators::Pair<Rule>) -> JoinClause {
             _ => {}
         }
     }
-    
+
     JoinClause {
         join_type,
         table,
@@ -1344,13 +1346,13 @@ fn parse_join_type(pair: pest::iterators::Pair<Rule>) -> JoinType {
 
 fn parse_compose_def(pair: pest::iterators::Pair<Rule>) -> ComposeDef {
     let mut entries = Vec::new();
-    
+
     for inner_pair in pair.into_inner() {
         if inner_pair.as_rule() == Rule::compose_entry {
             entries.push(parse_compose_entry(inner_pair));
         }
     }
-    
+
     ComposeDef { entries }
 }
 
@@ -1358,7 +1360,7 @@ fn parse_compose_entry(pair: pest::iterators::Pair<Rule>) -> ComposeEntry {
     let mut source = ComposeNode::Single(String::new());
     let mut targets = Vec::new();
     let mut is_first = true;
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::identifier => {
@@ -1382,25 +1384,25 @@ fn parse_compose_entry(pair: pest::iterators::Pair<Rule>) -> ComposeEntry {
             _ => {}
         }
     }
-    
+
     ComposeEntry { source, targets }
 }
 
 fn parse_tuple_chain(pair: pest::iterators::Pair<Rule>) -> ComposeNode {
     let mut names = Vec::new();
-    
+
     for inner_pair in pair.into_inner() {
         if inner_pair.as_rule() == Rule::identifier {
             names.push(inner_pair.as_str().to_string());
         }
     }
-    
+
     ComposeNode::Tuple(names)
 }
 
 fn parse_db_def(pair: pest::iterators::Pair<Rule>) -> DatabaseDef {
     let mut entries = Vec::new();
-    
+
     for inner_pair in pair.into_inner() {
         if inner_pair.as_rule() == Rule::db_entries {
             for entry_pair in inner_pair.into_inner() {
@@ -1410,14 +1412,14 @@ fn parse_db_def(pair: pest::iterators::Pair<Rule>) -> DatabaseDef {
             }
         }
     }
-    
+
     DatabaseDef { entries }
 }
 
 fn parse_db_entry(pair: pest::iterators::Pair<Rule>) -> DatabaseEntry {
     let mut name = String::new();
     let mut table_type = None;
-    
+
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::identifier => {
@@ -1430,7 +1432,7 @@ fn parse_db_entry(pair: pest::iterators::Pair<Rule>) -> DatabaseEntry {
             _ => {}
         }
     }
-    
+
     DatabaseEntry { name, table_type }
 }
 
@@ -1439,8 +1441,10 @@ fn parse_reference_type(pair: pest::iterators::Pair<Rule>) -> Type {
     let mut it = pair.into_inner();
     // reference_type = { ("&mut" | "&") ~ type }
     let first = it.next().unwrap();
-    let ty_pair = it.next().unwrap_or_else(|| panic!("reference missing type"));
-    
+    let ty_pair = it
+        .next()
+        .unwrap_or_else(|| panic!("reference missing type"));
+
     match first.as_str() {
         "&mut" => Type::Reference {
             is_mutable: true,
@@ -1459,7 +1463,7 @@ fn parse_function_param(pair: pest::iterators::Pair<Rule>) -> Parameter {
     let name = it.next().unwrap().as_str().to_string();
     let mut param_type: Option<Type> = None;
     let mut default_value: Option<Expression> = None;
-    
+
     for part in it {
         match part.as_rule() {
             Rule::r#type => {
@@ -1471,7 +1475,7 @@ fn parse_function_param(pair: pest::iterators::Pair<Rule>) -> Parameter {
             _ => {}
         }
     }
-    
+
     Parameter {
         name,
         param_type,

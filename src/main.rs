@@ -18,8 +18,8 @@ pub mod table_runtime;
 use crate::ast::*;
 use crate::async_runtime::RuntimeConfig;
 use crate::async_scheduler_integration::{AsyncSystemScheduler, SystemExecutionRequest};
-use crate::event_loop_manager::{EventLoopManager, EventLoopConfig, LoadBalancingStrategy};
-use crate::table_runtime::{TableRuntime, ColumnValue};
+use crate::event_loop_manager::{EventLoopConfig, EventLoopManager, LoadBalancingStrategy};
+use crate::table_runtime::{ColumnValue, TableRuntime};
 use inkwell::context::Context;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -62,14 +62,17 @@ fn main() {
     // Check if we have async systems that need the async runtime
     let async_systems = extract_async_systems(&program);
     if !async_systems.is_empty() {
-        println!("\nDetected {} async systems - initializing async runtime...", async_systems.len());
-        
+        println!(
+            "\nDetected {} async systems - initializing async runtime...",
+            async_systems.len()
+        );
+
         // Run async systems through the event loop
         if let Err(error) = run_async_systems(async_systems, semantic_context.clone()) {
             eprintln!("Async execution error: {:?}", error);
             return;
         }
-        
+
         println!("Async execution completed successfully!");
     }
 
@@ -136,15 +139,19 @@ fn main() {
 /// Extract async systems from the program
 fn extract_async_systems(program: &Program) -> Vec<SystemDef> {
     let mut async_systems = Vec::new();
-    
+
     for statement in &program.statements {
-        if let Statement::ConstDecl { value: ConstValue::SystemDef(system_def), .. } = statement {
+        if let Statement::ConstDecl {
+            value: ConstValue::SystemDef(system_def),
+            ..
+        } = statement
+        {
             if system_def.is_async {
                 async_systems.push(system_def.clone());
             }
         }
     }
-    
+
     async_systems
 }
 
@@ -175,11 +182,7 @@ fn run_async_systems(
     };
 
     // Create the event loop manager
-    let event_loop = EventLoopManager::new(
-        runtime_config,
-        semantic_context,
-        event_loop_config,
-    );
+    let event_loop = EventLoopManager::new(runtime_config, semantic_context, event_loop_config);
 
     // Create system execution requests for async systems
     let mut execution_requests = Vec::new();
@@ -196,8 +199,11 @@ fn run_async_systems(
 
     // Execute the async systems
     if !execution_requests.is_empty() {
-        println!("Starting event loop for {} async systems...", execution_requests.len());
-        
+        println!(
+            "Starting event loop for {} async systems...",
+            execution_requests.len()
+        );
+
         // For now, we'll start the event loop and let it run briefly
         // In a full implementation, this would be more sophisticated
         std::thread::spawn(move || {

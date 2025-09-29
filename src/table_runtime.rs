@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::computed_columns::*;
-use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct TableRuntime {
@@ -11,8 +11,8 @@ pub struct TableRuntime {
     pub secondary_indexes: HashMap<String, SecondaryIndex>, // Column-level indexes
     pub row_count: usize,
     pub deleted_rows: std::collections::HashSet<usize>, // Tombstones for deleted rows
-    pub next_row_id: usize, // Next available row ID
-    pub computed_engine: Option<LazyEvaluationEngine>, // Lazy evaluation for computed columns
+    pub next_row_id: usize,                             // Next available row ID
+    pub computed_engine: Option<LazyEvaluationEngine>,  // Lazy evaluation for computed columns
 }
 
 #[derive(Debug, Clone)]
@@ -47,7 +47,7 @@ pub struct SecondaryIndex {
 pub struct BitmapIndex {
     pub column_name: String,
     pub value_bitmaps: HashMap<ColumnValue, RowBitmap>, // One bitmap per distinct value
-    pub null_bitmap: RowBitmap, // Bitmap for NULL values
+    pub null_bitmap: RowBitmap,                         // Bitmap for NULL values
 }
 
 /// Row bitmap for efficient predicate evaluation
@@ -92,7 +92,11 @@ pub struct TableRow {
 pub enum TableError {
     DuplicatePrimaryKey(ColumnValue),
     ColumnNotFound(String),
-    TypeMismatch { column: String, expected: String, found: String },
+    TypeMismatch {
+        column: String,
+        expected: String,
+        found: String,
+    },
     PrimaryKeyRequired,
     RowNotFound(RowId),
 }
@@ -114,11 +118,13 @@ impl ColumnData {
             (ColumnData::String(vec), ColumnValue::String(v)) => vec.push(Some(v)),
             (ColumnData::Bool(vec), ColumnValue::Bool(v)) => vec.push(Some(v)),
             (ColumnData::F64(vec), ColumnValue::F64(v)) => vec.push(Some(f64::from_bits(v))),
-            _ => return Err(TableError::TypeMismatch {
-                column: "unknown".to_string(),
-                expected: "matching type".to_string(),
-                found: "incompatible type".to_string(),
-            }),
+            _ => {
+                return Err(TableError::TypeMismatch {
+                    column: "unknown".to_string(),
+                    expected: "matching type".to_string(),
+                    found: "incompatible type".to_string(),
+                })
+            }
         }
         Ok(())
     }
@@ -141,13 +147,17 @@ impl ColumnData {
             (ColumnData::String(vec), None) => vec[index] = None,
             (ColumnData::Bool(vec), Some(ColumnValue::Bool(v))) => vec[index] = Some(v),
             (ColumnData::Bool(vec), None) => vec[index] = None,
-            (ColumnData::F64(vec), Some(ColumnValue::F64(v))) => vec[index] = Some(f64::from_bits(v)),
+            (ColumnData::F64(vec), Some(ColumnValue::F64(v))) => {
+                vec[index] = Some(f64::from_bits(v))
+            }
             (ColumnData::F64(vec), None) => vec[index] = None,
-            (_, Some(_)) => return Err(TableError::TypeMismatch {
-                column: "unknown".to_string(),
-                expected: "matching type".to_string(),
-                found: "incompatible type".to_string(),
-            }),
+            (_, Some(_)) => {
+                return Err(TableError::TypeMismatch {
+                    column: "unknown".to_string(),
+                    expected: "matching type".to_string(),
+                    found: "incompatible type".to_string(),
+                })
+            }
         }
         Ok(())
     }
@@ -155,9 +165,15 @@ impl ColumnData {
     pub fn get_value(&self, index: usize) -> Option<ColumnValue> {
         match self {
             ColumnData::U64(vec) => vec.get(index)?.as_ref().map(|&v| ColumnValue::U64(v)),
-            ColumnData::String(vec) => vec.get(index)?.as_ref().map(|v| ColumnValue::String(v.clone())),
+            ColumnData::String(vec) => vec
+                .get(index)?
+                .as_ref()
+                .map(|v| ColumnValue::String(v.clone())),
             ColumnData::Bool(vec) => vec.get(index)?.as_ref().map(|&v| ColumnValue::Bool(v)),
-            ColumnData::F64(vec) => vec.get(index)?.as_ref().map(|&v| ColumnValue::F64(v.to_bits())),
+            ColumnData::F64(vec) => vec
+                .get(index)?
+                .as_ref()
+                .map(|&v| ColumnValue::F64(v.to_bits())),
         }
     }
 
@@ -183,11 +199,13 @@ impl ColumnData {
                     *slot = Some(f64::from_bits(v));
                 }
             }
-            _ => return Err(TableError::TypeMismatch {
-                column: "unknown".to_string(),
-                expected: "matching type".to_string(),
-                found: "incompatible type".to_string(),
-            }),
+            _ => {
+                return Err(TableError::TypeMismatch {
+                    column: "unknown".to_string(),
+                    expected: "matching type".to_string(),
+                    found: "incompatible type".to_string(),
+                })
+            }
         }
         Ok(())
     }
@@ -239,11 +257,15 @@ impl TableRuntime {
                 Type::Identifier { name, .. } => name.clone(),
                 _ => "String".to_string(), // Default fallback
             };
-            storage.columns.insert(column.name.clone(), ColumnData::new_for_type(&type_name));
+            storage
+                .columns
+                .insert(column.name.clone(), ColumnData::new_for_type(&type_name));
         }
 
         // Find primary key column
-        let primary_key_column = schema.columns.iter()
+        let primary_key_column = schema
+            .columns
+            .iter()
             .find(|col| col.annotations.iter().any(|ann| ann.name == "primary"))
             .map(|col| col.name.clone());
 
@@ -256,13 +278,13 @@ impl TableRuntime {
 
         // Initialize computed column engine if there are computed columns
         let computed_engine = if schema.columns.iter().any(|col| col.is_computed) {
-            Some(LazyEvaluationEngine::new(&schema).map_err(|e| {
-                TableError::TypeMismatch {
+            Some(
+                LazyEvaluationEngine::new(&schema).map_err(|e| TableError::TypeMismatch {
                     column: "computed_engine".to_string(),
                     expected: "valid computed column configuration".to_string(),
                     found: format!("evaluation error: {:?}", e),
-                }
-            })?)
+                })?,
+            )
         } else {
             None
         };
@@ -280,12 +302,22 @@ impl TableRuntime {
     }
 
     /// Get the value of a column (regular or computed) for a specific row
-    pub fn get_column_value(&mut self, row_id: RowId, column_name: &str) -> Result<ColumnValue, TableError> {
+    pub fn get_column_value(
+        &mut self,
+        row_id: RowId,
+        column_name: &str,
+    ) -> Result<ColumnValue, TableError> {
         // Check if the column is computed
-        if let Some(column) = self.schema.columns.iter().find(|col| col.name == column_name) {
+        if let Some(column) = self
+            .schema
+            .columns
+            .iter()
+            .find(|col| col.name == column_name)
+        {
             if column.is_computed {
                 if let Some(ref mut engine) = self.computed_engine {
-                    return engine.get_computed_value(column_name, row_id, &self.storage)
+                    return engine
+                        .get_computed_value(column_name, row_id, &self.storage)
                         .map_err(|e| TableError::TypeMismatch {
                             column: column_name.to_string(),
                             expected: "computed value".to_string(),
@@ -302,10 +334,14 @@ impl TableRuntime {
         }
 
         // Get value from regular column storage
-        let column_data = self.storage.columns.get(column_name)
+        let column_data = self
+            .storage
+            .columns
+            .get(column_name)
             .ok_or_else(|| TableError::ColumnNotFound(column_name.to_string()))?;
 
-        column_data.get_value(row_id.0)
+        column_data
+            .get_value(row_id.0)
             .ok_or_else(|| TableError::RowNotFound(row_id))
     }
 
@@ -325,7 +361,9 @@ impl TableRuntime {
 
     /// Check if a column is computed
     pub fn is_computed_column(&self, column_name: &str) -> bool {
-        self.schema.columns.iter()
+        self.schema
+            .columns
+            .iter()
             .find(|col| col.name == column_name)
             .map_or(false, |col| col.is_computed)
     }
@@ -340,13 +378,13 @@ impl TableRuntime {
     pub fn insert_row(&mut self, row: TableRow) -> Result<RowId, TableError> {
         // Validate all required columns are present and apply defaults
         let mut complete_row = HashMap::new();
-        
+
         for column in &self.schema.columns {
             if column.is_computed {
                 // Skip computed columns during insertion - they're calculated on demand
                 continue;
             }
-            
+
             if let Some(value) = row.values.get(&column.name) {
                 // Validate type compatibility
                 self.validate_column_value(&column.name, value)?;
@@ -371,7 +409,7 @@ impl TableRuntime {
 
         // Get next available row ID (stable across deletions)
         let row_id = RowId(self.next_row_id);
-        
+
         // Insert into columnar storage at the specific index (only for non-computed columns)
         for (column_name, value) in &complete_row {
             if let Some(column_data) = self.storage.columns.get_mut(column_name) {
@@ -403,7 +441,7 @@ impl TableRuntime {
         }
 
         let mut values = HashMap::new();
-        
+
         for column in &self.schema.columns {
             if column.is_computed {
                 // Use get_column_value for computed columns
@@ -465,7 +503,11 @@ impl TableRuntime {
         Ok(())
     }
 
-    pub fn update_row(&mut self, row_id: RowId, updates: HashMap<String, ColumnValue>) -> Result<(), TableError> {
+    pub fn update_row(
+        &mut self,
+        row_id: RowId,
+        updates: HashMap<String, ColumnValue>,
+    ) -> Result<(), TableError> {
         // Check if row exists and is not deleted
         if self.deleted_rows.contains(&row_id.0) || row_id.0 >= self.next_row_id {
             return Err(TableError::RowNotFound(row_id));
@@ -485,7 +527,7 @@ impl TableRuntime {
         // Apply updates
         for (column_name, value) in updates {
             self.validate_column_value(&column_name, &value)?;
-            
+
             if let Some(column_data) = self.storage.columns.get_mut(&column_name) {
                 column_data.set_value(row_id.0, value)?;
             } else {
@@ -502,7 +544,7 @@ impl TableRuntime {
 
     pub fn scan_all(&self) -> Vec<(RowId, TableRow)> {
         let mut result = Vec::new();
-        
+
         for i in 0..self.next_row_id {
             let row_id = RowId(i);
             if !self.deleted_rows.contains(&i) {
@@ -511,7 +553,7 @@ impl TableRuntime {
                 }
             }
         }
-        
+
         result
     }
 
@@ -521,7 +563,7 @@ impl TableRuntime {
         F: Fn(&TableRow) -> bool,
     {
         let mut result = Vec::new();
-        
+
         for i in 0..self.next_row_id {
             let row_id = RowId(i);
             if !self.deleted_rows.contains(&i) {
@@ -532,21 +574,26 @@ impl TableRuntime {
                 }
             }
         }
-        
+
         result
     }
 
     /// Efficient lookup using primary key index
     pub fn get_by_primary_key(&self, key: &ColumnValue) -> Result<(RowId, TableRow), TableError> {
-        let row_id = self.find_by_primary_key(key.clone())
+        let row_id = self
+            .find_by_primary_key(key.clone())
             .ok_or_else(|| TableError::RowNotFound(RowId(0)))?;
-        
+
         let row = self.get_row(row_id)?;
         Ok((row_id, row))
     }
 
     /// Scan with equality filter on a column (can use index if available)
-    pub fn scan_by_column_value(&self, column_name: &str, value: &ColumnValue) -> Vec<(RowId, TableRow)> {
+    pub fn scan_by_column_value(
+        &self,
+        column_name: &str,
+        value: &ColumnValue,
+    ) -> Vec<(RowId, TableRow)> {
         // Check if this is a primary key lookup
         if let Some(ref pk_column) = self.primary_index.column_name {
             if pk_column == column_name {
@@ -558,27 +605,36 @@ impl TableRuntime {
                 }
             }
         }
-        
+
         // Fall back to filtered scan for non-indexed columns
-        self.scan_filtered(|row| {
-            row.values.get(column_name).map_or(false, |v| v == value)
-        })
+        self.scan_filtered(|row| row.values.get(column_name).map_or(false, |v| v == value))
     }
 
     /// Scan with range filter (for numeric columns)
-    pub fn scan_by_column_range(&self, column_name: &str, min_value: Option<&ColumnValue>, max_value: Option<&ColumnValue>) -> Vec<(RowId, TableRow)> {
+    pub fn scan_by_column_range(
+        &self,
+        column_name: &str,
+        min_value: Option<&ColumnValue>,
+        max_value: Option<&ColumnValue>,
+    ) -> Vec<(RowId, TableRow)> {
         self.scan_filtered(|row| {
             if let Some(column_value) = row.values.get(column_name) {
                 let mut passes = true;
-                
+
                 if let Some(min) = min_value {
-                    passes = passes && self.compare_column_values(column_value, min).unwrap_or(false);
+                    passes = passes
+                        && self
+                            .compare_column_values(column_value, min)
+                            .unwrap_or(false);
                 }
-                
+
                 if let Some(max) = max_value {
-                    passes = passes && self.compare_column_values(max, column_value).unwrap_or(false);
+                    passes = passes
+                        && self
+                            .compare_column_values(max, column_value)
+                            .unwrap_or(false);
                 }
-                
+
                 passes
             } else {
                 false
@@ -591,13 +647,14 @@ impl TableRuntime {
         (0..self.next_row_id)
             .map(RowId)
             .filter(move |row_id| !self.deleted_rows.contains(&row_id.0))
-            .filter_map(move |row_id| {
-                self.get_row(row_id).ok().map(|row| (row_id, row))
-            })
+            .filter_map(move |row_id| self.get_row(row_id).ok().map(|row| (row_id, row)))
     }
 
     /// Iterator with predicate filtering
-    pub fn iter_filtered<'a, F>(&'a self, predicate: F) -> impl Iterator<Item = (RowId, TableRow)> + 'a
+    pub fn iter_filtered<'a, F>(
+        &'a self,
+        predicate: F,
+    ) -> impl Iterator<Item = (RowId, TableRow)> + 'a
     where
         F: Fn(&TableRow) -> bool + 'a,
     {
@@ -608,8 +665,15 @@ impl TableRuntime {
         self.storage.columns.get(column_name)
     }
 
-    fn validate_column_value(&self, column_name: &str, value: &ColumnValue) -> Result<(), TableError> {
-        let column = self.schema.columns.iter()
+    fn validate_column_value(
+        &self,
+        column_name: &str,
+        value: &ColumnValue,
+    ) -> Result<(), TableError> {
+        let column = self
+            .schema
+            .columns
+            .iter()
             .find(|col| col.name == column_name)
             .ok_or_else(|| TableError::ColumnNotFound(column_name.to_string()))?;
 
@@ -657,25 +721,33 @@ impl TableRuntime {
     /// Generate table statistics for query optimization
     pub fn generate_statistics(&self) -> crate::query::TableStatistics {
         let mut column_stats = HashMap::new();
-        
+
         for column in &self.schema.columns {
             if let Some(column_data) = self.storage.columns.get(&column.name) {
                 let mut distinct_values = std::collections::HashSet::new();
                 let mut null_count = 0;
                 let mut min_value: Option<ColumnValue> = None;
                 let mut max_value: Option<ColumnValue> = None;
-                
+
                 // Analyze column data
                 for i in 0..self.next_row_id {
                     if !self.deleted_rows.contains(&i) {
                         if let Some(value) = column_data.get_value(i) {
                             distinct_values.insert(value.clone());
-                            
+
                             // Update min/max
-                            if min_value.is_none() || self.compare_column_values(&value, min_value.as_ref().unwrap()).unwrap_or(false) {
+                            if min_value.is_none()
+                                || self
+                                    .compare_column_values(&value, min_value.as_ref().unwrap())
+                                    .unwrap_or(false)
+                            {
                                 min_value = Some(value.clone());
                             }
-                            if max_value.is_none() || self.compare_column_values(max_value.as_ref().unwrap(), &value).unwrap_or(false) {
+                            if max_value.is_none()
+                                || self
+                                    .compare_column_values(max_value.as_ref().unwrap(), &value)
+                                    .unwrap_or(false)
+                            {
                                 max_value = Some(value.clone());
                             }
                         } else {
@@ -683,26 +755,29 @@ impl TableRuntime {
                         }
                     }
                 }
-                
+
                 let is_indexed = self.primary_index.column_name.as_ref() == Some(&column.name);
-                
-                column_stats.insert(column.name.clone(), crate::query::ColumnStatistics {
-                    column_name: column.name.clone(),
-                    distinct_count: distinct_values.len(),
-                    null_count,
-                    min_value,
-                    max_value,
-                    is_indexed,
-                });
+
+                column_stats.insert(
+                    column.name.clone(),
+                    crate::query::ColumnStatistics {
+                        column_name: column.name.clone(),
+                        distinct_count: distinct_values.len(),
+                        null_count,
+                        min_value,
+                        max_value,
+                        is_indexed,
+                    },
+                );
             }
         }
-        
+
         let indexed_columns = if let Some(ref pk_col) = self.primary_index.column_name {
             vec![pk_col.clone()]
         } else {
             vec![]
         };
-        
+
         crate::query::TableStatistics {
             table_name: self.schema.name.clone(),
             row_count: self.row_count,
@@ -716,10 +791,14 @@ impl TableRuntime {
     pub fn estimate_column_cardinality(&self, column_name: &str, value: &ColumnValue) -> usize {
         if let Some(ref pk_column) = self.primary_index.column_name {
             if pk_column == column_name {
-                return if self.primary_index.index.contains_key(value) { 1 } else { 0 };
+                return if self.primary_index.index.contains_key(value) {
+                    1
+                } else {
+                    0
+                };
             }
         }
-        
+
         // For non-indexed columns, estimate based on distinctness
         if let Some(column_data) = self.storage.columns.get(column_name) {
             let mut matches = 0;
@@ -739,7 +818,6 @@ impl TableRuntime {
     }
 
     fn compare_column_values(&self, left: &ColumnValue, right: &ColumnValue) -> Option<bool> {
-        
         match (left, right) {
             (ColumnValue::U64(a), ColumnValue::U64(b)) => Some(a >= b),
             (ColumnValue::String(a), ColumnValue::String(b)) => Some(a >= b),
@@ -754,12 +832,19 @@ impl TableRuntime {
     }
 
     // ==================== ALGORITHMIC IMPROVEMENTS ====================
-    
+
     /// CRITICAL: Bitmap-based columnar filtering - O(k) instead of O(n)
     /// Evaluates predicates directly on column data without row materialization
-    pub fn evaluate_predicate_columnar(&self, predicate: &Expression) -> Result<PredicateResult, TableError> {
+    pub fn evaluate_predicate_columnar(
+        &self,
+        predicate: &Expression,
+    ) -> Result<PredicateResult, TableError> {
         match predicate {
-            Expression::BinaryOp { left, operator, right } => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
                 match operator {
                     BinaryOperator::And => {
                         // Decompose AND: evaluate each side and intersect bitmaps
@@ -773,9 +858,7 @@ impl TableRuntime {
                         let right_result = self.evaluate_predicate_columnar(right)?;
                         Ok(self.union_predicate_results(left_result, right_result))
                     }
-                    BinaryOperator::Equal => {
-                        self.evaluate_equality_predicate(left, right)
-                    }
+                    BinaryOperator::Equal => self.evaluate_equality_predicate(left, right),
                     BinaryOperator::NotEqual => {
                         // Invert equality result
                         match self.evaluate_equality_predicate(left, right)? {
@@ -788,24 +871,31 @@ impl TableRuntime {
                                 }
                                 Ok(PredicateResult::Bitmap(inverted))
                             }
-                            other => Ok(other)
+                            other => Ok(other),
                         }
                     }
-                    BinaryOperator::Less | BinaryOperator::Greater | BinaryOperator::LessEqual | BinaryOperator::GreaterEqual => {
+                    BinaryOperator::Less
+                    | BinaryOperator::Greater
+                    | BinaryOperator::LessEqual
+                    | BinaryOperator::GreaterEqual => {
                         self.evaluate_range_predicate(left, operator, right)
                     }
-                    _ => Ok(PredicateResult::FullScan)
+                    _ => Ok(PredicateResult::FullScan),
                 }
             }
-            _ => Ok(PredicateResult::FullScan) // Non-optimizable predicates
+            _ => Ok(PredicateResult::FullScan), // Non-optimizable predicates
         }
     }
 
     /// Evaluate equality predicate with potential index usage
-    fn evaluate_equality_predicate(&self, left: &Expression, right: &Expression) -> Result<PredicateResult, TableError> {
+    fn evaluate_equality_predicate(
+        &self,
+        left: &Expression,
+        right: &Expression,
+    ) -> Result<PredicateResult, TableError> {
         if let (Expression::Identifier(column_name), Expression::Literal(literal)) = (left, right) {
             let value = self.literal_to_column_value(literal)?;
-            
+
             // Check for primary key index usage - O(1) lookup
             if let Some(ref pk_col) = self.primary_index.column_name {
                 if pk_col == column_name {
@@ -816,7 +906,7 @@ impl TableRuntime {
                     }
                 }
             }
-            
+
             // Check for secondary index usage - O(log n) lookup
             if let Some(index) = self.secondary_indexes.get(column_name) {
                 if let Some(row_ids) = index.ordered_index.get(&value) {
@@ -825,19 +915,23 @@ impl TableRuntime {
                     return Ok(PredicateResult::IndexLookup(vec![]));
                 }
             }
-            
+
             // Fall back to columnar bitmap evaluation - O(n) but no row materialization
             return self.create_equality_bitmap(column_name, &value);
         }
-        
+
         Ok(PredicateResult::FullScan)
     }
 
     /// Create bitmap for equality comparison on column data
-    fn create_equality_bitmap(&self, column_name: &str, value: &ColumnValue) -> Result<PredicateResult, TableError> {
+    fn create_equality_bitmap(
+        &self,
+        column_name: &str,
+        value: &ColumnValue,
+    ) -> Result<PredicateResult, TableError> {
         if let Some(column_data) = self.storage.columns.get(column_name) {
             let mut bitmap = RowBitmap::new(self.next_row_id);
-            
+
             // CRITICAL: Evaluate directly on column data, no row materialization
             for i in 0..self.next_row_id {
                 if !self.deleted_rows.contains(&i) {
@@ -848,7 +942,7 @@ impl TableRuntime {
                     }
                 }
             }
-            
+
             Ok(PredicateResult::Bitmap(bitmap))
         } else {
             Err(TableError::ColumnNotFound(column_name.to_string()))
@@ -856,70 +950,96 @@ impl TableRuntime {
     }
 
     /// Evaluate range predicate with potential index usage
-    fn evaluate_range_predicate(&self, left: &Expression, operator: &BinaryOperator, right: &Expression) -> Result<PredicateResult, TableError> {
+    fn evaluate_range_predicate(
+        &self,
+        left: &Expression,
+        operator: &BinaryOperator,
+        right: &Expression,
+    ) -> Result<PredicateResult, TableError> {
         if let (Expression::Identifier(column_name), Expression::Literal(literal)) = (left, right) {
             let value = self.literal_to_column_value(literal)?;
-            
+
             // Check for secondary index usage for range queries - O(log n)
             if let Some(index) = self.secondary_indexes.get(column_name) {
                 let mut matching_row_ids = Vec::new();
-                
+
                 for (index_value, row_ids) in &index.ordered_index {
                     let matches = match operator {
-                        BinaryOperator::Less => self.compare_column_values(&value, index_value).unwrap_or(false),
+                        BinaryOperator::Less => self
+                            .compare_column_values(&value, index_value)
+                            .unwrap_or(false),
                         BinaryOperator::LessEqual => {
-                            self.compare_column_values(&value, index_value).unwrap_or(false) || index_value == &value
+                            self.compare_column_values(&value, index_value)
+                                .unwrap_or(false)
+                                || index_value == &value
                         }
-                        BinaryOperator::Greater => self.compare_column_values(index_value, &value).unwrap_or(false),
+                        BinaryOperator::Greater => self
+                            .compare_column_values(index_value, &value)
+                            .unwrap_or(false),
                         BinaryOperator::GreaterEqual => {
-                            self.compare_column_values(index_value, &value).unwrap_or(false) || index_value == &value
+                            self.compare_column_values(index_value, &value)
+                                .unwrap_or(false)
+                                || index_value == &value
                         }
                         _ => false,
                     };
-                    
+
                     if matches {
                         matching_row_ids.extend(row_ids.iter().copied());
                     }
                 }
-                
+
                 return Ok(PredicateResult::IndexLookup(matching_row_ids));
             }
-            
+
             // Fall back to columnar bitmap evaluation
             return self.create_range_bitmap(column_name, operator, &value);
         }
-        
+
         Ok(PredicateResult::FullScan)
     }
 
     /// Create bitmap for range comparison on column data
-    fn create_range_bitmap(&self, column_name: &str, operator: &BinaryOperator, value: &ColumnValue) -> Result<PredicateResult, TableError> {
+    fn create_range_bitmap(
+        &self,
+        column_name: &str,
+        operator: &BinaryOperator,
+        value: &ColumnValue,
+    ) -> Result<PredicateResult, TableError> {
         if let Some(column_data) = self.storage.columns.get(column_name) {
             let mut bitmap = RowBitmap::new(self.next_row_id);
-            
+
             // CRITICAL: Evaluate directly on column data, no row materialization
             for i in 0..self.next_row_id {
                 if !self.deleted_rows.contains(&i) {
                     if let Some(col_value) = column_data.get_value(i) {
                         let matches = match operator {
-                            BinaryOperator::Less => self.compare_column_values(value, &col_value).unwrap_or(false),
+                            BinaryOperator::Less => self
+                                .compare_column_values(value, &col_value)
+                                .unwrap_or(false),
                             BinaryOperator::LessEqual => {
-                                self.compare_column_values(value, &col_value).unwrap_or(false) || col_value == *value
+                                self.compare_column_values(value, &col_value)
+                                    .unwrap_or(false)
+                                    || col_value == *value
                             }
-                            BinaryOperator::Greater => self.compare_column_values(&col_value, value).unwrap_or(false),
+                            BinaryOperator::Greater => self
+                                .compare_column_values(&col_value, value)
+                                .unwrap_or(false),
                             BinaryOperator::GreaterEqual => {
-                                self.compare_column_values(&col_value, value).unwrap_or(false) || col_value == *value
+                                self.compare_column_values(&col_value, value)
+                                    .unwrap_or(false)
+                                    || col_value == *value
                             }
                             _ => false,
                         };
-                        
+
                         if matches {
                             bitmap.set(i, true);
                         }
                     }
                 }
             }
-            
+
             Ok(PredicateResult::Bitmap(bitmap))
         } else {
             Err(TableError::ColumnNotFound(column_name.to_string()))
@@ -927,29 +1047,41 @@ impl TableRuntime {
     }
 
     /// Intersect predicate results (for AND operations)
-    fn intersect_predicate_results(&self, left: PredicateResult, right: PredicateResult) -> PredicateResult {
+    fn intersect_predicate_results(
+        &self,
+        left: PredicateResult,
+        right: PredicateResult,
+    ) -> PredicateResult {
         match (left, right) {
             (PredicateResult::Bitmap(left_bitmap), PredicateResult::Bitmap(right_bitmap)) => {
                 PredicateResult::Bitmap(left_bitmap.and(&right_bitmap))
             }
             (PredicateResult::IndexLookup(left_ids), PredicateResult::IndexLookup(right_ids)) => {
-                let intersection: Vec<RowId> = left_ids.into_iter()
+                let intersection: Vec<RowId> = left_ids
+                    .into_iter()
                     .filter(|id| right_ids.contains(id))
                     .collect();
                 PredicateResult::IndexLookup(intersection)
             }
             // Mixed results fall back to bitmap evaluation
-            _ => PredicateResult::FullScan
+            _ => PredicateResult::FullScan,
         }
     }
 
     /// Union predicate results (for OR operations)
-    fn union_predicate_results(&self, left: PredicateResult, right: PredicateResult) -> PredicateResult {
+    fn union_predicate_results(
+        &self,
+        left: PredicateResult,
+        right: PredicateResult,
+    ) -> PredicateResult {
         match (left, right) {
             (PredicateResult::Bitmap(left_bitmap), PredicateResult::Bitmap(right_bitmap)) => {
                 PredicateResult::Bitmap(left_bitmap.or(&right_bitmap))
             }
-            (PredicateResult::IndexLookup(mut left_ids), PredicateResult::IndexLookup(right_ids)) => {
+            (
+                PredicateResult::IndexLookup(mut left_ids),
+                PredicateResult::IndexLookup(right_ids),
+            ) => {
                 for id in right_ids {
                     if !left_ids.contains(&id) {
                         left_ids.push(id);
@@ -958,14 +1090,17 @@ impl TableRuntime {
                 PredicateResult::IndexLookup(left_ids)
             }
             // Mixed results fall back to full scan
-            _ => PredicateResult::FullScan
+            _ => PredicateResult::FullScan,
         }
     }
 
     /// CRITICAL: Optimized filtered scan using bitmaps - O(k) instead of O(n)
-    pub fn scan_filtered_optimized(&self, predicate: &Expression) -> Result<Vec<(RowId, TableRow)>, TableError> {
+    pub fn scan_filtered_optimized(
+        &self,
+        predicate: &Expression,
+    ) -> Result<Vec<(RowId, TableRow)>, TableError> {
         let predicate_result = self.evaluate_predicate_columnar(predicate)?;
-        
+
         match predicate_result {
             PredicateResult::IndexLookup(row_ids) => {
                 // O(k) - only process matching rows
@@ -1002,11 +1137,20 @@ impl TableRuntime {
     }
 
     /// Get row with only projected columns for efficiency
-    pub fn get_row_projected(&self, row_id: RowId, projection_columns: &[String]) -> Result<TableRow, TableError> {
+    pub fn get_row_projected(
+        &self,
+        row_id: RowId,
+        projection_columns: &[String],
+    ) -> Result<TableRow, TableError> {
         let mut values = HashMap::new();
-        
+
         for column_name in projection_columns {
-            if let Some(column) = self.schema.columns.iter().find(|col| col.name == *column_name) {
+            if let Some(column) = self
+                .schema
+                .columns
+                .iter()
+                .find(|col| col.name == *column_name)
+            {
                 if column.is_computed {
                     // Skip computed columns in projected rows to avoid borrowing issues
                     continue;
@@ -1022,7 +1166,7 @@ impl TableRuntime {
                 }
             }
         }
-        
+
         Ok(TableRow { values })
     }
 
@@ -1031,42 +1175,50 @@ impl TableRuntime {
         if self.secondary_indexes.contains_key(&column_name) {
             return Ok(()); // Index already exists
         }
-        
+
         let mut ordered_index = BTreeMap::new();
-        
+
         // Build index from existing data
         if let Some(column_data) = self.storage.columns.get(&column_name) {
             for i in 0..self.next_row_id {
                 if !self.deleted_rows.contains(&i) {
                     if let Some(value) = column_data.get_value(i) {
-                        ordered_index.entry(value).or_insert_with(Vec::new).push(RowId(i));
+                        ordered_index
+                            .entry(value)
+                            .or_insert_with(Vec::new)
+                            .push(RowId(i));
                     }
                 }
             }
         }
-        
+
         // Build bitmap index if column has low cardinality
-        let bitmap_index = if ordered_index.len() <= 100 { // Low cardinality threshold
+        let bitmap_index = if ordered_index.len() <= 100 {
+            // Low cardinality threshold
             Some(self.build_bitmap_index_for_column(&column_name, &ordered_index)?)
         } else {
             None
         };
-        
+
         let index = SecondaryIndex {
             column_name: column_name.clone(),
             ordered_index,
             bitmap_index,
         };
-        
+
         self.secondary_indexes.insert(column_name, index);
         Ok(())
     }
 
     /// Build bitmap index for low-cardinality column - O(k) lookups where k is distinct values
-    fn build_bitmap_index_for_column(&self, column_name: &str, ordered_index: &BTreeMap<ColumnValue, Vec<RowId>>) -> Result<BitmapIndex, TableError> {
+    fn build_bitmap_index_for_column(
+        &self,
+        column_name: &str,
+        ordered_index: &BTreeMap<ColumnValue, Vec<RowId>>,
+    ) -> Result<BitmapIndex, TableError> {
         let mut value_bitmaps = HashMap::new();
         let mut null_bitmap = RowBitmap::new(self.next_row_id);
-        
+
         // Create bitmap for each distinct value
         for (value, row_ids) in ordered_index {
             let mut bitmap = RowBitmap::new(self.next_row_id);
@@ -1075,7 +1227,7 @@ impl TableRuntime {
             }
             value_bitmaps.insert(value.clone(), bitmap);
         }
-        
+
         // Create bitmap for NULL values
         if let Some(column_data) = self.storage.columns.get(column_name) {
             for i in 0..self.next_row_id {
@@ -1086,7 +1238,7 @@ impl TableRuntime {
                 }
             }
         }
-        
+
         Ok(BitmapIndex {
             column_name: column_name.to_string(),
             value_bitmaps,
@@ -1095,7 +1247,11 @@ impl TableRuntime {
     }
 
     /// CRITICAL: Enhanced equality bitmap using bitmap indexes - O(1) for indexed low-cardinality columns
-    fn create_equality_bitmap_optimized(&self, column_name: &str, value: &ColumnValue) -> Result<PredicateResult, TableError> {
+    fn create_equality_bitmap_optimized(
+        &self,
+        column_name: &str,
+        value: &ColumnValue,
+    ) -> Result<PredicateResult, TableError> {
         // Check for bitmap index first - O(1) lookup
         if let Some(index) = self.secondary_indexes.get(column_name) {
             if let Some(bitmap_index) = &index.bitmap_index {
@@ -1107,18 +1263,27 @@ impl TableRuntime {
                 }
             }
         }
-        
+
         // Fall back to regular bitmap creation
         self.create_equality_bitmap(column_name, value)
     }
 
     /// Enhanced predicate evaluation using bitmap indexes where available
-    pub fn evaluate_predicate_with_bitmap_indexes(&self, predicate: &Expression) -> Result<PredicateResult, TableError> {
+    pub fn evaluate_predicate_with_bitmap_indexes(
+        &self,
+        predicate: &Expression,
+    ) -> Result<PredicateResult, TableError> {
         match predicate {
-            Expression::BinaryOp { left, operator, right } => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
                 match operator {
                     BinaryOperator::Equal => {
-                        if let (Expression::Identifier(column_name), Expression::Literal(literal)) = (left.as_ref(), right.as_ref()) {
+                        if let (Expression::Identifier(column_name), Expression::Literal(literal)) =
+                            (left.as_ref(), right.as_ref())
+                        {
                             let value = self.literal_to_column_value(literal)?;
                             // Use optimized bitmap index lookup
                             return self.create_equality_bitmap_optimized(column_name, &value);
@@ -1141,7 +1306,7 @@ impl TableRuntime {
             }
             _ => {}
         }
-        
+
         // Fall back to regular predicate evaluation
         self.evaluate_predicate_columnar(predicate)
     }
@@ -1209,8 +1374,16 @@ impl RowBitmap {
     pub fn or(&self, other: &RowBitmap) -> RowBitmap {
         let mut result = RowBitmap::new(self.bits.len().max(other.bits.len()));
         for i in 0..result.bits.len() {
-            let left_bit = if i < self.bits.len() { self.bits[i] } else { false };
-            let right_bit = if i < other.bits.len() { other.bits[i] } else { false };
+            let left_bit = if i < self.bits.len() {
+                self.bits[i]
+            } else {
+                false
+            };
+            let right_bit = if i < other.bits.len() {
+                other.bits[i]
+            } else {
+                false
+            };
             let bit_value = left_bit || right_bit;
             if bit_value {
                 result.bits[i] = true;
@@ -1222,7 +1395,9 @@ impl RowBitmap {
 
     /// Get iterator over row IDs where the bit is true
     pub fn true_row_ids(&self) -> impl Iterator<Item = RowId> + '_ {
-        self.bits.iter().enumerate()
+        self.bits
+            .iter()
+            .enumerate()
             .filter_map(|(i, &bit)| if bit { Some(RowId(i)) } else { None })
     }
 
@@ -1234,7 +1409,11 @@ impl RowBitmap {
 
 impl<'a> IndexedIterator<'a> {
     /// Create a new indexed iterator for specific row IDs
-    pub fn new(table: &'a TableRuntime, row_ids: Vec<RowId>, projection_columns: Vec<String>) -> Self {
+    pub fn new(
+        table: &'a TableRuntime,
+        row_ids: Vec<RowId>,
+        projection_columns: Vec<String>,
+    ) -> Self {
         Self {
             table,
             row_ids: Box::new(row_ids.into_iter()),
@@ -1243,13 +1422,21 @@ impl<'a> IndexedIterator<'a> {
     }
 
     /// Create indexed iterator from bitmap
-    pub fn from_bitmap(table: &'a TableRuntime, bitmap: &RowBitmap, projection_columns: Vec<String>) -> Self {
+    pub fn from_bitmap(
+        table: &'a TableRuntime,
+        bitmap: &RowBitmap,
+        projection_columns: Vec<String>,
+    ) -> Self {
         let row_ids: Vec<RowId> = bitmap.true_row_ids().collect();
         Self::new(table, row_ids, projection_columns)
     }
 
     /// Create indexed iterator for primary key lookup
-    pub fn primary_key_lookup(table: &'a TableRuntime, key: &ColumnValue, projection_columns: Vec<String>) -> Self {
+    pub fn primary_key_lookup(
+        table: &'a TableRuntime,
+        key: &ColumnValue,
+        projection_columns: Vec<String>,
+    ) -> Self {
         let row_ids = if let Some(row_id) = table.find_by_primary_key(key.clone()) {
             vec![row_id]
         } else {
@@ -1259,31 +1446,37 @@ impl<'a> IndexedIterator<'a> {
     }
 
     /// Create indexed iterator for range scan
-    pub fn range_scan(table: &'a TableRuntime, column_name: &str, min_value: Option<&ColumnValue>, max_value: Option<&ColumnValue>, projection_columns: Vec<String>) -> Self {
+    pub fn range_scan(
+        table: &'a TableRuntime,
+        column_name: &str,
+        min_value: Option<&ColumnValue>,
+        max_value: Option<&ColumnValue>,
+        projection_columns: Vec<String>,
+    ) -> Self {
         // If we have a secondary index for this column, use it
         if let Some(index) = table.secondary_indexes.get(column_name) {
             let mut row_ids = Vec::new();
-            
+
             for (value, ids) in &index.ordered_index {
                 let mut include = true;
-                
+
                 if let Some(min) = min_value {
                     if table.compare_column_values(value, min).unwrap_or(false) {
                         include = false;
                     }
                 }
-                
+
                 if let Some(max) = max_value {
                     if table.compare_column_values(max, value).unwrap_or(false) {
                         include = false;
                     }
                 }
-                
+
                 if include {
                     row_ids.extend(ids.iter().copied());
                 }
             }
-            
+
             Self::new(table, row_ids, projection_columns)
         } else {
             // Fallback to full scan with range filtering
@@ -1303,7 +1496,10 @@ impl<'a> Iterator for IndexedIterator<'a> {
         while let Some(row_id) = self.row_ids.next() {
             if !self.table.deleted_rows.contains(&row_id.0) {
                 // Only materialize the row with projected columns for efficiency
-                if let Ok(row) = self.table.get_row_projected(row_id, &self.projection_columns) {
+                if let Ok(row) = self
+                    .table
+                    .get_row_projected(row_id, &self.projection_columns)
+                {
                     return Some((row_id, row));
                 }
             }

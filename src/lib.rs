@@ -14,3 +14,5 @@ pub mod scheduler;
 pub mod semantic;
 pub mod system_executor;
 pub mod table_runtime;
+#[cfg(feature = "tri-runtime")]
+pub mod tri_runtime_bridge;

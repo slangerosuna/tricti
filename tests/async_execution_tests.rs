@@ -1,15 +1,7 @@
-use tricti::{
-    async_runtime::*,
-    async_scheduler_integration::*,
-    async_table_integration::*,
-    error_propagation::*,
-    event_loop_manager::*,
-    resource_lifecycle::*,
-    system_executor::*,
-    ast::*,
-    table_runtime::*,
-    semantic::SemanticContext,
-    scheduler::SystemScheduler,
+use peano::{
+    ast::*, async_runtime::*, async_scheduler_integration::*, async_table_integration::*,
+    error_propagation::*, event_loop_manager::*, resource_lifecycle::*, scheduler::SystemScheduler,
+    semantic::SemanticContext, system_executor::*, table_runtime::*,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -32,15 +24,17 @@ mod async_execution_tests {
         let parameters = HashMap::new();
 
         // Submit system for execution
-        let future = async_runtime.submit_system(
-            system_def,
-            parameters,
-            TaskPriority::Normal,
-            Some(Duration::from_secs(10)),
-        ).expect("Should submit system successfully");
+        let future = async_runtime
+            .submit_system(
+                system_def,
+                parameters,
+                TaskPriority::Normal,
+                Some(Duration::from_secs(10)),
+            )
+            .expect("Should submit system successfully");
 
         let task_id = future.task_id();
-        
+
         // Test future properties
         assert_eq!(future.task_id(), task_id);
         assert_eq!(future.priority(), TaskPriority::Normal);
@@ -60,7 +54,8 @@ mod async_execution_tests {
         let system_def = create_complex_system_def();
         let parameters = HashMap::new();
 
-        let state_machine = builder.build_state_machine(&system_def, parameters)
+        let state_machine = builder
+            .build_state_machine(&system_def, parameters)
             .expect("Should build state machine");
 
         // Verify state machine structure
@@ -70,14 +65,18 @@ mod async_execution_tests {
 
         // Test state machine execution
         let mut executor = SystemStateMachineExecutor::new();
-        
+
         let mut state_machine_clone = state_machine.clone();
-        let result = executor.execute_step(&mut state_machine_clone)
+        let result = executor
+            .execute_step(&mut state_machine_clone)
             .expect("Should execute step");
 
         match result {
             ExecutionStepResult::Continue => {
-                assert!(state_machine_clone.current_state > 0, "Should advance state");
+                assert!(
+                    state_machine_clone.current_state > 0,
+                    "Should advance state"
+                );
             }
             ExecutionStepResult::Yield(_) => {
                 // Yield is acceptable for complex systems
@@ -108,7 +107,9 @@ mod async_execution_tests {
         ];
 
         // Schedule systems
-        let futures = scheduler.schedule_systems(requests).await
+        let futures = scheduler
+            .schedule_systems(requests)
+            .await
             .expect("Should schedule systems");
 
         assert_eq!(futures.len(), 3);
@@ -139,25 +140,34 @@ mod async_execution_tests {
         let system1 = create_test_system_def("concurrent_system1");
         let system2 = create_test_system_def("concurrent_system2");
 
-        let future1 = event_loop_clone.submit_system(
-            system1,
-            HashMap::new(),
-            TaskPriority::Normal,
-            Some(Duration::from_secs(5)),
-            HashMap::new(),
-        ).await.expect("Should submit system1");
+        let future1 = event_loop_clone
+            .submit_system(
+                system1,
+                HashMap::new(),
+                TaskPriority::Normal,
+                Some(Duration::from_secs(5)),
+                HashMap::new(),
+            )
+            .await
+            .expect("Should submit system1");
 
-        let future2 = event_loop_clone.submit_system(
-            system2,
-            HashMap::new(),
-            TaskPriority::High,
-            Some(Duration::from_secs(5)),
-            HashMap::new(),
-        ).await.expect("Should submit system2");
+        let future2 = event_loop_clone
+            .submit_system(
+                system2,
+                HashMap::new(),
+                TaskPriority::High,
+                Some(Duration::from_secs(5)),
+                HashMap::new(),
+            )
+            .await
+            .expect("Should submit system2");
 
         // Test event loop statistics
         let stats = event_loop_clone.get_stats();
-        assert!(stats.total_processed_events >= 2, "Should process system start events");
+        assert!(
+            stats.total_processed_events >= 2,
+            "Should process system start events"
+        );
 
         // Stop event loop
         event_loop_clone.stop().expect("Should stop event loop");
@@ -174,12 +184,15 @@ mod async_execution_tests {
         let resource_name = "test_resource".to_string();
 
         // Test resource acquisition
-        let result1 = resource_manager.acquire_resource(
-            resource_name.clone(),
-            task1,
-            ResourceAccess::Immutable,
-            Some(Duration::from_secs(10)),
-        ).await.expect("Should acquire resource");
+        let result1 = resource_manager
+            .acquire_resource(
+                resource_name.clone(),
+                task1,
+                ResourceAccess::Immutable,
+                Some(Duration::from_secs(10)),
+            )
+            .await
+            .expect("Should acquire resource");
 
         match result1 {
             AcquisitionResult::Acquired(lease) => {
@@ -190,12 +203,15 @@ mod async_execution_tests {
         }
 
         // Test conflicting access
-        let result2 = resource_manager.acquire_resource(
-            resource_name.clone(),
-            task2,
-            ResourceAccess::Mutable,
-            Some(Duration::from_secs(1)),
-        ).await.expect("Should handle conflicting access");
+        let result2 = resource_manager
+            .acquire_resource(
+                resource_name.clone(),
+                task2,
+                ResourceAccess::Mutable,
+                Some(Duration::from_secs(1)),
+            )
+            .await
+            .expect("Should handle conflicting access");
 
         match result2 {
             AcquisitionResult::WaitRequired { .. } => {
@@ -205,31 +221,36 @@ mod async_execution_tests {
         }
 
         // Test resource release
-        resource_manager.release_resource(
-            resource_name.clone(),
-            task1,
-            ReleaseReason::TaskCompleted,
-        ).await.expect("Should release resource");
+        resource_manager
+            .release_resource(resource_name.clone(), task1, ReleaseReason::TaskCompleted)
+            .await
+            .expect("Should release resource");
 
         // Test deadlock detection
         let task3 = TaskId::new();
         let resource_b = "resource_b".to_string();
 
         // Acquire both resources in different orders to simulate potential deadlock
-        let _lease_a = resource_manager.acquire_resource(
-            resource_name.clone(),
-            task3,
-            ResourceAccess::Mutable,
-            Some(Duration::from_secs(5)),
-        ).await.expect("Should acquire resource_a");
+        let _lease_a = resource_manager
+            .acquire_resource(
+                resource_name.clone(),
+                task3,
+                ResourceAccess::Mutable,
+                Some(Duration::from_secs(5)),
+            )
+            .await
+            .expect("Should acquire resource_a");
 
         // This should not create a deadlock in this simple case
-        let lease_b_result = resource_manager.acquire_resource(
-            resource_b.clone(),
-            task3,
-            ResourceAccess::Mutable,
-            Some(Duration::from_secs(5)),
-        ).await.expect("Should handle resource_b acquisition");
+        let lease_b_result = resource_manager
+            .acquire_resource(
+                resource_b.clone(),
+                task3,
+                ResourceAccess::Mutable,
+                Some(Duration::from_secs(5)),
+            )
+            .await
+            .expect("Should handle resource_b acquisition");
 
         match lease_b_result {
             AcquisitionResult::Acquired(_) => {
@@ -268,7 +289,9 @@ mod async_execution_tests {
             reason: "Resource already in use".to_string(),
         };
 
-        let result = error_manager.handle_error(task_id, resource_error.clone(), context.clone()).await
+        let result = error_manager
+            .handle_error(task_id, resource_error.clone(), context.clone())
+            .await
             .expect("Should handle error");
 
         // Default behavior should be to abort on unhandled errors
@@ -287,7 +310,9 @@ mod async_execution_tests {
             duration: Duration::from_secs(30),
         };
 
-        let timeout_result = error_manager.handle_error(task_id, timeout_error, context.clone()).await
+        let timeout_result = error_manager
+            .handle_error(task_id, timeout_error, context.clone())
+            .await
             .expect("Should handle timeout error");
 
         // Test system error
@@ -296,7 +321,9 @@ mod async_execution_tests {
             message: "Internal system error".to_string(),
         };
 
-        let system_result = error_manager.handle_error(task_id, system_error, context).await
+        let system_result = error_manager
+            .handle_error(task_id, system_error, context)
+            .await
             .expect("Should handle system error");
 
         // Test error statistics
@@ -309,25 +336,21 @@ mod async_execution_tests {
     async fn test_async_table_integration() {
         let table_runtime = create_test_table_runtime();
         let resource_manager = Arc::new(ResourceLifecycleManager::new(
-            ResourceLifecyclePolicies::default()
+            ResourceLifecyclePolicies::default(),
         ));
-        let error_manager = Arc::new(ErrorPropagationManager::new(
-            ErrorHandlingConfig::default()
-        ));
+        let error_manager = Arc::new(ErrorPropagationManager::new(ErrorHandlingConfig::default()));
         let config = AsyncTableConfig::default();
 
-        let async_table = AsyncTableRuntime::new(
-            table_runtime,
-            resource_manager,
-            error_manager,
-            config,
-        );
+        let async_table =
+            AsyncTableRuntime::new(table_runtime, resource_manager, error_manager, config);
 
         let task_id = TaskId::new();
 
         // Test simple query execution
         let query_spec = create_test_query_spec("test_table");
-        let query_future = async_table.execute_query(task_id, query_spec).await
+        let query_future = async_table
+            .execute_query(task_id, query_spec)
+            .await
             .expect("Should create query future");
 
         let query_id = query_future.query_id();
@@ -339,27 +362,38 @@ mod async_execution_tests {
             create_test_query_spec("table2"),
         ];
 
-        let batch_futures = async_table.execute_batch(task_id, queries).await
+        let batch_futures = async_table
+            .execute_batch(task_id, queries)
+            .await
             .expect("Should execute batch queries");
 
-        assert_eq!(batch_futures.len(), 2, "Should create futures for all queries");
+        assert_eq!(
+            batch_futures.len(),
+            2,
+            "Should create futures for all queries"
+        );
 
         // Test transaction support
-        let transaction = async_table.begin_transaction(
-            task_id,
-            IsolationLevel::ReadCommitted,
-        ).await.expect("Should begin transaction");
+        let transaction = async_table
+            .begin_transaction(task_id, IsolationLevel::ReadCommitted)
+            .await
+            .expect("Should begin transaction");
 
         assert_eq!(transaction.task_id, task_id);
         assert_eq!(transaction.isolation_level, IsolationLevel::ReadCommitted);
 
         // Commit transaction
-        async_table.commit_transaction(transaction).await
+        async_table
+            .commit_transaction(transaction)
+            .await
             .expect("Should commit transaction");
 
         // Test async table statistics
         let stats = async_table.get_stats();
-        assert!(stats.total_queries_executed >= 0, "Should track query statistics");
+        assert!(
+            stats.total_queries_executed >= 0,
+            "Should track query statistics"
+        );
     }
 
     /// Test concurrent system execution scenarios
@@ -381,7 +415,9 @@ mod async_execution_tests {
         ];
 
         let start_time = Instant::now();
-        let futures = scheduler.schedule_systems(requests).await
+        let futures = scheduler
+            .schedule_systems(requests)
+            .await
             .expect("Should schedule concurrent systems");
 
         // All systems should be schedulable since they don't conflict
@@ -389,10 +425,16 @@ mod async_execution_tests {
 
         // Test scheduler statistics
         let stats = scheduler.get_stats();
-        assert!(stats.total_systems_scheduled >= 3, "Should track scheduled systems");
+        assert!(
+            stats.total_systems_scheduled >= 3,
+            "Should track scheduled systems"
+        );
 
         let scheduling_time = start_time.elapsed();
-        assert!(scheduling_time < Duration::from_secs(1), "Scheduling should be fast");
+        assert!(
+            scheduling_time < Duration::from_secs(1),
+            "Scheduling should be fast"
+        );
     }
 
     /// Test resource management and borrow safety constraints
@@ -405,15 +447,15 @@ mod async_execution_tests {
         // Create systems with conflicting resource access patterns
         let reader_system1 = create_resource_system_with_access(
             "reader1",
-            vec![("shared_resource", ResourceAccess::Immutable)]
+            vec![("shared_resource", ResourceAccess::Immutable)],
         );
         let reader_system2 = create_resource_system_with_access(
             "reader2",
-            vec![("shared_resource", ResourceAccess::Immutable)]
+            vec![("shared_resource", ResourceAccess::Immutable)],
         );
         let writer_system = create_resource_system_with_access(
             "writer",
-            vec![("shared_resource", ResourceAccess::Mutable)]
+            vec![("shared_resource", ResourceAccess::Mutable)],
         );
 
         // Multiple readers should be allowed concurrently
@@ -422,17 +464,23 @@ mod async_execution_tests {
             create_execution_request(reader_system2, TaskPriority::Normal),
         ];
 
-        let reader_futures = scheduler.schedule_systems(reader_requests).await
+        let reader_futures = scheduler
+            .schedule_systems(reader_requests)
+            .await
             .expect("Should schedule reader systems");
 
-        assert_eq!(reader_futures.len(), 2, "Multiple readers should be allowed");
+        assert_eq!(
+            reader_futures.len(),
+            2,
+            "Multiple readers should be allowed"
+        );
 
         // Writer should conflict with readers
-        let writer_request = vec![
-            create_execution_request(writer_system, TaskPriority::High),
-        ];
+        let writer_request = vec![create_execution_request(writer_system, TaskPriority::High)];
 
-        let writer_futures = scheduler.schedule_systems(writer_request).await
+        let writer_futures = scheduler
+            .schedule_systems(writer_request)
+            .await
             .expect("Should handle writer scheduling");
 
         // Writer scheduling should be handled (may wait for readers to complete)
@@ -458,18 +506,17 @@ mod async_execution_tests {
             ],
         };
 
-        error_manager.register_recovery_strategy(
-            "retry_resource_conflicts".to_string(),
-            retry_strategy,
-        ).expect("Should register recovery strategy");
+        error_manager
+            .register_recovery_strategy("retry_resource_conflicts".to_string(), retry_strategy)
+            .expect("Should register recovery strategy");
 
         let task_id = TaskId::new();
 
         // Test recovery attempt
-        let recovery_result = error_manager.attempt_recovery(
-            task_id,
-            "retry_resource_conflicts",
-        ).await.expect("Should attempt recovery");
+        let recovery_result = error_manager
+            .attempt_recovery(task_id, "retry_resource_conflicts")
+            .await
+            .expect("Should attempt recovery");
 
         match recovery_result {
             RecoveryResult::Success => {
@@ -502,16 +549,20 @@ mod async_execution_tests {
             dependent_tasks: target_tasks.clone(),
         };
 
-        let propagation_result = error_manager.handle_error(
-            source_task,
-            propagation_error,
-            context,
-        ).await.expect("Should handle error propagation");
+        let propagation_result = error_manager
+            .handle_error(source_task, propagation_error, context)
+            .await
+            .expect("Should handle error propagation");
 
         // Error should be handled in some way
         match propagation_result {
-            ErrorHandlingResult::Propagate { target_tasks: propagated_to } => {
-                assert!(!propagated_to.is_empty(), "Should propagate to dependent tasks");
+            ErrorHandlingResult::Propagate {
+                target_tasks: propagated_to,
+            } => {
+                assert!(
+                    !propagated_to.is_empty(),
+                    "Should propagate to dependent tasks"
+                );
             }
             _ => {
                 // Other handling strategies are acceptable
@@ -527,11 +578,7 @@ mod async_execution_tests {
         let semantic_context = create_test_semantic_context();
         let event_loop_config = EventLoopConfig::default();
 
-        let event_loop = EventLoopManager::new(
-            runtime_config,
-            semantic_context,
-            event_loop_config,
-        );
+        let event_loop = EventLoopManager::new(runtime_config, semantic_context, event_loop_config);
 
         // Register a test table
         let table_runtime = create_test_table_runtime();
@@ -543,13 +590,16 @@ mod async_execution_tests {
         let table_runtimes = HashMap::new();
 
         // Submit the system for execution
-        let future = event_loop.submit_system(
-            complex_system,
-            parameters,
-            TaskPriority::Normal,
-            Some(Duration::from_secs(30)),
-            table_runtimes,
-        ).await.expect("Should submit complex system");
+        let future = event_loop
+            .submit_system(
+                complex_system,
+                parameters,
+                TaskPriority::Normal,
+                Some(Duration::from_secs(30)),
+                table_runtimes,
+            )
+            .await
+            .expect("Should submit complex system");
 
         let task_id = future.task_id();
 
@@ -564,7 +614,9 @@ mod async_execution_tests {
         let execution_result = timeout(Duration::from_secs(5), future).await;
 
         // Stop event loop
-        event_loop_arc.stop().expect("Should stop event loop gracefully");
+        event_loop_arc
+            .stop()
+            .expect("Should stop event loop gracefully");
 
         // Wait for event loop to shut down
         let _event_loop_result = event_loop_task.await;
@@ -590,7 +642,10 @@ mod async_execution_tests {
 
         // Verify event loop statistics
         let final_stats = event_loop_arc.get_stats();
-        assert!(final_stats.total_processed_events > 0, "Should have processed events");
+        assert!(
+            final_stats.total_processed_events > 0,
+            "Should have processed events"
+        );
     }
 
     // Helper functions for creating test data
@@ -598,20 +653,18 @@ mod async_execution_tests {
     fn create_test_system_def(name: &str) -> SystemDef {
         SystemDef {
             name: name.to_string(),
-            parameters: vec![
-                SystemParameter::Value {
-                    name: "input".to_string(),
-                    param_type: Type::I32,
-                    default_value: None,
-                }
-            ],
+            parameters: vec![SystemParameter::Value {
+                name: "input".to_string(),
+                param_type: Type::I32,
+                default_value: None,
+            }],
             return_type: Some(Type::I32),
-            body: vec![
-                Statement::Expression(Expression::Literal(Literal::Integer(IntegerLiteral {
+            body: vec![Statement::Expression(Expression::Literal(
+                Literal::Integer(IntegerLiteral {
                     value: 42,
                     suffix: None,
-                })))
-            ],
+                }),
+            ))],
         }
     }
 
@@ -630,86 +683,82 @@ mod async_execution_tests {
                         value: 10,
                         suffix: None,
                     }))),
-                }
+                },
             ],
             return_type: Some(Type::I32),
-            body: vec![
-                Statement::ForLoop {
-                    variable: "i".to_string(),
-                    iterable: Expression::Identifier("iterations".to_string()),
-                    body: vec![
-                        Statement::Expression(Expression::Query(QuerySpec {
-                            projections: vec![FieldProjection {
-                                name: "count".to_string(),
-                                expression: Expression::Literal(Literal::Integer(IntegerLiteral {
-                                    value: 1,
-                                    suffix: None,
-                                })),
-                            }],
-                            from_table: "database".to_string(),
-                            where_clause: None,
-                            joins: Vec::new(),
-                        }))
-                    ],
-                }
-            ],
+            body: vec![Statement::ForLoop {
+                variable: "i".to_string(),
+                iterable: Expression::Identifier("iterations".to_string()),
+                body: vec![Statement::Expression(Expression::Query(QuerySpec {
+                    projections: vec![FieldProjection {
+                        name: "count".to_string(),
+                        expression: Expression::Literal(Literal::Integer(IntegerLiteral {
+                            value: 1,
+                            suffix: None,
+                        })),
+                    }],
+                    from_table: "database".to_string(),
+                    where_clause: None,
+                    joins: Vec::new(),
+                }))],
+            }],
         }
     }
 
     fn create_resource_dependent_system(name: &str, resources: Vec<&str>) -> SystemDef {
-        let parameters: Vec<SystemParameter> = resources.into_iter().map(|resource| {
-            SystemParameter::Resource {
+        let parameters: Vec<SystemParameter> = resources
+            .into_iter()
+            .map(|resource| SystemParameter::Resource {
                 name: resource.to_string(),
                 access: ResourceAccess::Immutable,
-            }
-        }).collect();
+            })
+            .collect();
 
         SystemDef {
             name: name.to_string(),
             parameters,
             return_type: Some(Type::I32),
-            body: vec![
-                Statement::Expression(Expression::Literal(Literal::Integer(IntegerLiteral {
+            body: vec![Statement::Expression(Expression::Literal(
+                Literal::Integer(IntegerLiteral {
                     value: 0,
                     suffix: None,
-                })))
-            ],
+                }),
+            ))],
         }
     }
 
     fn create_resource_system_with_access(
         name: &str,
-        resources: Vec<(&str, ResourceAccess)>
+        resources: Vec<(&str, ResourceAccess)>,
     ) -> SystemDef {
-        let parameters: Vec<SystemParameter> = resources.into_iter().map(|(resource, access)| {
-            SystemParameter::Resource {
+        let parameters: Vec<SystemParameter> = resources
+            .into_iter()
+            .map(|(resource, access)| SystemParameter::Resource {
                 name: resource.to_string(),
                 access,
-            }
-        }).collect();
+            })
+            .collect();
 
         SystemDef {
             name: name.to_string(),
             parameters,
             return_type: Some(Type::I32),
-            body: vec![
-                Statement::Expression(Expression::Literal(Literal::Integer(IntegerLiteral {
+            body: vec![Statement::Expression(Expression::Literal(
+                Literal::Integer(IntegerLiteral {
                     value: 0,
                     suffix: None,
-                })))
-            ],
+                }),
+            ))],
         }
     }
 
     fn create_complex_end_to_end_system() -> SystemDef {
         SystemDef {
             name: "end_to_end_system".to_string(),
-            parameters: vec![
-                SystemParameter::Resource {
-                    name: "test_table".to_string(),
-                    access: ResourceAccess::Mutable,
-                }
-            ],
+            parameters: vec![SystemParameter::Resource {
+                name: "test_table".to_string(),
+                access: ResourceAccess::Mutable,
+            }],
             return_type: Some(Type::I32),
             body: vec![
                 Statement::VariableDecl {
@@ -732,12 +781,15 @@ mod async_execution_tests {
                         right: Box::new(Expression::Literal(Literal::Boolean(true))),
                     })),
                     joins: Vec::new(),
-                }))
+                })),
             ],
         }
     }
 
-    fn create_execution_request(system_def: SystemDef, priority: TaskPriority) -> SystemExecutionRequest {
+    fn create_execution_request(
+        system_def: SystemDef,
+        priority: TaskPriority,
+    ) -> SystemExecutionRequest {
         SystemExecutionRequest {
             system_def,
             parameters: HashMap::new(),
@@ -749,30 +801,33 @@ mod async_execution_tests {
 
     fn create_test_semantic_context() -> SemanticContext {
         let mut context = SemanticContext::new();
-        
+
         // Add some test function signatures
-        context.functions.insert("test_function".to_string(), crate::semantic::FunctionSignature {
-            name: "test_function".to_string(),
-            parameters: Vec::new(),
-            return_type: Type::I32,
-            is_async: true,
-        });
+        context.functions.insert(
+            "test_function".to_string(),
+            crate::semantic::FunctionSignature {
+                name: "test_function".to_string(),
+                parameters: Vec::new(),
+                return_type: Type::I32,
+                is_async: true,
+            },
+        );
 
         context
     }
 
     fn create_test_table_runtime() -> TableRuntime {
         let mut table = TableRuntime::new();
-        
+
         // Add some test data
         let mut row_data = HashMap::new();
         row_data.insert("id".to_string(), ColumnValue::U64(1));
         row_data.insert("name".to_string(), ColumnValue::String("test".to_string()));
         row_data.insert("active".to_string(), ColumnValue::Bool(true));
-        
+
         let row = TableRow { values: row_data };
         table.insert_row(row).expect("Should insert test row");
-        
+
         table
     }
 
@@ -790,7 +845,10 @@ mod async_execution_tests {
 
     fn create_test_parameters() -> HashMap<String, ColumnValue> {
         let mut params = HashMap::new();
-        params.insert("test_param".to_string(), ColumnValue::String("test_value".to_string()));
+        params.insert(
+            "test_param".to_string(),
+            ColumnValue::String("test_value".to_string()),
+        );
         params
     }
 }
@@ -804,7 +862,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_full_async_execution_integration() {
         // This test verifies that all components work together correctly
-        
+
         // 1. Create the complete execution environment
         let runtime_config = RuntimeConfig {
             max_concurrent_tasks: 10,
@@ -816,11 +874,7 @@ mod integration_tests {
         let semantic_context = create_test_semantic_context();
         let event_loop_config = EventLoopConfig::default();
 
-        let event_loop = EventLoopManager::new(
-            runtime_config,
-            semantic_context,
-            event_loop_config,
-        );
+        let event_loop = EventLoopManager::new(runtime_config, semantic_context, event_loop_config);
 
         // 2. Set up resources and tables
         let table_runtime = create_test_table_runtime();
@@ -841,7 +895,7 @@ mod integration_tests {
                         value: 100,
                         suffix: None,
                     }))),
-                }
+                },
             ],
             return_type: Some(Type::I32),
             body: vec![
@@ -873,47 +927,51 @@ mod integration_tests {
                     iterable: Expression::Call {
                         function: Box::new(Expression::Identifier("range".to_string())),
                         arguments: vec![
-                            Expression::Literal(Literal::Integer(IntegerLiteral { value: 0, suffix: None })),
+                            Expression::Literal(Literal::Integer(IntegerLiteral {
+                                value: 0,
+                                suffix: None,
+                            })),
                             Expression::Identifier("active_users".to_string()),
                             Expression::Identifier("batch_size".to_string()),
                         ],
                         return_type: Some(Type::I32),
                     },
-                    body: vec![
-                        Statement::Expression(Expression::Call {
-                            function: Box::new(Expression::Identifier("process_user_batch".to_string())),
-                            arguments: vec![Expression::Identifier("batch".to_string())],
-                            return_type: Some(Type::I32),
-                        })
-                    ],
-                }
+                    body: vec![Statement::Expression(Expression::Call {
+                        function: Box::new(Expression::Identifier(
+                            "process_user_batch".to_string(),
+                        )),
+                        arguments: vec![Expression::Identifier("batch".to_string())],
+                        return_type: Some(Type::I32),
+                    })],
+                },
             ],
         };
 
         // 4. Submit the system for execution
         let start_time = Instant::now();
-        let execution_future = event_loop.submit_system(
-            user_processing_system,
-            HashMap::new(),
-            TaskPriority::Normal,
-            Some(Duration::from_secs(20)),
-            HashMap::new(),
-        ).await.expect("Should submit user processing system");
+        let execution_future = event_loop
+            .submit_system(
+                user_processing_system,
+                HashMap::new(),
+                TaskPriority::Normal,
+                Some(Duration::from_secs(20)),
+                HashMap::new(),
+            )
+            .await
+            .expect("Should submit user processing system");
 
         // 5. Run the event loop and wait for completion
         let event_loop_arc = Arc::new(event_loop);
         let event_loop_handle = event_loop_arc.clone();
-        
-        let event_loop_task = tokio::spawn(async move {
-            event_loop_handle.start().await
-        });
+
+        let event_loop_task = tokio::spawn(async move { event_loop_handle.start().await });
 
         // 6. Wait for execution to complete
         let execution_result = timeout(Duration::from_secs(15), execution_future).await;
 
         // 7. Stop the event loop
         event_loop_arc.stop().expect("Should stop event loop");
-        
+
         // Wait for event loop to finish
         let _ = timeout(Duration::from_secs(5), event_loop_task).await;
 
@@ -926,7 +984,7 @@ mod integration_tests {
                 match system_result {
                     Ok(result) => {
                         println!("Integration test completed successfully: {:?}", result);
-                        
+
                         // Verify the result contains expected data
                         match result {
                             SystemExecutionResult::Success { return_value, .. } => {
@@ -937,7 +995,7 @@ mod integration_tests {
                     }
                     Err(error) => {
                         println!("System execution failed with error: {:?}", error);
-                        
+
                         // Some errors are acceptable in test environment
                         match error {
                             AsyncExecutionError::ResourceConflict { .. } => {
@@ -955,16 +1013,21 @@ mod integration_tests {
                 }
             }
             Err(_timeout) => {
-                println!("Integration test timed out - this may be expected for complex operations");
+                println!(
+                    "Integration test timed out - this may be expected for complex operations"
+                );
             }
         }
 
         // 9. Verify final statistics
         let final_stats = event_loop_arc.get_stats();
-        assert!(final_stats.total_processed_events > 0, "Should have processed events");
-        
+        assert!(
+            final_stats.total_processed_events > 0,
+            "Should have processed events"
+        );
+
         println!("Final event loop statistics: {:?}", final_stats);
-        
+
         // Test passed if we reach this point without panicking
         println!("Integration test completed successfully");
     }
@@ -977,31 +1040,48 @@ mod integration_tests {
         let scheduler = AsyncSystemScheduler::new(runtime_config, semantic_context);
 
         // Create multiple systems that compete for the same resource
-        let systems: Vec<SystemDef> = (0..5).map(|i| {
-            create_resource_dependent_system(&format!("concurrent_system_{}", i), vec!["shared_db"])
-        }).collect();
+        let systems: Vec<SystemDef> = (0..5)
+            .map(|i| {
+                create_resource_dependent_system(
+                    &format!("concurrent_system_{}", i),
+                    vec!["shared_db"],
+                )
+            })
+            .collect();
 
-        let requests: Vec<SystemExecutionRequest> = systems.into_iter().map(|system| {
-            create_execution_request(system, TaskPriority::Normal)
-        }).collect();
+        let requests: Vec<SystemExecutionRequest> = systems
+            .into_iter()
+            .map(|system| create_execution_request(system, TaskPriority::Normal))
+            .collect();
 
         let start_time = Instant::now();
-        let futures = scheduler.schedule_systems(requests).await
+        let futures = scheduler
+            .schedule_systems(requests)
+            .await
             .expect("Should schedule all systems");
 
         let scheduling_time = start_time.elapsed();
-        
+
         // All systems should be scheduled (though they may wait for resources)
         assert_eq!(futures.len(), 5, "All systems should be scheduled");
-        
+
         // Scheduling should be reasonably fast even with contention
-        assert!(scheduling_time < Duration::from_secs(2), "Scheduling should be efficient");
+        assert!(
+            scheduling_time < Duration::from_secs(2),
+            "Scheduling should be efficient"
+        );
 
         // Verify scheduler statistics
         let stats = scheduler.get_stats();
-        assert_eq!(stats.total_systems_scheduled, 5, "Should track all scheduled systems");
-        
-        println!("Concurrent execution test completed - scheduling time: {:?}", scheduling_time);
+        assert_eq!(
+            stats.total_systems_scheduled, 5,
+            "Should track all scheduled systems"
+        );
+
+        println!(
+            "Concurrent execution test completed - scheduling time: {:?}",
+            scheduling_time
+        );
     }
 
     /// Test error recovery and resilience
@@ -1026,9 +1106,7 @@ mod integration_tests {
                 base: Duration::from_millis(10),
                 multiplier: 1.5,
             },
-            conditions: vec![
-                RetryCondition::ErrorType("ResourceConflict".to_string()),
-            ],
+            conditions: vec![RetryCondition::ErrorType("ResourceConflict".to_string())],
         };
 
         let fallback_strategy = RecoveryStrategy::Fallback {
@@ -1036,9 +1114,11 @@ mod integration_tests {
             fallback_parameters: HashMap::new(),
         };
 
-        error_manager.register_recovery_strategy("retry".to_string(), retry_strategy)
+        error_manager
+            .register_recovery_strategy("retry".to_string(), retry_strategy)
             .expect("Should register retry strategy");
-        error_manager.register_recovery_strategy("fallback".to_string(), fallback_strategy)
+        error_manager
+            .register_recovery_strategy("fallback".to_string(), fallback_strategy)
             .expect("Should register fallback strategy");
 
         // Test multiple error scenarios
@@ -1053,7 +1133,9 @@ mod integration_tests {
         };
 
         // Test retry recovery
-        let retry_result = error_manager.attempt_recovery(task_id, "retry").await
+        let retry_result = error_manager
+            .attempt_recovery(task_id, "retry")
+            .await
             .expect("Should attempt retry recovery");
 
         match retry_result {
@@ -1066,7 +1148,9 @@ mod integration_tests {
         }
 
         // Test fallback recovery
-        let fallback_result = error_manager.attempt_recovery(task_id, "fallback").await
+        let fallback_result = error_manager
+            .attempt_recovery(task_id, "fallback")
+            .await
             .expect("Should attempt fallback recovery");
 
         match fallback_result {

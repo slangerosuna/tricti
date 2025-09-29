@@ -24,7 +24,9 @@ fn parses_char_literal() {
     assert_eq!(
         program,
         Program {
-            statements: vec![Statement::Expression(Expression::Literal(Literal::Char('a')))],
+            statements: vec![Statement::Expression(Expression::Literal(Literal::Char(
+                'a'
+            )))],
         }
     );
 }

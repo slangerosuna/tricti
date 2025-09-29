@@ -16,8 +16,12 @@ fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
     let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
     gen.generate_program(&program).expect("codegen");
 
-    if Path::new(obj).exists() { let _ = fs::remove_file(obj); }
-    if Path::new(exe).exists() { let _ = fs::remove_file(exe); }
+    if Path::new(obj).exists() {
+        let _ = fs::remove_file(obj);
+    }
+    if Path::new(exe).exists() {
+        let _ = fs::remove_file(exe);
+    }
 
     gen.write_object_file(obj).expect("write obj");
 
@@ -34,7 +38,10 @@ fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
 
 #[test]
 fn prints_various_types() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         println("hello")
         println(42)
@@ -49,7 +56,10 @@ fn prints_various_types() {
 
 #[test]
 fn prints_string_variable_and_utf8() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         s := "hello, world"
         println(s)
@@ -65,7 +75,10 @@ fn prints_string_variable_and_utf8() {
 
 #[test]
 fn mixed_printf_formats() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         println("x", 5, 2.5, true)
     "#;
@@ -75,7 +88,10 @@ fn mixed_printf_formats() {
 
 #[test]
 fn len_of_string_literal_and_var() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         println(len("abc"))
         s := "hé"
@@ -87,7 +103,10 @@ fn len_of_string_literal_and_var() {
 
 #[test]
 fn contains_substring_basic() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         main :: () => {
             println(contains("hello", "ell"))
@@ -102,7 +121,10 @@ fn contains_substring_basic() {
 
 #[test]
 fn streq_basic() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         println(streq("a", "a"))
         println(streq("a", "b"))
@@ -116,7 +138,10 @@ fn streq_basic() {
 
 #[test]
 fn starts_with_and_ends_with() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         main :: () => {
             println(starts_with("hello", "he"))
@@ -127,13 +152,20 @@ fn starts_with_and_ends_with() {
             println(ends_with("héllo", "éllo"))
         }
     "#;
-    let stdout = compile_and_run(src, "tests/tmp_prefix_suffix.o", "tests/tmp_prefix_suffix.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_prefix_suffix.o",
+        "tests/tmp_prefix_suffix.out",
+    );
     assert_eq!(stdout, "true\ntrue\nfalse\ntrue\ntrue\ntrue\n");
 }
 
 #[test]
 fn find_returns_index_or_minus_one() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         main :: () => {
             println(find("hello", "ell"))
@@ -148,7 +180,10 @@ fn find_returns_index_or_minus_one() {
 
 #[test]
 fn string_helper_edge_cases() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         main :: () => {
             println(contains("", ""))
@@ -163,6 +198,10 @@ fn string_helper_edge_cases() {
             println(find("abc", "d"))
         }
     "#;
-    let stdout = compile_and_run(src, "tests/tmp_string_edges.o", "tests/tmp_string_edges.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_string_edges.o",
+        "tests/tmp_string_edges.out",
+    );
     assert_eq!(stdout, "true\ntrue\ntrue\ntrue\ntrue\nfalse\n0\n0\n2\n-1\n");
 }

@@ -1,17 +1,17 @@
+use crate::ast::{ResourceAccess, SystemDef, SystemParameter};
 use crate::async_runtime::{
-    AsyncSystemRuntime, AsyncExecutionError, SystemFuture, SystemExecutionResult,
-    TaskId, TaskPriority, RuntimeConfig, SystemExecutionState, YieldPoint
+    AsyncExecutionError, AsyncSystemRuntime, RuntimeConfig, SystemExecutionResult,
+    SystemExecutionState, SystemFuture, TaskId, TaskPriority, YieldPoint,
 };
 use crate::async_scheduler_integration::{AsyncSystemScheduler, SystemExecutionRequest};
-use crate::system_executor::{SystemStateMachine, SystemStateMachineExecutor, ExecutionStepResult};
-use crate::ast::{SystemDef, SystemParameter, ResourceAccess};
-use crate::table_runtime::{TableRuntime, ColumnValue};
 use crate::semantic::SemanticContext;
-use std::collections::{HashMap, VecDeque, BinaryHeap, HashSet};
-use std::sync::{Arc, Mutex, RwLock, mpsc, Condvar};
+use crate::system_executor::{ExecutionStepResult, SystemStateMachine, SystemStateMachineExecutor};
+use crate::table_runtime::{ColumnValue, TableRuntime};
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
+use std::sync::{mpsc, Arc, Condvar, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use std::cmp::Ordering;
 
 /// Central event loop manager for coordinating async system execution
 pub struct EventLoopManager {
@@ -131,7 +131,9 @@ impl PartialOrd for PriorityEvent {
 impl Ord for PriorityEvent {
     fn cmp(&self, other: &Self) -> Ordering {
         // Higher priority first, then earlier timestamp
-        other.priority.cmp(&self.priority)
+        other
+            .priority
+            .cmp(&self.priority)
             .then_with(|| self.timestamp.cmp(&other.timestamp))
     }
 }
@@ -216,7 +218,7 @@ impl EventLoopManager {
         let event_queue = Arc::new(Mutex::new(EventQueue::new(config.event_queue_capacity)));
         let timer_manager = Arc::new(Mutex::new(TimerManager::new()));
         let executor_pool = Arc::new(ExecutorPool::new(config.clone()));
-        
+
         let state = Arc::new(RwLock::new(EventLoopState {
             is_running: false,
             active_systems: 0,
@@ -302,12 +304,15 @@ impl EventLoopManager {
         let task_id = future.task_id();
 
         // Enqueue start event
-        self.enqueue_event(SystemEvent::SystemStart {
-            task_id,
-            system_def,
-            parameters,
+        self.enqueue_event(
+            SystemEvent::SystemStart {
+                task_id,
+                system_def,
+                parameters,
+                priority,
+            },
             priority,
-        }, priority)?;
+        )?;
 
         Ok(future)
     }
@@ -321,7 +326,7 @@ impl EventLoopManager {
     ) -> Result<TimerId, AsyncExecutionError> {
         let mut timer_manager = self.timer_manager.lock().unwrap();
         let timer_id = timer_manager.schedule(task_id, delay, event);
-        
+
         // Update state
         {
             let mut state = self.state.write().unwrap();
@@ -335,7 +340,7 @@ impl EventLoopManager {
     pub fn cancel_timer(&self, timer_id: TimerId) -> Result<(), AsyncExecutionError> {
         let mut timer_manager = self.timer_manager.lock().unwrap();
         timer_manager.cancel(timer_id);
-        
+
         // Update state
         {
             let mut state = self.state.write().unwrap();
@@ -353,7 +358,7 @@ impl EventLoopManager {
     ) -> Result<(), AsyncExecutionError> {
         let mut queue = self.event_queue.lock().unwrap();
         queue.enqueue(event, priority)?;
-        
+
         // Update state
         {
             let mut state = self.state.write().unwrap();
@@ -364,11 +369,36 @@ impl EventLoopManager {
         Ok(())
     }
 
+    /// Drive the underlying async runtime and surface resulting events.
+    fn poll_async_runtime(&self) -> Result<(), AsyncExecutionError> {
+        let has_work = self.scheduler.tick_runtime()?;
+        let completions = self.scheduler.drain_completed_tasks();
+
+        for completion in completions {
+            self.scheduler.record_task_completion(&completion);
+
+            let task_id = completion.task_id;
+            let priority = completion.priority;
+            let result = completion.result;
+
+            self.enqueue_event(SystemEvent::SystemComplete { task_id, result }, priority)?;
+        }
+
+        if has_work {
+            let mut state = self.state.write().unwrap();
+            state.last_activity = Instant::now();
+        }
+
+        Ok(())
+    }
+
     /// Main event loop
     fn run_event_loop(&self) -> Result<(), AsyncExecutionError> {
         let mut last_timer_check = Instant::now();
-        
+
         loop {
+            self.poll_async_runtime()?;
+
             // Check for shutdown signal
             {
                 let (lock, _) = &*self.shutdown_signal;
@@ -394,7 +424,7 @@ impl EventLoopManager {
 
         // Shutdown cleanup
         self.shutdown_cleanup()?;
-        
+
         {
             let mut state = self.state.write().unwrap();
             state.is_running = false;
@@ -407,7 +437,7 @@ impl EventLoopManager {
     fn process_timer_events(&self) -> Result<(), AsyncExecutionError> {
         let mut timer_manager = self.timer_manager.lock().unwrap();
         let fired_timers = timer_manager.get_fired_timers();
-        
+
         for timer in fired_timers {
             self.enqueue_event(timer.event, TaskPriority::Normal)?;
         }
@@ -419,34 +449,45 @@ impl EventLoopManager {
     fn dequeue_event(&self) -> Option<SystemEvent> {
         let mut queue = self.event_queue.lock().unwrap();
         let event = queue.dequeue();
-        
+
         if event.is_some() {
             let mut state = self.state.write().unwrap();
             state.pending_events = state.pending_events.saturating_sub(1);
             state.total_processed_events += 1;
         }
-        
+
         event
     }
 
     /// Process a single event
     fn process_event(&self, event: SystemEvent) -> Result<(), AsyncExecutionError> {
         let start_time = Instant::now();
-        
+
         match event {
-            SystemEvent::SystemStart { task_id, system_def, parameters, priority } => {
+            SystemEvent::SystemStart {
+                task_id,
+                system_def,
+                parameters,
+                priority,
+            } => {
                 self.handle_system_start(task_id, system_def, parameters, priority)?;
             }
             SystemEvent::SystemComplete { task_id, result } => {
                 self.handle_system_complete(task_id, result)?;
             }
-            SystemEvent::SystemYield { task_id, yield_point } => {
+            SystemEvent::SystemYield {
+                task_id,
+                yield_point,
+            } => {
                 self.handle_system_yield(task_id, yield_point)?;
             }
             SystemEvent::SystemResume { task_id } => {
                 self.handle_system_resume(task_id)?;
             }
-            SystemEvent::ResourceAvailable { resource_name, available_for } => {
+            SystemEvent::ResourceAvailable {
+                resource_name,
+                available_for,
+            } => {
                 self.handle_resource_available(resource_name, available_for)?;
             }
             SystemEvent::TimerExpired { timer_id, task_id } => {
@@ -467,7 +508,7 @@ impl EventLoopManager {
             let total_events = state.total_processed_events as f64;
             let current_avg = state.average_latency.as_nanos() as f64;
             let new_latency = latency.as_nanos() as f64;
-            
+
             // Running average
             let new_avg = (current_avg * (total_events - 1.0) + new_latency) / total_events;
             state.average_latency = Duration::from_nanos(new_avg as u64);
@@ -550,10 +591,7 @@ impl EventLoopManager {
     ) -> Result<(), AsyncExecutionError> {
         // Resume systems waiting for this resource
         for task_id in available_for {
-            self.enqueue_event(
-                SystemEvent::SystemResume { task_id },
-                TaskPriority::Normal,
-            )?;
+            self.enqueue_event(SystemEvent::SystemResume { task_id }, TaskPriority::Normal)?;
         }
 
         Ok(())
@@ -620,7 +658,11 @@ impl EventQueue {
         }
     }
 
-    pub fn enqueue(&mut self, event: SystemEvent, priority: TaskPriority) -> Result<(), AsyncExecutionError> {
+    pub fn enqueue(
+        &mut self,
+        event: SystemEvent,
+        priority: TaskPriority,
+    ) -> Result<(), AsyncExecutionError> {
         if self.events.len() >= self.capacity {
             return Err(AsyncExecutionError::SystemError {
                 system: "event_queue".to_string(),
@@ -700,9 +742,9 @@ impl ExecutorPool {
     pub fn new(config: EventLoopConfig) -> Self {
         let (work_sender, work_receiver) = mpsc::channel();
         let work_receiver = Arc::new(Mutex::new(work_receiver));
-        
+
         let mut workers = Vec::with_capacity(config.max_executor_threads);
-        
+
         for id in 0..config.max_executor_threads {
             workers.push(Worker::new(id, Arc::clone(&work_receiver)));
         }
@@ -716,12 +758,12 @@ impl ExecutorPool {
     }
 
     pub fn submit_work(&self, work: WorkItem) -> Result<(), AsyncExecutionError> {
-        self.work_sender.send(work).map_err(|_| {
-            AsyncExecutionError::SystemError {
+        self.work_sender
+            .send(work)
+            .map_err(|_| AsyncExecutionError::SystemError {
                 system: "executor_pool".to_string(),
                 message: "Failed to submit work to executor pool".to_string(),
-            }
-        })
+            })
     }
 }
 
@@ -755,10 +797,14 @@ impl Worker {
 
     fn process_work_item(work: WorkItem) -> Result<(), AsyncExecutionError> {
         match work {
-            WorkItem::ExecuteStep { task_id, mut state_machine, mut executor } => {
+            WorkItem::ExecuteStep {
+                task_id,
+                mut state_machine,
+                mut executor,
+            } => {
                 // Execute one step of the state machine
                 let result = executor.execute_step(&mut state_machine)?;
-                
+
                 match result {
                     ExecutionStepResult::Continue => {
                         // Continue execution
@@ -766,7 +812,7 @@ impl Worker {
                     ExecutionStepResult::Yield(yield_point) => {
                         // Handle yield point
                     }
-                    ExecutionStepResult::Completed => {
+                    ExecutionStepResult::Completed(_result) => {
                         // System completed
                     }
                 }

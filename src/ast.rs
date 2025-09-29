@@ -398,9 +398,9 @@ pub enum SystemParameter {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResourceAccess {
-    Immutable,    // &T
-    Mutable,      // &mut T
-    Owned,        // T
+    Immutable, // &T
+    Mutable,   // &mut T
+    Owned,     // T
 }
 
 #[derive(Debug, Clone, PartialEq)]

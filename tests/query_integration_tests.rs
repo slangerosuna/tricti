@@ -14,25 +14,23 @@ mod integration_tests {
             columns: vec![
                 TableColumn {
                     name: "id".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "u64".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
                     },
-                    annotations: vec![
-                        TableAnnotation {
-                            name: "primary".to_string(),
-                            args: vec![],
-                        }
-                    ],
+                    annotations: vec![TableAnnotation {
+                        name: "primary".to_string(),
+                        args: vec![],
+                    }],
                     default_value: None,
                     is_computed: false,
                     computed_expression: None,
                 },
                 TableColumn {
                     name: "name".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "String".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
                     default_value: None,
@@ -41,9 +39,9 @@ mod integration_tests {
                 },
                 TableColumn {
                     name: "price".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "f64".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "f64".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
                     default_value: None,
@@ -52,20 +50,24 @@ mod integration_tests {
                 },
                 TableColumn {
                     name: "quantity".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "u64".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
-                    default_value: Some(Expression::Literal(Literal::integer_from_parts("0".to_string(), 0, None))),
+                    default_value: Some(Expression::Literal(Literal::integer_from_parts(
+                        "0".to_string(),
+                        0,
+                        None,
+                    ))),
                     is_computed: false,
                     computed_expression: None,
                 },
                 TableColumn {
                     name: "in_stock".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "bool".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "bool".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
                     default_value: None,
@@ -73,14 +75,18 @@ mod integration_tests {
                     computed_expression: Some(Expression::BinaryOp {
                         left: Box::new(Expression::Identifier("quantity".to_string())),
                         operator: BinaryOperator::Greater,
-                        right: Box::new(Expression::Literal(Literal::integer_from_parts("0".to_string(), 0, None))),
+                        right: Box::new(Expression::Literal(Literal::integer_from_parts(
+                            "0".to_string(),
+                            0,
+                            None,
+                        ))),
                     }),
                 },
                 TableColumn {
                     name: "total_value".to_string(),
-                    column_type: Type::Identifier { 
-                        name: "f64".to_string(), 
-                        type_args: vec![] 
+                    column_type: Type::Identifier {
+                        name: "f64".to_string(),
+                        type_args: vec![],
                     },
                     annotations: vec![],
                     default_value: None,
@@ -107,16 +113,22 @@ mod integration_tests {
     #[test]
     fn test_integration_with_computed_columns() {
         let mut executor = QueryExecutor::new();
-        
+
         // Create table with computed columns
         let schema = create_comprehensive_table_schema();
         let mut table = TableRuntime::new(schema).expect("Failed to create table");
-        
+
         // Insert test data
-        table.insert_row(create_test_product(1, "Laptop", 1000.0, 5)).unwrap();
-        table.insert_row(create_test_product(2, "Mouse", 25.0, 0)).unwrap();
-        table.insert_row(create_test_product(3, "Keyboard", 75.0, 10)).unwrap();
-        
+        table
+            .insert_row(create_test_product(1, "Laptop", 1000.0, 5))
+            .unwrap();
+        table
+            .insert_row(create_test_product(2, "Mouse", 25.0, 0))
+            .unwrap();
+        table
+            .insert_row(create_test_product(3, "Keyboard", 75.0, 10))
+            .unwrap();
+
         executor.register_table("Products".to_string(), table);
 
         // Query including computed columns
@@ -129,7 +141,9 @@ mod integration_tests {
         ];
 
         let query = QueryPlan::select("Products".to_string(), projection, None);
-        let result = executor.execute(query).expect("Failed to execute query with computed columns");
+        let result = executor
+            .execute(query)
+            .expect("Failed to execute query with computed columns");
 
         assert_eq!(result.len(), 3);
         assert_eq!(result.schema.len(), 5);
@@ -166,23 +180,34 @@ mod integration_tests {
 
             // Verify total_value is correctly computed (price * quantity)
             let expected_total = price * (quantity as f64);
-            assert!((total_value - expected_total).abs() < 0.001, 
-                   "Total value mismatch for {}: expected {}, got {}", name, expected_total, total_value);
+            assert!(
+                (total_value - expected_total).abs() < 0.001,
+                "Total value mismatch for {}: expected {}, got {}",
+                name,
+                expected_total,
+                total_value
+            );
         }
     }
 
     #[test]
     fn test_where_clause_with_computed_columns() {
         let mut executor = QueryExecutor::new();
-        
+
         let schema = create_comprehensive_table_schema();
         let mut table = TableRuntime::new(schema).expect("Failed to create table");
-        
+
         // Insert test data
-        table.insert_row(create_test_product(1, "Laptop", 1000.0, 5)).unwrap();    // in_stock = true
-        table.insert_row(create_test_product(2, "Mouse", 25.0, 0)).unwrap();      // in_stock = false
-        table.insert_row(create_test_product(3, "Keyboard", 75.0, 10)).unwrap();  // in_stock = true
-        
+        table
+            .insert_row(create_test_product(1, "Laptop", 1000.0, 5))
+            .unwrap(); // in_stock = true
+        table
+            .insert_row(create_test_product(2, "Mouse", 25.0, 0))
+            .unwrap(); // in_stock = false
+        table
+            .insert_row(create_test_product(3, "Keyboard", 75.0, 10))
+            .unwrap(); // in_stock = true
+
         executor.register_table("Products".to_string(), table);
 
         // Query filtering by computed column (in_stock)
@@ -191,16 +216,16 @@ mod integration_tests {
             FieldProjection::column("quantity".to_string()),
         ];
 
-        let where_clause = Some(WhereClause::new(
-            Expression::BinaryOp {
-                left: Box::new(Expression::Identifier("in_stock".to_string())),
-                operator: BinaryOperator::Equal,
-                right: Box::new(Expression::Literal(Literal::Boolean(true))),
-            }
-        ));
+        let where_clause = Some(WhereClause::new(Expression::BinaryOp {
+            left: Box::new(Expression::Identifier("in_stock".to_string())),
+            operator: BinaryOperator::Equal,
+            right: Box::new(Expression::Literal(Literal::Boolean(true))),
+        }));
 
         let query = QueryPlan::select("Products".to_string(), projection, where_clause);
-        let result = executor.execute(query).expect("Failed to execute query filtering by computed column");
+        let result = executor
+            .execute(query)
+            .expect("Failed to execute query filtering by computed column");
 
         // Should return only products in stock (Laptop and Keyboard)
         assert_eq!(result.len(), 2);
@@ -223,16 +248,24 @@ mod integration_tests {
     #[test]
     fn test_complex_where_clauses() {
         let mut executor = QueryExecutor::new();
-        
+
         let schema = create_comprehensive_table_schema();
         let mut table = TableRuntime::new(schema).expect("Failed to create table");
-        
+
         // Insert test data
-        table.insert_row(create_test_product(1, "Laptop", 1000.0, 5)).unwrap();
-        table.insert_row(create_test_product(2, "Mouse", 25.0, 15)).unwrap();
-        table.insert_row(create_test_product(3, "Keyboard", 75.0, 0)).unwrap();
-        table.insert_row(create_test_product(4, "Monitor", 300.0, 3)).unwrap();
-        
+        table
+            .insert_row(create_test_product(1, "Laptop", 1000.0, 5))
+            .unwrap();
+        table
+            .insert_row(create_test_product(2, "Mouse", 25.0, 15))
+            .unwrap();
+        table
+            .insert_row(create_test_product(3, "Keyboard", 75.0, 0))
+            .unwrap();
+        table
+            .insert_row(create_test_product(4, "Monitor", 300.0, 3))
+            .unwrap();
+
         executor.register_table("Products".to_string(), table);
 
         // Complex WHERE clause: price > 50 AND quantity > 2
@@ -242,24 +275,32 @@ mod integration_tests {
             FieldProjection::column("quantity".to_string()),
         ];
 
-        let where_clause = Some(WhereClause::new(
-            Expression::BinaryOp {
-                left: Box::new(Expression::BinaryOp {
-                    left: Box::new(Expression::Identifier("price".to_string())),
-                    operator: BinaryOperator::Greater,
-                    right: Box::new(Expression::Literal(Literal::integer_from_parts("50".to_string(), 50, None))),
-                }),
-                operator: BinaryOperator::And,
-                right: Box::new(Expression::BinaryOp {
-                    left: Box::new(Expression::Identifier("quantity".to_string())),
-                    operator: BinaryOperator::Greater,
-                    right: Box::new(Expression::Literal(Literal::integer_from_parts("2".to_string(), 2, None))),
-                }),
-            }
-        ));
+        let where_clause = Some(WhereClause::new(Expression::BinaryOp {
+            left: Box::new(Expression::BinaryOp {
+                left: Box::new(Expression::Identifier("price".to_string())),
+                operator: BinaryOperator::Greater,
+                right: Box::new(Expression::Literal(Literal::integer_from_parts(
+                    "50".to_string(),
+                    50,
+                    None,
+                ))),
+            }),
+            operator: BinaryOperator::And,
+            right: Box::new(Expression::BinaryOp {
+                left: Box::new(Expression::Identifier("quantity".to_string())),
+                operator: BinaryOperator::Greater,
+                right: Box::new(Expression::Literal(Literal::integer_from_parts(
+                    "2".to_string(),
+                    2,
+                    None,
+                ))),
+            }),
+        }));
 
         let query = QueryPlan::select("Products".to_string(), projection, where_clause);
-        let result = executor.execute(query).expect("Failed to execute complex WHERE query");
+        let result = executor
+            .execute(query)
+            .expect("Failed to execute complex WHERE query");
 
         // Should return Laptop (price=1000, qty=5) and Monitor (price=300, qty=3)
         // Mouse excluded (price=25 < 50), Keyboard excluded (qty=0 < 2)
@@ -284,14 +325,18 @@ mod integration_tests {
     #[test]
     fn test_projection_with_transformation() {
         let mut executor = QueryExecutor::new();
-        
+
         let schema = create_comprehensive_table_schema();
         let mut table = TableRuntime::new(schema).expect("Failed to create table");
-        
+
         // Insert test data
-        table.insert_row(create_test_product(1, "Laptop", 1000.0, 5)).unwrap();
-        table.insert_row(create_test_product(2, "Mouse", 25.0, 15)).unwrap();
-        
+        table
+            .insert_row(create_test_product(1, "Laptop", 1000.0, 5))
+            .unwrap();
+        table
+            .insert_row(create_test_product(2, "Mouse", 25.0, 15))
+            .unwrap();
+
         executor.register_table("Products".to_string(), table);
 
         // Query with computed projection (price with tax)
@@ -304,12 +349,14 @@ mod integration_tests {
                     left: Box::new(Expression::Identifier("price".to_string())),
                     operator: BinaryOperator::Mul,
                     right: Box::new(Expression::Literal(Literal::Float(1.08))), // 8% tax
-                }
+                },
             ),
         ];
 
         let query = QueryPlan::select("Products".to_string(), projection, None);
-        let result = executor.execute(query).expect("Failed to execute query with computed projection");
+        let result = executor
+            .execute(query)
+            .expect("Failed to execute query with computed projection");
 
         assert_eq!(result.len(), 2);
         assert_eq!(result.schema.len(), 3);
@@ -321,7 +368,8 @@ mod integration_tests {
                 _ => panic!("Expected f64 price"),
             };
 
-            let _computed_price = match row.values.get("price") { // This gets the last occurrence in the projection
+            let _computed_price = match row.values.get("price") {
+                // This gets the last occurrence in the projection
                 Some(ColumnValue::F64(p)) => f64::from_bits(*p),
                 _ => panic!("Expected f64 computed price"),
             };
@@ -334,22 +382,31 @@ mod integration_tests {
     #[test]
     fn test_join_with_computed_columns() {
         let mut executor = QueryExecutor::new();
-        
+
         // Create Categories table
         let categories_schema = TableDef {
             name: "Categories".to_string(),
             columns: vec![
                 TableColumn {
                     name: "id".to_string(),
-                    column_type: Type::Identifier { name: "u64".to_string(), type_args: vec![] },
-                    annotations: vec![TableAnnotation { name: "primary".to_string(), args: vec![] }],
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
+                    annotations: vec![TableAnnotation {
+                        name: "primary".to_string(),
+                        args: vec![],
+                    }],
                     default_value: None,
                     is_computed: false,
                     computed_expression: None,
                 },
                 TableColumn {
                     name: "name".to_string(),
-                    column_type: Type::Identifier { name: "String".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -357,7 +414,10 @@ mod integration_tests {
                 },
                 TableColumn {
                     name: "tax_rate".to_string(),
-                    column_type: Type::Identifier { name: "f64".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "f64".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -372,15 +432,24 @@ mod integration_tests {
             columns: vec![
                 TableColumn {
                     name: "id".to_string(),
-                    column_type: Type::Identifier { name: "u64".to_string(), type_args: vec![] },
-                    annotations: vec![TableAnnotation { name: "primary".to_string(), args: vec![] }],
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
+                    annotations: vec![TableAnnotation {
+                        name: "primary".to_string(),
+                        args: vec![],
+                    }],
                     default_value: None,
                     is_computed: false,
                     computed_expression: None,
                 },
                 TableColumn {
                     name: "name".to_string(),
-                    column_type: Type::Identifier { name: "String".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -388,7 +457,10 @@ mod integration_tests {
                 },
                 TableColumn {
                     name: "price".to_string(),
-                    column_type: Type::Identifier { name: "f64".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "f64".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -396,7 +468,10 @@ mod integration_tests {
                 },
                 TableColumn {
                     name: "category_id".to_string(),
-                    column_type: Type::Identifier { name: "u64".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -405,36 +480,59 @@ mod integration_tests {
             ],
         };
 
-        let mut categories_table = TableRuntime::new(categories_schema).expect("Failed to create categories table");
-        let mut products_table = TableRuntime::new(products_schema).expect("Failed to create products table");
+        let mut categories_table =
+            TableRuntime::new(categories_schema).expect("Failed to create categories table");
+        let mut products_table =
+            TableRuntime::new(products_schema).expect("Failed to create products table");
 
         // Insert category data
         let mut cat_values = HashMap::new();
         cat_values.insert("id".to_string(), ColumnValue::U64(1));
-        cat_values.insert("name".to_string(), ColumnValue::String("Electronics".to_string()));
+        cat_values.insert(
+            "name".to_string(),
+            ColumnValue::String("Electronics".to_string()),
+        );
         cat_values.insert("tax_rate".to_string(), ColumnValue::F64(0.08_f64.to_bits()));
-        categories_table.insert_row(TableRow { values: cat_values }).unwrap();
+        categories_table
+            .insert_row(TableRow { values: cat_values })
+            .unwrap();
 
         let mut cat_values = HashMap::new();
         cat_values.insert("id".to_string(), ColumnValue::U64(2));
-        cat_values.insert("name".to_string(), ColumnValue::String("Office".to_string()));
+        cat_values.insert(
+            "name".to_string(),
+            ColumnValue::String("Office".to_string()),
+        );
         cat_values.insert("tax_rate".to_string(), ColumnValue::F64(0.05_f64.to_bits()));
-        categories_table.insert_row(TableRow { values: cat_values }).unwrap();
+        categories_table
+            .insert_row(TableRow { values: cat_values })
+            .unwrap();
 
         // Insert product data
         let mut prod_values = HashMap::new();
         prod_values.insert("id".to_string(), ColumnValue::U64(1));
-        prod_values.insert("name".to_string(), ColumnValue::String("Laptop".to_string()));
+        prod_values.insert(
+            "name".to_string(),
+            ColumnValue::String("Laptop".to_string()),
+        );
         prod_values.insert("price".to_string(), ColumnValue::F64(1000.0_f64.to_bits()));
         prod_values.insert("category_id".to_string(), ColumnValue::U64(1));
-        products_table.insert_row(TableRow { values: prod_values }).unwrap();
+        products_table
+            .insert_row(TableRow {
+                values: prod_values,
+            })
+            .unwrap();
 
         let mut prod_values = HashMap::new();
         prod_values.insert("id".to_string(), ColumnValue::U64(2));
         prod_values.insert("name".to_string(), ColumnValue::String("Desk".to_string()));
         prod_values.insert("price".to_string(), ColumnValue::F64(200.0_f64.to_bits()));
         prod_values.insert("category_id".to_string(), ColumnValue::U64(2));
-        products_table.insert_row(TableRow { values: prod_values }).unwrap();
+        products_table
+            .insert_row(TableRow {
+                values: prod_values,
+            })
+            .unwrap();
 
         executor.register_table("Categories".to_string(), categories_table);
         executor.register_table("Products".to_string(), products_table);
@@ -459,7 +557,9 @@ mod integration_tests {
             right_projection,
         );
 
-        let result = executor.execute(query).expect("Failed to execute join with computed columns");
+        let result = executor
+            .execute(query)
+            .expect("Failed to execute join with computed columns");
 
         assert_eq!(result.len(), 2); // Both products should match their categories
         assert_eq!(result.schema.len(), 4); // left_name, left_price, right_name, right_tax_rate
@@ -488,7 +588,7 @@ mod integration_tests {
     #[test]
     fn test_query_optimization_flags() {
         let mut executor = QueryExecutor::new();
-        
+
         let schema = create_comprehensive_table_schema();
         let table = TableRuntime::new(schema).expect("Failed to create table");
         executor.register_table("Products".to_string(), table);
@@ -498,17 +598,21 @@ mod integration_tests {
         let where_clause = Some(
             WhereClause::new(Expression::Literal(Literal::Boolean(true)))
                 .with_hint(OptimizationHint::PredicatePushdown)
-                .with_hint(OptimizationHint::UseIndex("name_index".to_string()))
+                .with_hint(OptimizationHint::UseIndex("name_index".to_string())),
         );
 
         let mut query = QueryPlan::select("Products".to_string(), projection, where_clause);
-        
+
         // Apply optimization
         query = query.optimize();
 
         // Verify optimization was applied
         match &query {
-            QueryPlan::Select { optimization, where_clause, .. } => {
+            QueryPlan::Select {
+                optimization,
+                where_clause,
+                ..
+            } => {
                 assert!(optimization.predicate_pushdown);
                 if let Some(where_clause) = where_clause {
                     assert!(!where_clause.optimization_hints.is_empty());
@@ -525,7 +629,7 @@ mod integration_tests {
     #[test]
     fn test_empty_table_queries() {
         let mut executor = QueryExecutor::new();
-        
+
         let schema = create_comprehensive_table_schema();
         let table = TableRuntime::new(schema).expect("Failed to create table");
         executor.register_table("Products".to_string(), table);
@@ -533,7 +637,9 @@ mod integration_tests {
         // Query empty table
         let projection = vec![FieldProjection::column("name".to_string())];
         let query = QueryPlan::select("Products".to_string(), projection, None);
-        let result = executor.execute(query).expect("Failed to execute query on empty table");
+        let result = executor
+            .execute(query)
+            .expect("Failed to execute query on empty table");
 
         assert_eq!(result.len(), 0);
         assert!(result.is_empty());
@@ -544,14 +650,17 @@ mod integration_tests {
     #[test]
     fn test_full_outer_join() {
         let mut executor = QueryExecutor::new();
-        
+
         // Create simple schemas for full outer join test
         let left_schema = TableDef {
             name: "Left".to_string(),
             columns: vec![
                 TableColumn {
                     name: "id".to_string(),
-                    column_type: Type::Identifier { name: "u64".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -559,7 +668,10 @@ mod integration_tests {
                 },
                 TableColumn {
                     name: "value".to_string(),
-                    column_type: Type::Identifier { name: "String".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -573,7 +685,10 @@ mod integration_tests {
             columns: vec![
                 TableColumn {
                     name: "id".to_string(),
-                    column_type: Type::Identifier { name: "u64".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -581,7 +696,10 @@ mod integration_tests {
                 },
                 TableColumn {
                     name: "data".to_string(),
-                    column_type: Type::Identifier { name: "String".to_string(), type_args: vec![] },
+                    column_type: Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    },
                     annotations: vec![],
                     default_value: None,
                     is_computed: false,
@@ -597,32 +715,56 @@ mod integration_tests {
         let mut left_values = HashMap::new();
         left_values.insert("id".to_string(), ColumnValue::U64(1));
         left_values.insert("value".to_string(), ColumnValue::String("A".to_string()));
-        left_table.insert_row(TableRow { values: left_values }).unwrap();
+        left_table
+            .insert_row(TableRow {
+                values: left_values,
+            })
+            .unwrap();
 
         let mut left_values = HashMap::new();
         left_values.insert("id".to_string(), ColumnValue::U64(2));
         left_values.insert("value".to_string(), ColumnValue::String("B".to_string()));
-        left_table.insert_row(TableRow { values: left_values }).unwrap();
+        left_table
+            .insert_row(TableRow {
+                values: left_values,
+            })
+            .unwrap();
 
         let mut left_values = HashMap::new();
         left_values.insert("id".to_string(), ColumnValue::U64(3));
         left_values.insert("value".to_string(), ColumnValue::String("C".to_string()));
-        left_table.insert_row(TableRow { values: left_values }).unwrap();
+        left_table
+            .insert_row(TableRow {
+                values: left_values,
+            })
+            .unwrap();
 
         let mut right_values = HashMap::new();
         right_values.insert("id".to_string(), ColumnValue::U64(2));
         right_values.insert("data".to_string(), ColumnValue::String("Y".to_string()));
-        right_table.insert_row(TableRow { values: right_values }).unwrap();
+        right_table
+            .insert_row(TableRow {
+                values: right_values,
+            })
+            .unwrap();
 
         let mut right_values = HashMap::new();
         right_values.insert("id".to_string(), ColumnValue::U64(3));
         right_values.insert("data".to_string(), ColumnValue::String("Z".to_string()));
-        right_table.insert_row(TableRow { values: right_values }).unwrap();
+        right_table
+            .insert_row(TableRow {
+                values: right_values,
+            })
+            .unwrap();
 
         let mut right_values = HashMap::new();
         right_values.insert("id".to_string(), ColumnValue::U64(4));
         right_values.insert("data".to_string(), ColumnValue::String("W".to_string()));
-        right_table.insert_row(TableRow { values: right_values }).unwrap();
+        right_table
+            .insert_row(TableRow {
+                values: right_values,
+            })
+            .unwrap();
 
         executor.register_table("Left".to_string(), left_table);
         executor.register_table("Right".to_string(), right_table);
@@ -647,7 +789,9 @@ mod integration_tests {
             right_projection,
         );
 
-        let result = executor.execute(query).expect("Failed to execute full outer join");
+        let result = executor
+            .execute(query)
+            .expect("Failed to execute full outer join");
 
         // Should include:
         // - Left id=1 (no match on right)

@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
+[features]
+default = []
+tri-runtime = []
+
 [dependencies]
 inkwell = { version = "0.6.0", features = ["llvm18-1"] }
 pest = "2.7.15"

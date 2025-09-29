@@ -1,11 +1,11 @@
-use crate::async_runtime::{AsyncExecutionError, TaskId, SystemExecutionResult};
-use crate::table_runtime::TableError;
-use crate::scheduler::SchedulerError;
+use crate::async_runtime::{AsyncExecutionError, SystemExecutionResult, TaskId};
 use crate::resource_lifecycle::{LifecycleEvent, ReleaseReason};
+use crate::scheduler::SchedulerError;
+use crate::table_runtime::TableError;
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, RwLock, Mutex};
-use std::time::{Duration, Instant};
 use std::fmt;
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 /// Error propagation and handling system for async execution chains
 pub struct ErrorPropagationManager {
@@ -180,7 +180,10 @@ impl ErrorPropagationManager {
         handler: ErrorHandler,
     ) -> Result<(), AsyncExecutionError> {
         let mut handlers = self.error_handlers.write().unwrap();
-        handlers.entry(error_type).or_insert_with(Vec::new).push(handler);
+        handlers
+            .entry(error_type)
+            .or_insert_with(Vec::new)
+            .push(handler);
         Ok(())
     }
 
@@ -203,7 +206,8 @@ impl ErrorPropagationManager {
         context: ErrorContext,
     ) -> Result<ErrorHandlingResult, AsyncExecutionError> {
         // Record error in history
-        self.record_error_event(task_id, error.clone(), context.clone()).await;
+        self.record_error_event(task_id, error.clone(), context.clone())
+            .await;
 
         // Get or create error chain
         let mut chains = self.propagation_chains.write().unwrap();
@@ -228,12 +232,12 @@ impl ErrorPropagationManager {
 
         // Find matching error handlers
         let handlers = self.find_matching_handlers(&error).await;
-        
+
         // Execute handlers in priority order
         for _handler in handlers {
             // Simplified handling for compilation
             let result = ErrorHandlingResult::Abort;
-            
+
             match result {
                 ErrorHandlingResult::Handled => {
                     return Ok(ErrorHandlingResult::Handled);
@@ -248,7 +252,8 @@ impl ErrorPropagationManager {
                     return Ok(ErrorHandlingResult::Fallback { new_task_id });
                 }
                 ErrorHandlingResult::Propagate { target_tasks } => {
-                    self.propagate_error(task_id, error.clone(), target_tasks.clone()).await?;
+                    self.propagate_error(task_id, error.clone(), target_tasks.clone())
+                        .await?;
                     return Ok(ErrorHandlingResult::Propagate { target_tasks });
                 }
                 ErrorHandlingResult::Abort => {
@@ -270,29 +275,24 @@ impl ErrorPropagationManager {
     /// Check if error matches a pattern
     fn matches_error_pattern(&self, pattern: &ErrorPattern, error: &AsyncExecutionError) -> bool {
         match pattern {
-            ErrorPattern::ExactType(type_name) => {
-                self.error_type_name(error) == *type_name
-            }
+            ErrorPattern::ExactType(type_name) => self.error_type_name(error) == *type_name,
             ErrorPattern::TypePattern(pattern) => {
                 // Would use regex matching in real implementation
                 self.error_type_name(error).contains(pattern)
             }
-            ErrorPattern::SourceSystem(system) => {
-                match error {
-                    AsyncExecutionError::SystemError { system: err_system, .. } => {
-                        err_system == system
-                    }
-                    _ => false,
-                }
-            }
-            ErrorPattern::ResourceName(resource) => {
-                match error {
-                    AsyncExecutionError::ResourceConflict { resource: err_resource, .. } => {
-                        err_resource == resource
-                    }
-                    _ => false,
-                }
-            }
+            ErrorPattern::SourceSystem(system) => match error {
+                AsyncExecutionError::SystemError {
+                    system: err_system, ..
+                } => err_system == system,
+                _ => false,
+            },
+            ErrorPattern::ResourceName(resource) => match error {
+                AsyncExecutionError::ResourceConflict {
+                    resource: err_resource,
+                    ..
+                } => err_resource == resource,
+                _ => false,
+            },
             ErrorPattern::Custom(_) => {
                 // Simplified for compilation
                 false
@@ -309,7 +309,9 @@ impl ErrorPropagationManager {
             AsyncExecutionError::SystemError { .. } => "SystemError".to_string(),
             AsyncExecutionError::Timeout { .. } => "Timeout".to_string(),
             AsyncExecutionError::Cancelled { .. } => "Cancelled".to_string(),
-            AsyncExecutionError::ResourceLifecycleError { .. } => "ResourceLifecycleError".to_string(),
+            AsyncExecutionError::ResourceLifecycleError { .. } => {
+                "ResourceLifecycleError".to_string()
+            }
         }
     }
 
@@ -321,7 +323,7 @@ impl ErrorPropagationManager {
         target_tasks: Vec<TaskId>,
     ) -> Result<(), AsyncExecutionError> {
         let mut chains = self.propagation_chains.write().unwrap();
-        
+
         for target_task in target_tasks {
             // Create or update error chain for target task
             let chain = chains.entry(target_task).or_insert_with(|| ErrorChain {
@@ -337,7 +339,7 @@ impl ErrorPropagationManager {
 
             // Create propagated error
             let propagated_error = self.transform_error_for_propagation(error.clone(), target_task);
-            
+
             let chained_error = ChainedError {
                 error: propagated_error,
                 occurred_at: Instant::now(),
@@ -345,7 +347,7 @@ impl ErrorPropagationManager {
                 recovery_result: None,
                 propagated_to: Vec::new(),
             };
-            
+
             chain.errors.push(chained_error);
         }
 
@@ -359,19 +361,17 @@ impl ErrorPropagationManager {
         target_task: TaskId,
     ) -> AsyncExecutionError {
         match error {
-            AsyncExecutionError::ResourceConflict { resource, reason, .. } => {
-                AsyncExecutionError::ResourceConflict {
-                    system: format!("task_{:?}", target_task),
-                    resource,
-                    reason: format!("Propagated: {}", reason),
-                }
-            }
-            AsyncExecutionError::SystemError { message, .. } => {
-                AsyncExecutionError::SystemError {
-                    system: format!("task_{:?}", target_task),
-                    message: format!("Propagated: {}", message),
-                }
-            }
+            AsyncExecutionError::ResourceConflict {
+                resource, reason, ..
+            } => AsyncExecutionError::ResourceConflict {
+                system: format!("task_{:?}", target_task),
+                resource,
+                reason: format!("Propagated: {}", reason),
+            },
+            AsyncExecutionError::SystemError { message, .. } => AsyncExecutionError::SystemError {
+                system: format!("task_{:?}", target_task),
+                message: format!("Propagated: {}", message),
+            },
             other => other, // Pass through other error types
         }
     }
@@ -393,12 +393,12 @@ impl ErrorPropagationManager {
         };
 
         let mut history = self.error_history.lock().unwrap();
-        
+
         // Maintain history size limit
         if history.len() >= self.config.error_history_size {
             history.pop_front();
         }
-        
+
         history.push_back(event);
     }
 
@@ -418,13 +418,11 @@ impl ErrorPropagationManager {
             if let Some(strategy) = strategies.get(strategy_name) {
                 // Clone the strategy data we need
                 match strategy {
-                    RecoveryStrategy::Retry { max_attempts, .. } => {
-                        RecoveryStrategy::Retry {
-                            max_attempts: *max_attempts,
-                            backoff_strategy: BackoffStrategy::Fixed(Duration::from_millis(100)),
-                            conditions: Vec::new(),
-                        }
-                    }
+                    RecoveryStrategy::Retry { max_attempts, .. } => RecoveryStrategy::Retry {
+                        max_attempts: *max_attempts,
+                        backoff_strategy: BackoffStrategy::Fixed(Duration::from_millis(100)),
+                        conditions: Vec::new(),
+                    },
                     _ => {
                         return Ok(RecoveryResult::Failure {
                             reason: "Strategy not implemented".to_string(),
@@ -439,23 +437,45 @@ impl ErrorPropagationManager {
         };
 
         match strategy {
-            RecoveryStrategy::Retry { max_attempts, backoff_strategy, conditions } => {
-                self.execute_retry_recovery(task_id, max_attempts, backoff_strategy, conditions).await
+            RecoveryStrategy::Retry {
+                max_attempts,
+                backoff_strategy,
+                conditions,
+            } => {
+                self.execute_retry_recovery(task_id, max_attempts, backoff_strategy, conditions)
+                    .await
             }
-            RecoveryStrategy::Fallback { fallback_system, fallback_parameters } => {
-                self.execute_fallback_recovery(task_id, fallback_system, fallback_parameters).await
+            RecoveryStrategy::Fallback {
+                fallback_system,
+                fallback_parameters,
+            } => {
+                self.execute_fallback_recovery(task_id, fallback_system, fallback_parameters)
+                    .await
             }
-            RecoveryStrategy::Isolate { release_resources, notify_dependents } => {
-                self.execute_isolation_recovery(task_id, release_resources, notify_dependents).await
+            RecoveryStrategy::Isolate {
+                release_resources,
+                notify_dependents,
+            } => {
+                self.execute_isolation_recovery(task_id, release_resources, notify_dependents)
+                    .await
             }
-            RecoveryStrategy::Restart { restart_delay, preserve_state } => {
-                self.execute_restart_recovery(task_id, restart_delay, preserve_state).await
+            RecoveryStrategy::Restart {
+                restart_delay,
+                preserve_state,
+            } => {
+                self.execute_restart_recovery(task_id, restart_delay, preserve_state)
+                    .await
             }
             RecoveryStrategy::Propagate { target_tasks } => {
-                self.execute_propagation_recovery(task_id, target_tasks).await
+                self.execute_propagation_recovery(task_id, target_tasks)
+                    .await
             }
-            RecoveryStrategy::CircuitBreaker { failure_threshold, recovery_timeout } => {
-                self.execute_circuit_breaker_recovery(task_id, failure_threshold, recovery_timeout).await
+            RecoveryStrategy::CircuitBreaker {
+                failure_threshold,
+                recovery_timeout,
+            } => {
+                self.execute_circuit_breaker_recovery(task_id, failure_threshold, recovery_timeout)
+                    .await
             }
         }
     }
@@ -480,7 +500,10 @@ impl ErrorPropagationManager {
         // Calculate backoff delay
         let retry_count = {
             let chains = self.propagation_chains.read().unwrap();
-            chains.get(&task_id).map(|chain| chain.recovery_attempts).unwrap_or(0)
+            chains
+                .get(&task_id)
+                .map(|chain| chain.recovery_attempts)
+                .unwrap_or(0)
         };
 
         if retry_count >= max_attempts {
@@ -490,7 +513,7 @@ impl ErrorPropagationManager {
         }
 
         let delay = self.calculate_backoff_delay(&backoff_strategy, retry_count);
-        
+
         // Schedule retry (this would integrate with the task scheduler)
         Ok(RecoveryResult::Success)
     }
@@ -584,9 +607,9 @@ impl ErrorPropagationManager {
     fn calculate_backoff_delay(&self, strategy: &BackoffStrategy, retry_count: u32) -> Duration {
         match strategy {
             BackoffStrategy::Linear(base) => *base * retry_count,
-            BackoffStrategy::Exponential { base, multiplier } => {
-                Duration::from_millis((base.as_millis() as f64 * multiplier.powi(retry_count as i32)) as u64)
-            }
+            BackoffStrategy::Exponential { base, multiplier } => Duration::from_millis(
+                (base.as_millis() as f64 * multiplier.powi(retry_count as i32)) as u64,
+            ),
             BackoffStrategy::Fixed(duration) => *duration,
             // Custom strategies simplified for compilation
         }
@@ -607,7 +630,8 @@ impl ErrorPropagationManager {
 
     /// Calculate average recovery time
     fn calculate_average_recovery_time(&self, history: &VecDeque<ErrorEvent>) -> Duration {
-        let recovery_times: Vec<Duration> = history.iter()
+        let recovery_times: Vec<Duration> = history
+            .iter()
             .filter_map(|event| event.recovery_time)
             .collect();
 
@@ -627,7 +651,8 @@ impl ErrorPropagationManager {
             *error_counts.entry(error_type).or_insert(0) += 1;
         }
 
-        error_counts.into_iter()
+        error_counts
+            .into_iter()
             .max_by_key(|(_, count)| *count)
             .map(|(error_type, _)| error_type)
             .unwrap_or_else(|| "None".to_string())

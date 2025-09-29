@@ -1,14 +1,20 @@
+use crate::ast::{
+    Argument, BinaryOperator, ConstValue, Expression, FunctionBody, IntegerLiteral, Literal,
+    Program, ResourceAccess, Statement, SystemParameter, Type, UnaryOperator,
+};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{BasicTypeEnum, FloatType, IntType, StructType};
-use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue, BasicMetadataValueEnum, StructValue, IntValue, BasicValue};
+use inkwell::values::{
+    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
+    StructValue,
+};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use crate::ast::{UnaryOperator, Expression, Argument, Type, FunctionBody, Statement, Program, ConstValue, Literal, BinaryOperator, IntegerLiteral, SystemParameter, ResourceAccess};
 #[derive(Debug)]
 pub enum CodegenError {
     UndefinedVariable(String),
@@ -130,7 +136,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 Err(CodegenError::UndefinedVariable(name.clone()))
             }
-            Expression::Call { function, type_args, .. } => {
+            Expression::Call {
+                function,
+                type_args,
+                ..
+            } => {
                 if let Expression::Identifier(func_name) = &**function {
                     if let Some((tname, vname)) = func_name.split_once('_') {
                         if let Some(Type::Enum { variants, order }) = self.semantic.types.get(tname)
@@ -430,7 +440,9 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         // Process exit (libc)
         let exit_ty = self.context.void_type().fn_type(&[i32_type.into()], false);
-        let exit_fn = self.module.add_function("exit", exit_ty, Some(Linkage::External));
+        let exit_fn = self
+            .module
+            .add_function("exit", exit_ty, Some(Linkage::External));
         self.functions.insert("exit".to_string(), exit_fn);
 
         // strlen for string length (bytes); expose as `len`
@@ -880,7 +892,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                     // Struct literal special-case when annotated with a known struct type
                     if let (
-                        Some(Type::Identifier { name: struct_name, type_args: _ }),
+                        Some(Type::Identifier {
+                            name: struct_name,
+                            type_args: _,
+                        }),
                         Expression::StructLiteral { fields },
                     ) = (type_annotation, expr)
                     {
@@ -1094,8 +1109,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 // Struct literal special-case when annotated with a known struct type
-                if let (Some(Type::Identifier { name: struct_name, type_args: _ }), Expression::StructLiteral { fields }) =
-                    (type_annotation, value)
+                if let (
+                    Some(Type::Identifier {
+                        name: struct_name,
+                        type_args: _,
+                    }),
+                    Expression::StructLiteral { fields },
+                ) = (type_annotation, value)
                 {
                     // limit borrow scope and clone needed data
                     let (st_copy, order_clone) =
@@ -1711,7 +1731,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }
                         }
                         // else fall through to semantic typing below
-                    } else if let Some(Type::Identifier { name: tn, type_args: _ }) = self.semantic.get_variable_type(name)
+                    } else if let Some(Type::Identifier {
+                        name: tn,
+                        type_args: _,
+                    }) = self.semantic.get_variable_type(name)
                     {
                         // Support built-in slice_i64 iteration
                         if tn == "slice_i64" {
@@ -2341,10 +2364,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(loaded)
     }
 
-    fn load_tuple_from_value(
-        &mut self,
-        value: BasicValueEnum<'ctx>,
-    ) -> Option<StructValue<'ctx>> {
+    fn load_tuple_from_value(&mut self, value: BasicValueEnum<'ctx>) -> Option<StructValue<'ctx>> {
         if value.is_struct_value() {
             Some(value.into_struct_value())
         } else {
@@ -2357,7 +2377,13 @@ impl<'ctx> CodeGenerator<'ctx> {
         tuple_val: StructValue<'ctx>,
         tuple_ty: StructType<'ctx>,
         items: &[Expression],
-    ) -> Result<(Vec<IntValue<'ctx>>, Vec<(String, Vec<u32>, BasicTypeEnum<'ctx>)>), CodegenError> {
+    ) -> Result<
+        (
+            Vec<IntValue<'ctx>>,
+            Vec<(String, Vec<u32>, BasicTypeEnum<'ctx>)>,
+        ),
+        CodegenError,
+    > {
         if tuple_ty.count_fields() != items.len() as u32 {
             return Err(CodegenError::InvalidOperation(
                 "tuple pattern arity mismatch".to_string(),
@@ -2389,7 +2415,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         for (idx, item) in items.iter().enumerate() {
             let field_ty = tuple_ty
                 .get_field_type_at_index(idx as u32)
-                .ok_or_else(|| CodegenError::InvalidOperation("tuple field index out of range".to_string()))?;
+                .ok_or_else(|| {
+                    CodegenError::InvalidOperation("tuple field index out of range".to_string())
+                })?;
             let field_val = self
                 .builder
                 .build_extract_value(tuple_val, idx as u32, &format!("tuple_elem{}", idx))
@@ -2480,12 +2508,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     };
                     let sub_val = field_val.into_struct_value();
                     self.evaluate_tuple_pattern_inner(
-                        sub_val,
-                        sub_ty,
-                        sub_items,
-                        &path,
-                        conds,
-                        bindings,
+                        sub_val, sub_ty, sub_items, &path, conds, bindings,
                     )?;
                 }
                 _ => {
@@ -2530,7 +2553,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 for (idx, value) in element_values.into_iter().enumerate() {
                     aggregate = self
                         .builder
-                        .build_insert_value(aggregate, value, idx as u32, &format!("tuple_elem{}", idx))
+                        .build_insert_value(
+                            aggregate,
+                            value,
+                            idx as u32,
+                            &format!("tuple_elem{}", idx),
+                        )
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                         .into_struct_value();
                 }
@@ -2998,8 +3026,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 ));
                             }
 
-                            let mut saved_bindings: Vec<(String, Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>)> =
-                                Vec::new();
+                            let mut saved_bindings: Vec<(
+                                String,
+                                Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
+                            )> = Vec::new();
 
                             for (idx, pat) in pattern_items.iter().enumerate() {
                                 let element_val = self
@@ -3021,13 +3051,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                                                     "tuple field index out of range".to_string(),
                                                 )
                                             })?;
-                                        let alloca = self.create_entry_block_alloca(name, field_ty)?;
-                                        self.builder
-                                            .build_store(alloca, element_val)
-                                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                                        let previous = self
-                                            .variables
-                                            .insert(name.clone(), (alloca, field_ty));
+                                        let alloca =
+                                            self.create_entry_block_alloca(name, field_ty)?;
+                                        self.builder.build_store(alloca, element_val).map_err(
+                                            |e| CodegenError::CompilationError(e.to_string()),
+                                        )?;
+                                        let previous =
+                                            self.variables.insert(name.clone(), (alloca, field_ty));
                                         saved_bindings.push((name.clone(), previous));
                                     }
                                     _ => {
@@ -4318,9 +4348,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                                 .map_err(|e| {
                                                     CodegenError::CompilationError(e.to_string())
                                                 })?;
-                                            let prev_acc = self
-                                                .variables
-                                                .insert(p_acc_name.to_string(), (acc_alloca, i64_bte));
+                                            let prev_acc = self.variables.insert(
+                                                p_acc_name.to_string(),
+                                                (acc_alloca, i64_bte),
+                                            );
                                             let x_alloca =
                                                 self.create_entry_block_alloca(&p_x_name, i64_bte)?;
                                             let prev_x = self
@@ -5894,21 +5925,19 @@ impl<'ctx> CodeGenerator<'ctx> {
                             _ => self.context.i64_type().fn_type(&param_meta, false),
                         };
                         // In runtime mode, emit user main as `peano_main` symbol
-                        let fname = if name == "main" {
-                            "peano_main"
-                        } else {
-                            name
-                        };
+                        let fname = if name == "main" { "peano_main" } else { name };
                         let f = self.module.add_function(fname, fn_type, None);
                         self.functions.insert(fname.to_string(), f);
                     } else if let ConstValue::SystemDef(system_def) = value {
                         // Handle system function declarations
-                        let ret_ty = system_def.return_type
+                        let ret_ty = system_def
+                            .return_type
                             .as_ref()
                             .and_then(|t| self.map_ast_type(t))
                             .unwrap_or(self.context.i64_type().into());
-                        
-                        let param_tys_bte: Vec<BasicTypeEnum<'ctx>> = system_def.parameters
+
+                        let param_tys_bte: Vec<BasicTypeEnum<'ctx>> = system_def
+                            .parameters
                             .iter()
                             .map(|p| {
                                 match p {
@@ -5916,11 +5945,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                                         // Query parameters are passed as opaque pointers to query results
                                         self.context.ptr_type(AddressSpace::default()).into()
                                     }
-                                    SystemParameter::Resource { resource_type, access, .. } => {
+                                    SystemParameter::Resource {
+                                        resource_type,
+                                        access,
+                                        ..
+                                    } => {
                                         match access {
                                             ResourceAccess::Immutable | ResourceAccess::Mutable => {
                                                 // Reference parameters are passed as pointers
-                                                self.context.ptr_type(AddressSpace::default()).into()
+                                                self.context
+                                                    .ptr_type(AddressSpace::default())
+                                                    .into()
                                             }
                                             ResourceAccess::Owned => {
                                                 // Owned parameters use the actual type
@@ -5929,17 +5964,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             }
                                         }
                                     }
-                                    SystemParameter::Regular { value_type, .. } => {
-                                        self.map_ast_type(value_type)
-                                            .unwrap_or(self.context.i64_type().into())
-                                    }
+                                    SystemParameter::Regular { value_type, .. } => self
+                                        .map_ast_type(value_type)
+                                        .unwrap_or(self.context.i64_type().into()),
                                 }
                             })
                             .collect();
-                        
+
                         let param_meta: Vec<inkwell::types::BasicMetadataTypeEnum> =
                             param_tys_bte.iter().map(|t| (*t).into()).collect();
-                        
+
                         let fn_type = match ret_ty {
                             BasicTypeEnum::IntType(it) => it.fn_type(&param_meta, false),
                             BasicTypeEnum::FloatType(ft) => ft.fn_type(&param_meta, false),
@@ -5947,7 +5981,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             BasicTypeEnum::StructType(st) => st.fn_type(&param_meta, false),
                             _ => self.context.i64_type().fn_type(&param_meta, false),
                         };
-                        
+
                         // System functions get a `sys_` prefix
                         let fname = format!("sys_{}", name);
                         let f = self.module.add_function(&fname, fn_type, None);
@@ -6050,7 +6084,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                             let ast_ty = parameters
                                 .get(i)
                                 .and_then(|p| p.param_type.clone())
-                                .unwrap_or(crate::ast::Type::Identifier { name: "i64".to_string(), type_args: vec![] });
+                                .unwrap_or(crate::ast::Type::Identifier {
+                                    name: "i64".to_string(),
+                                    type_args: vec![],
+                                });
                             self.local_types.insert(p_name, ast_ty);
                         }
 
@@ -6283,7 +6320,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             Some(f) => *f,
                             None => continue,
                         };
-                        
+
                         let entry = self.context.append_basic_block(f, "entry");
                         self.builder.position_at_end(entry);
                         let prev_fn = self.current_function;
@@ -6294,27 +6331,41 @@ impl<'ctx> CodeGenerator<'ctx> {
                         for (i, param) in f.get_param_iter().enumerate() {
                             if let Some(system_param) = system_def.parameters.get(i) {
                                 let (p_name, p_ty) = match system_param {
-                                    SystemParameter::Query { name, .. } => {
-                                        (name.clone(), self.context.ptr_type(AddressSpace::default()).into())
-                                    }
-                                    SystemParameter::Resource { param_type: _, name, resource_type, access } => {
+                                    SystemParameter::Query { name, .. } => (
+                                        name.clone(),
+                                        self.context.ptr_type(AddressSpace::default()).into(),
+                                    ),
+                                    SystemParameter::Resource {
+                                        param_type: _,
+                                        name,
+                                        resource_type,
+                                        access,
+                                    } => {
                                         let ty = match access {
                                             ResourceAccess::Immutable | ResourceAccess::Mutable => {
-                                                self.context.ptr_type(AddressSpace::default()).into()
+                                                self.context
+                                                    .ptr_type(AddressSpace::default())
+                                                    .into()
                                             }
-                                            ResourceAccess::Owned => {
-                                                self.map_ast_type(resource_type).unwrap_or(self.context.i64_type().into())
-                                            }
+                                            ResourceAccess::Owned => self
+                                                .map_ast_type(resource_type)
+                                                .unwrap_or(self.context.i64_type().into()),
                                         };
                                         (name.clone(), ty)
                                     }
-                                    SystemParameter::Regular { param_type: _, name, value_type, .. } => {
-                                        let ty = self.map_ast_type(&value_type)
+                                    SystemParameter::Regular {
+                                        param_type: _,
+                                        name,
+                                        value_type,
+                                        ..
+                                    } => {
+                                        let ty = self
+                                            .map_ast_type(&value_type)
                                             .unwrap_or(self.context.i64_type().into());
                                         (name.clone(), ty)
                                     }
                                 };
-                                
+
                                 let alloca = self.create_entry_block_alloca(&p_name, p_ty)?;
                                 self.builder
                                     .build_store(alloca, param)
@@ -6330,15 +6381,22 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                         // Ensure function has return if needed
                         let current_block = self.builder.get_insert_block();
-                        let needs_return = current_block.map_or(true, |block| block.get_terminator().is_none());
+                        let needs_return =
+                            current_block.map_or(true, |block| block.get_terminator().is_none());
                         if needs_return {
                             if let Some(ret_type) = &system_def.return_type {
                                 if ret_type != &Type::None {
                                     // Build default return value
-                                    let default_val: BasicValueEnum = match self.map_ast_type(ret_type) {
+                                    let default_val: BasicValueEnum = match self
+                                        .map_ast_type(ret_type)
+                                    {
                                         Some(BasicTypeEnum::IntType(it)) => it.const_zero().into(),
-                                        Some(BasicTypeEnum::FloatType(ft)) => ft.const_zero().into(),
-                                        Some(BasicTypeEnum::PointerType(pt)) => pt.const_zero().into(),
+                                        Some(BasicTypeEnum::FloatType(ft)) => {
+                                            ft.const_zero().into()
+                                        }
+                                        Some(BasicTypeEnum::PointerType(pt)) => {
+                                            pt.const_zero().into()
+                                        }
                                         _ => self.context.i64_type().const_zero().into(),
                                     };
                                     self.try_build_return(Some(&default_val))?;
@@ -6441,7 +6499,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     let ast_ty = parameters
                                         .get(i - param_index)
                                         .and_then(|p| p.param_type.clone())
-                                        .unwrap_or(crate::ast::Type::Identifier { name: "i64".to_string(), type_args: vec![] });
+                                        .unwrap_or(crate::ast::Type::Identifier {
+                                            name: "i64".to_string(),
+                                            type_args: vec![],
+                                        });
                                     self.local_types.insert(p_name, ast_ty);
                                 }
 

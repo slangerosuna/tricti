@@ -1,6 +1,9 @@
 use crate::ast::{self, *};
-use crate::query::{self, QueryStatistics, QueryResult, QueryError, ResultColumn, 
-                  WhereClause, JoinCondition, QueryPlan, JoinType, FieldProjection, OptimizationContext, BuildSide};
+use crate::query::{
+    self, BuildSide, FieldProjection, JoinCondition, JoinType, OptimizationContext,
+    OptimizationHint, QueryError, QueryPlan, QueryResult, QueryStatistics, ResultColumn,
+    WhereClause,
+};
 use crate::table_runtime::*;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -45,42 +48,159 @@ impl QueryExecutor {
     pub fn register_table(&mut self, name: String, table: TableRuntime) {
         // Generate statistics for the table
         let stats = table.generate_statistics();
-        self.optimization_context.table_stats.insert(name.clone(), stats);
+        self.optimization_context
+            .table_stats
+            .insert(name.clone(), stats);
         self.tables.insert(name, table);
+    }
+
+    fn apply_select_hints(
+        &self,
+        context: &mut OptimizationContext,
+        where_clause: Option<&WhereClause>,
+    ) {
+        if let Some(clause) = where_clause {
+            for hint in &clause.optimization_hints {
+                match hint {
+                    OptimizationHint::PredicatePushdown => {
+                        context.enable_predicate_pushdown = true;
+                    }
+                    OptimizationHint::UseIndex(_) => {
+                        context.enable_index_optimization = true;
+                    }
+                }
+            }
+        }
+    }
+
+    fn materialize_physical_plan(&self, plan: QueryPlan) -> QueryPlan {
+        match plan {
+            QueryPlan::Select {
+                table_name,
+                projection,
+                where_clause,
+                ..
+            } => {
+                let mut context = self.optimization_context.clone();
+                self.apply_select_hints(&mut context, where_clause.as_ref());
+                let predicate = where_clause.as_ref().map(|clause| clause.condition.clone());
+                QueryPlan::logical_select(table_name, projection, predicate)
+                    .optimize_with_context(&context)
+            }
+            QueryPlan::Join {
+                left_table,
+                right_table,
+                join_type,
+                join_condition,
+                left_projection,
+                right_projection,
+                ..
+            } => QueryPlan::logical_join(
+                left_table,
+                right_table,
+                join_type,
+                join_condition,
+                left_projection,
+                right_projection,
+            )
+            .optimize_with_context(&self.optimization_context),
+            other => other,
+        }
     }
 
     /// Execute a query plan with different behavior for each node type
     pub fn execute(&self, plan: QueryPlan) -> Result<QueryResult, QueryError> {
         let start_time = Instant::now();
 
-        let result = match plan {
+        let physical_plan = self.materialize_physical_plan(plan);
+
+        let result = match physical_plan {
             // DIFFERENT EXECUTION BEHAVIORS FOR EACH PLAN NODE TYPE
-            QueryPlan::TableScan { table_name, projection } => {
-                self.execute_table_scan(&table_name, &projection)
-            }
-            QueryPlan::FilteredScan { table_name, projection, predicate } => {
-                self.execute_filtered_scan(&table_name, &projection, &predicate)
-            }
-            QueryPlan::IndexScan { table_name, projection, index_column, index_value } => {
-                self.execute_index_scan(&table_name, &projection, &index_column, &index_value)
-            }
-            QueryPlan::RangeScan { table_name, projection, index_column, min_value, max_value } => {
-                self.execute_range_scan(&table_name, &projection, &index_column, min_value.as_ref(), max_value.as_ref())
-            }
-            QueryPlan::NestedLoopJoin { left_input, right_input, join_type, join_condition, left_projection, right_projection } => {
-                self.execute_nested_loop_join(*left_input, *right_input, join_type, &join_condition, &left_projection, &right_projection)
-            }
-            QueryPlan::HashJoin { left_input, right_input, join_type, join_condition, left_projection, right_projection, build_side } => {
-                self.execute_hash_join(*left_input, *right_input, join_type, &join_condition, &left_projection, &right_projection, build_side)
-            }
-            QueryPlan::IndexNestedLoopJoin { left_input, right_table, join_type, join_condition, left_projection, right_projection, right_index_column } => {
-                self.execute_index_nested_loop_join(*left_input, &right_table, join_type, &join_condition, &left_projection, &right_projection, &right_index_column)
-            }
+            QueryPlan::TableScan {
+                table_name,
+                projection,
+            } => self.execute_table_scan(&table_name, &projection),
+            QueryPlan::FilteredScan {
+                table_name,
+                projection,
+                predicate,
+            } => self.execute_filtered_scan(&table_name, &projection, &predicate),
+            QueryPlan::IndexScan {
+                table_name,
+                projection,
+                index_column,
+                index_value,
+            } => self.execute_index_scan(&table_name, &projection, &index_column, &index_value),
+            QueryPlan::RangeScan {
+                table_name,
+                projection,
+                index_column,
+                min_value,
+                max_value,
+            } => self.execute_range_scan(
+                &table_name,
+                &projection,
+                &index_column,
+                min_value.as_ref(),
+                max_value.as_ref(),
+            ),
+            QueryPlan::NestedLoopJoin {
+                left_input,
+                right_input,
+                join_type,
+                join_condition,
+                left_projection,
+                right_projection,
+            } => self.execute_nested_loop_join(
+                *left_input,
+                *right_input,
+                join_type,
+                &join_condition,
+                &left_projection,
+                &right_projection,
+            ),
+            QueryPlan::HashJoin {
+                left_input,
+                right_input,
+                join_type,
+                join_condition,
+                left_projection,
+                right_projection,
+                build_side,
+            } => self.execute_hash_join(
+                *left_input,
+                *right_input,
+                join_type,
+                &join_condition,
+                &left_projection,
+                &right_projection,
+                build_side,
+            ),
+            QueryPlan::IndexNestedLoopJoin {
+                left_input,
+                right_table,
+                join_type,
+                join_condition,
+                left_projection,
+                right_projection,
+                right_index_column,
+            } => self.execute_index_nested_loop_join(
+                *left_input,
+                &right_table,
+                join_type,
+                &join_condition,
+                &left_projection,
+                &right_projection,
+                &right_index_column,
+            ),
             QueryPlan::Projection { input, projection } => {
                 self.execute_projection(*input, &projection)
             }
-            QueryPlan::Filter { input, predicate } => {
-                self.execute_filter(*input, &predicate)
+            QueryPlan::Filter { input, predicate } => self.execute_filter(*input, &predicate),
+            QueryPlan::Select { .. } | QueryPlan::Join { .. } => {
+                Err(QueryError::OptimizationError(
+                    "High-level plan must be materialized before execution".to_string(),
+                ))
             }
         };
 
@@ -95,8 +215,14 @@ impl QueryExecutor {
     }
 
     /// Execute table scan - scans ALL rows without filtering
-    fn execute_table_scan(&self, table_name: &str, projection: &[FieldProjection]) -> Result<QueryResult, QueryError> {
-        let table = self.tables.get(table_name)
+    fn execute_table_scan(
+        &self,
+        table_name: &str,
+        projection: &[FieldProjection],
+    ) -> Result<QueryResult, QueryError> {
+        let table = self
+            .tables
+            .get(table_name)
             .ok_or_else(|| QueryError::TableNotFound(table_name.to_string()))?;
 
         let mut statistics = QueryStatistics {
@@ -124,8 +250,15 @@ impl QueryExecutor {
 
     /// Execute filtered scan - CRITICAL ALGORITHMIC IMPROVEMENT: O(k) instead of O(n)
     /// Uses bitmap-based columnar filtering with no row materialization until final result
-    fn execute_filtered_scan(&self, table_name: &str, projection: &[FieldProjection], predicate: &Expression) -> Result<QueryResult, QueryError> {
-        let table = self.tables.get(table_name)
+    fn execute_filtered_scan(
+        &self,
+        table_name: &str,
+        projection: &[FieldProjection],
+        predicate: &Expression,
+    ) -> Result<QueryResult, QueryError> {
+        let table = self
+            .tables
+            .get(table_name)
             .ok_or_else(|| QueryError::TableNotFound(table_name.to_string()))?;
 
         let mut statistics = QueryStatistics {
@@ -138,9 +271,10 @@ impl QueryExecutor {
 
         // CRITICAL ALGORITHMIC IMPROVEMENT: Use bitmap-based columnar filtering
         // This evaluates predicates directly on column data without row materialization
-        let filtered_rows = table.scan_filtered_optimized(predicate)
+        let filtered_rows = table
+            .scan_filtered_optimized(predicate)
             .map_err(|e| QueryError::ExecutionError(format!("Filtered scan failed: {:?}", e)))?;
-        
+
         // Update statistics based on the optimized execution
         match table.evaluate_predicate_columnar(predicate) {
             Ok(crate::table_runtime::PredicateResult::IndexLookup(ref row_ids)) => {
@@ -170,8 +304,16 @@ impl QueryExecutor {
     }
 
     /// Execute index scan - DIFFERENT behavior: uses index lookup, not table scan
-    fn execute_index_scan(&self, table_name: &str, projection: &[FieldProjection], index_column: &str, index_value: &ColumnValue) -> Result<QueryResult, QueryError> {
-        let table = self.tables.get(table_name)
+    fn execute_index_scan(
+        &self,
+        table_name: &str,
+        projection: &[FieldProjection],
+        index_column: &str,
+        index_value: &ColumnValue,
+    ) -> Result<QueryResult, QueryError> {
+        let table = self
+            .tables
+            .get(table_name)
             .ok_or_else(|| QueryError::TableNotFound(table_name.to_string()))?;
 
         let mut statistics = QueryStatistics {
@@ -198,8 +340,17 @@ impl QueryExecutor {
     }
 
     /// Execute range scan - DIFFERENT behavior: uses range index scan
-    fn execute_range_scan(&self, table_name: &str, projection: &[FieldProjection], index_column: &str, min_value: Option<&ColumnValue>, max_value: Option<&ColumnValue>) -> Result<QueryResult, QueryError> {
-        let table = self.tables.get(table_name)
+    fn execute_range_scan(
+        &self,
+        table_name: &str,
+        projection: &[FieldProjection],
+        index_column: &str,
+        min_value: Option<&ColumnValue>,
+        max_value: Option<&ColumnValue>,
+    ) -> Result<QueryResult, QueryError> {
+        let table = self
+            .tables
+            .get(table_name)
             .ok_or_else(|| QueryError::TableNotFound(table_name.to_string()))?;
 
         let mut statistics = QueryStatistics {
@@ -226,12 +377,21 @@ impl QueryExecutor {
     }
 
     /// Execute nested loop join - DIFFERENT behavior: nested loop algorithm
-    fn execute_nested_loop_join(&self, left_input: QueryPlan, right_input: QueryPlan, join_type: JoinType, join_condition: &JoinCondition, left_projection: &[FieldProjection], right_projection: &[FieldProjection]) -> Result<QueryResult, QueryError> {
+    fn execute_nested_loop_join(
+        &self,
+        left_input: QueryPlan,
+        right_input: QueryPlan,
+        join_type: JoinType,
+        join_condition: &JoinCondition,
+        left_projection: &[FieldProjection],
+        right_projection: &[FieldProjection],
+    ) -> Result<QueryResult, QueryError> {
         let left_result = self.execute(left_input)?;
         let right_result = self.execute(right_input)?;
 
         let mut statistics = QueryStatistics {
-            rows_scanned: left_result.statistics.rows_scanned + right_result.statistics.rows_scanned,
+            rows_scanned: left_result.statistics.rows_scanned
+                + right_result.statistics.rows_scanned,
             rows_filtered: 0,
             rows_returned: 0,
             index_seeks: left_result.statistics.index_seeks + right_result.statistics.index_seeks,
@@ -243,13 +403,24 @@ impl QueryExecutor {
         for (left_row_id, left_row) in &left_result.rows {
             for (right_row_id, right_row) in &right_result.rows {
                 if self.evaluate_join_condition_simple(join_condition, left_row, right_row)? {
-                    joined_rows.push((*left_row_id, *right_row_id, left_row.clone(), right_row.clone()));
+                    joined_rows.push((
+                        *left_row_id,
+                        *right_row_id,
+                        left_row.clone(),
+                        right_row.clone(),
+                    ));
                 }
             }
         }
 
-        let projected_rows = self.apply_join_projection(&joined_rows, left_projection, right_projection)?;
-        let schema = self.build_join_result_schema(left_projection, right_projection, &left_result.schema, &right_result.schema)?;
+        let projected_rows =
+            self.apply_join_projection(&joined_rows, left_projection, right_projection)?;
+        let schema = self.build_join_result_schema(
+            left_projection,
+            right_projection,
+            &left_result.schema,
+            &right_result.schema,
+        )?;
         statistics.rows_returned = projected_rows.len();
 
         Ok(QueryResult {
@@ -260,12 +431,22 @@ impl QueryExecutor {
     }
 
     /// Execute hash join - DIFFERENT behavior: hash join algorithm
-    fn execute_hash_join(&self, left_input: QueryPlan, right_input: QueryPlan, join_type: JoinType, join_condition: &JoinCondition, left_projection: &[FieldProjection], right_projection: &[FieldProjection], build_side: BuildSide) -> Result<QueryResult, QueryError> {
+    fn execute_hash_join(
+        &self,
+        left_input: QueryPlan,
+        right_input: QueryPlan,
+        join_type: JoinType,
+        join_condition: &JoinCondition,
+        left_projection: &[FieldProjection],
+        right_projection: &[FieldProjection],
+        build_side: BuildSide,
+    ) -> Result<QueryResult, QueryError> {
         let left_result = self.execute(left_input)?;
         let right_result = self.execute(right_input)?;
 
         let mut statistics = QueryStatistics {
-            rows_scanned: left_result.statistics.rows_scanned + right_result.statistics.rows_scanned,
+            rows_scanned: left_result.statistics.rows_scanned
+                + right_result.statistics.rows_scanned,
             rows_filtered: 0,
             rows_returned: 0,
             index_seeks: left_result.statistics.index_seeks + right_result.statistics.index_seeks,
@@ -281,7 +462,10 @@ impl QueryExecutor {
                 let mut hash_table: HashMap<ColumnValue, Vec<(RowId, TableRow)>> = HashMap::new();
                 for (row_id, row) in &right_result.rows {
                     if let Some(join_key) = row.values.get(&join_condition.right_column) {
-                        hash_table.entry(join_key.clone()).or_insert_with(Vec::new).push((*row_id, row.clone()));
+                        hash_table
+                            .entry(join_key.clone())
+                            .or_insert_with(Vec::new)
+                            .push((*row_id, row.clone()));
                     }
                 }
 
@@ -290,7 +474,12 @@ impl QueryExecutor {
                     if let Some(left_key) = left_row.values.get(&join_condition.left_column) {
                         if let Some(matching_rights) = hash_table.get(left_key) {
                             for (right_row_id, right_row) in matching_rights {
-                                joined_rows.push((*left_row_id, *right_row_id, left_row.clone(), right_row.clone()));
+                                joined_rows.push((
+                                    *left_row_id,
+                                    *right_row_id,
+                                    left_row.clone(),
+                                    right_row.clone(),
+                                ));
                             }
                         }
                     }
@@ -301,7 +490,10 @@ impl QueryExecutor {
                 let mut hash_table: HashMap<ColumnValue, Vec<(RowId, TableRow)>> = HashMap::new();
                 for (row_id, row) in &left_result.rows {
                     if let Some(join_key) = row.values.get(&join_condition.left_column) {
-                        hash_table.entry(join_key.clone()).or_insert_with(Vec::new).push((*row_id, row.clone()));
+                        hash_table
+                            .entry(join_key.clone())
+                            .or_insert_with(Vec::new)
+                            .push((*row_id, row.clone()));
                     }
                 }
 
@@ -310,7 +502,12 @@ impl QueryExecutor {
                     if let Some(right_key) = right_row.values.get(&join_condition.right_column) {
                         if let Some(matching_lefts) = hash_table.get(right_key) {
                             for (left_row_id, left_row) in matching_lefts {
-                                joined_rows.push((*left_row_id, *right_row_id, left_row.clone(), right_row.clone()));
+                                joined_rows.push((
+                                    *left_row_id,
+                                    *right_row_id,
+                                    left_row.clone(),
+                                    right_row.clone(),
+                                ));
                             }
                         }
                     }
@@ -318,8 +515,14 @@ impl QueryExecutor {
             }
         }
 
-        let projected_rows = self.apply_join_projection(&joined_rows, left_projection, right_projection)?;
-        let schema = self.build_join_result_schema(left_projection, right_projection, &left_result.schema, &right_result.schema)?;
+        let projected_rows =
+            self.apply_join_projection(&joined_rows, left_projection, right_projection)?;
+        let schema = self.build_join_result_schema(
+            left_projection,
+            right_projection,
+            &left_result.schema,
+            &right_result.schema,
+        )?;
         statistics.rows_returned = projected_rows.len();
 
         Ok(QueryResult {
@@ -330,10 +533,21 @@ impl QueryExecutor {
     }
 
     /// Execute index nested loop join - DIFFERENT behavior: uses index on inner table
-    fn execute_index_nested_loop_join(&self, left_input: QueryPlan, right_table: &str, join_type: JoinType, join_condition: &JoinCondition, left_projection: &[FieldProjection], right_projection: &[FieldProjection], right_index_column: &str) -> Result<QueryResult, QueryError> {
+    fn execute_index_nested_loop_join(
+        &self,
+        left_input: QueryPlan,
+        right_table: &str,
+        join_type: JoinType,
+        join_condition: &JoinCondition,
+        left_projection: &[FieldProjection],
+        right_projection: &[FieldProjection],
+        right_index_column: &str,
+    ) -> Result<QueryResult, QueryError> {
         let left_result = self.execute(left_input)?;
-        
-        let table = self.tables.get(right_table)
+
+        let table = self
+            .tables
+            .get(right_table)
             .ok_or_else(|| QueryError::TableNotFound(right_table.to_string()))?;
 
         let mut statistics = QueryStatistics {
@@ -359,8 +573,14 @@ impl QueryExecutor {
             }
         }
 
-        let projected_rows = self.apply_join_projection(&joined_rows, left_projection, right_projection)?;
-        let schema = self.build_join_result_schema_for_tables(left_projection, right_projection, &left_result.schema, table)?;
+        let projected_rows =
+            self.apply_join_projection(&joined_rows, left_projection, right_projection)?;
+        let schema = self.build_join_result_schema_for_tables(
+            left_projection,
+            right_projection,
+            &left_result.schema,
+            table,
+        )?;
         statistics.rows_returned = projected_rows.len();
 
         Ok(QueryResult {
@@ -371,29 +591,34 @@ impl QueryExecutor {
     }
 
     /// Execute projection - applies column transformations and aliases
-    fn execute_projection(&self, input: QueryPlan, projection: &[FieldProjection]) -> Result<QueryResult, QueryError> {
+    fn execute_projection(
+        &self,
+        input: QueryPlan,
+        projection: &[FieldProjection],
+    ) -> Result<QueryResult, QueryError> {
         let input_result = self.execute(input)?;
-        
+
         let mut projected_rows = Vec::new();
         for (row_id, row) in &input_result.rows {
             let mut new_values = HashMap::new();
-            
+
             for field_proj in projection {
                 let value = if let Some(ref transformation) = field_proj.transformation {
                     // Apply transformation (simplified)
                     self.evaluate_expression_simple(transformation, row)?
                 } else {
-                    row.values.get(&field_proj.source_column)
+                    row.values
+                        .get(&field_proj.source_column)
                         .cloned()
-                        .ok_or_else(|| QueryError::ColumnNotFound { 
-                            table: "input".to_string(), 
-                            column: field_proj.source_column.clone() 
+                        .ok_or_else(|| QueryError::ColumnNotFound {
+                            table: "input".to_string(),
+                            column: field_proj.source_column.clone(),
                         })?
                 };
-                
+
                 new_values.insert(field_proj.output_name().to_string(), value);
             }
-            
+
             projected_rows.push((*row_id, TableRow { values: new_values }));
         }
 
@@ -401,7 +626,10 @@ impl QueryExecutor {
         for field_proj in projection {
             schema.push(ResultColumn::new(
                 field_proj.output_name().to_string(),
-                Type::Identifier { name: "unknown".to_string(), type_args: vec![] }, // Simplified
+                Type::Identifier {
+                    name: "unknown".to_string(),
+                    type_args: vec![],
+                }, // Simplified
                 None,
             ));
         }
@@ -414,9 +642,13 @@ impl QueryExecutor {
     }
 
     /// Execute filter - applies WHERE condition to input
-    fn execute_filter(&self, input: QueryPlan, predicate: &Expression) -> Result<QueryResult, QueryError> {
+    fn execute_filter(
+        &self,
+        input: QueryPlan,
+        predicate: &Expression,
+    ) -> Result<QueryResult, QueryError> {
         let input_result = self.execute(input)?;
-        
+
         let mut filtered_rows = Vec::new();
         for (row_id, row) in &input_result.rows {
             if self.evaluate_condition_simple(predicate, row)? {
@@ -438,38 +670,60 @@ impl QueryExecutor {
     // Helper methods for the new execution behavior
 
     /// Evaluate join condition directly between two rows
-    fn evaluate_join_condition_simple(&self, join_condition: &JoinCondition, left_row: &TableRow, right_row: &TableRow) -> Result<bool, QueryError> {
-        let left_value = left_row.values.get(&join_condition.left_column)
-            .ok_or_else(|| QueryError::ColumnNotFound { 
-                table: "left".to_string(), 
-                column: join_condition.left_column.clone() 
+    fn evaluate_join_condition_simple(
+        &self,
+        join_condition: &JoinCondition,
+        left_row: &TableRow,
+        right_row: &TableRow,
+    ) -> Result<bool, QueryError> {
+        let left_value = left_row
+            .values
+            .get(&join_condition.left_column)
+            .ok_or_else(|| QueryError::ColumnNotFound {
+                table: "left".to_string(),
+                column: join_condition.left_column.clone(),
             })?;
-        
-        let right_value = right_row.values.get(&join_condition.right_column)
-            .ok_or_else(|| QueryError::ColumnNotFound { 
-                table: "right".to_string(), 
-                column: join_condition.right_column.clone() 
+
+        let right_value = right_row
+            .values
+            .get(&join_condition.right_column)
+            .ok_or_else(|| QueryError::ColumnNotFound {
+                table: "right".to_string(),
+                column: join_condition.right_column.clone(),
             })?;
-        
+
         match join_condition.operator {
             BinaryOperator::Equal => Ok(left_value == right_value),
             BinaryOperator::NotEqual => Ok(left_value != right_value),
             BinaryOperator::Less => Ok(self.compare_values_simple(left_value, right_value)? < 0),
-            BinaryOperator::LessEqual => Ok(self.compare_values_simple(left_value, right_value)? <= 0),
+            BinaryOperator::LessEqual => {
+                Ok(self.compare_values_simple(left_value, right_value)? <= 0)
+            }
             BinaryOperator::Greater => Ok(self.compare_values_simple(left_value, right_value)? > 0),
-            BinaryOperator::GreaterEqual => Ok(self.compare_values_simple(left_value, right_value)? >= 0),
-            _ => Err(QueryError::ExecutionError(format!("Unsupported join operator: {:?}", join_condition.operator))),
+            BinaryOperator::GreaterEqual => {
+                Ok(self.compare_values_simple(left_value, right_value)? >= 0)
+            }
+            _ => Err(QueryError::ExecutionError(format!(
+                "Unsupported join operator: {:?}",
+                join_condition.operator
+            ))),
         }
     }
 
     /// Compare two column values
-    fn compare_values_simple(&self, left: &ColumnValue, right: &ColumnValue) -> Result<i32, QueryError> {
+    fn compare_values_simple(
+        &self,
+        left: &ColumnValue,
+        right: &ColumnValue,
+    ) -> Result<i32, QueryError> {
         match (left, right) {
             (ColumnValue::U64(l), ColumnValue::U64(r)) => Ok(l.cmp(r) as i32),
             (ColumnValue::F64(l), ColumnValue::F64(r)) => {
                 let l_float = f64::from_bits(*l);
                 let r_float = f64::from_bits(*r);
-                Ok(l_float.partial_cmp(&r_float).unwrap_or(std::cmp::Ordering::Equal) as i32)
+                Ok(l_float
+                    .partial_cmp(&r_float)
+                    .unwrap_or(std::cmp::Ordering::Equal) as i32)
             }
             (ColumnValue::String(l), ColumnValue::String(r)) => Ok(l.cmp(r) as i32),
             (ColumnValue::Bool(l), ColumnValue::Bool(r)) => Ok(l.cmp(r) as i32),
@@ -481,18 +735,34 @@ impl QueryExecutor {
     }
 
     /// Evaluate condition on a row (simplified version)
-    fn evaluate_condition_simple(&self, condition: &Expression, row: &TableRow) -> Result<bool, QueryError> {
+    fn evaluate_condition_simple(
+        &self,
+        condition: &Expression,
+        row: &TableRow,
+    ) -> Result<bool, QueryError> {
         match condition {
-            Expression::BinaryOp { left, operator, right } => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
                 let left_value = self.evaluate_expression_simple(left, row)?;
                 let right_value = self.evaluate_expression_simple(right, row)?;
                 match operator {
                     BinaryOperator::Equal => Ok(left_value == right_value),
                     BinaryOperator::NotEqual => Ok(left_value != right_value),
-                    BinaryOperator::Less => Ok(self.compare_values_simple(&left_value, &right_value)? < 0),
-                    BinaryOperator::LessEqual => Ok(self.compare_values_simple(&left_value, &right_value)? <= 0),
-                    BinaryOperator::Greater => Ok(self.compare_values_simple(&left_value, &right_value)? > 0),
-                    BinaryOperator::GreaterEqual => Ok(self.compare_values_simple(&left_value, &right_value)? >= 0),
+                    BinaryOperator::Less => {
+                        Ok(self.compare_values_simple(&left_value, &right_value)? < 0)
+                    }
+                    BinaryOperator::LessEqual => {
+                        Ok(self.compare_values_simple(&left_value, &right_value)? <= 0)
+                    }
+                    BinaryOperator::Greater => {
+                        Ok(self.compare_values_simple(&left_value, &right_value)? > 0)
+                    }
+                    BinaryOperator::GreaterEqual => {
+                        Ok(self.compare_values_simple(&left_value, &right_value)? >= 0)
+                    }
                     BinaryOperator::And => {
                         let left_bool = self.value_to_bool(&left_value)?;
                         let right_bool = self.value_to_bool(&right_value)?;
@@ -503,40 +773,58 @@ impl QueryExecutor {
                         let right_bool = self.value_to_bool(&right_value)?;
                         Ok(left_bool || right_bool)
                     }
-                    _ => Err(QueryError::ExecutionError(format!("Unsupported operator: {:?}", operator))),
+                    _ => Err(QueryError::ExecutionError(format!(
+                        "Unsupported operator: {:?}",
+                        operator
+                    ))),
                 }
             }
             Expression::Identifier(column_name) => {
-                let value = row.values.get(column_name)
-                    .ok_or_else(|| QueryError::ColumnNotFound { 
-                        table: "row".to_string(), 
-                        column: column_name.clone() 
-                    })?;
+                let value =
+                    row.values
+                        .get(column_name)
+                        .ok_or_else(|| QueryError::ColumnNotFound {
+                            table: "row".to_string(),
+                            column: column_name.clone(),
+                        })?;
                 self.value_to_bool(value)
             }
             Expression::Literal(Literal::Boolean(b)) => Ok(*b),
-            _ => Err(QueryError::ExecutionError("Unsupported condition type".to_string())),
+            _ => Err(QueryError::ExecutionError(
+                "Unsupported condition type".to_string(),
+            )),
         }
     }
 
     /// Evaluate expression on a row (simplified version)
-    fn evaluate_expression_simple(&self, expr: &Expression, row: &TableRow) -> Result<ColumnValue, QueryError> {
+    fn evaluate_expression_simple(
+        &self,
+        expr: &Expression,
+        row: &TableRow,
+    ) -> Result<ColumnValue, QueryError> {
         match expr {
             Expression::Identifier(column_name) => {
-                row.values.get(column_name)
+                row.values
+                    .get(column_name)
                     .cloned()
-                    .ok_or_else(|| QueryError::ColumnNotFound { 
-                        table: "row".to_string(), 
-                        column: column_name.clone() 
+                    .ok_or_else(|| QueryError::ColumnNotFound {
+                        table: "row".to_string(),
+                        column: column_name.clone(),
                     })
             }
             Expression::Literal(lit) => Ok(self.literal_to_column_value_simple(lit)),
-            Expression::BinaryOp { left, operator, right } => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
                 let left_value = self.evaluate_expression_simple(left, row)?;
                 let right_value = self.evaluate_expression_simple(right, row)?;
                 self.apply_binary_operation(&left_value, operator, &right_value)
             }
-            _ => Err(QueryError::ExecutionError("Unsupported expression type".to_string())),
+            _ => Err(QueryError::ExecutionError(
+                "Unsupported expression type".to_string(),
+            )),
         }
     }
 
@@ -552,75 +840,111 @@ impl QueryExecutor {
     }
 
     /// Build result schema for join between two result sets
-    fn build_join_result_schema(&self, left_projection: &[FieldProjection], right_projection: &[FieldProjection], left_schema: &[ResultColumn], right_schema: &[ResultColumn]) -> Result<Vec<ResultColumn>, QueryError> {
+    fn build_join_result_schema(
+        &self,
+        left_projection: &[FieldProjection],
+        right_projection: &[FieldProjection],
+        left_schema: &[ResultColumn],
+        right_schema: &[ResultColumn],
+    ) -> Result<Vec<ResultColumn>, QueryError> {
         let mut schema = Vec::new();
-        
+
         for field_proj in left_projection {
             schema.push(ResultColumn::new(
                 format!("left_{}", field_proj.output_name()),
-                Type::Identifier { name: "unknown".to_string(), type_args: vec![] },
+                Type::Identifier {
+                    name: "unknown".to_string(),
+                    type_args: vec![],
+                },
                 Some("left".to_string()),
             ));
         }
-        
+
         for field_proj in right_projection {
             schema.push(ResultColumn::new(
                 format!("right_{}", field_proj.output_name()),
-                Type::Identifier { name: "unknown".to_string(), type_args: vec![] },
+                Type::Identifier {
+                    name: "unknown".to_string(),
+                    type_args: vec![],
+                },
                 Some("right".to_string()),
             ));
         }
-        
+
         Ok(schema)
     }
 
     /// Build result schema for join between result set and table
-    fn build_join_result_schema_for_tables(&self, left_projection: &[FieldProjection], right_projection: &[FieldProjection], left_schema: &[ResultColumn], right_table: &TableRuntime) -> Result<Vec<ResultColumn>, QueryError> {
+    fn build_join_result_schema_for_tables(
+        &self,
+        left_projection: &[FieldProjection],
+        right_projection: &[FieldProjection],
+        left_schema: &[ResultColumn],
+        right_table: &TableRuntime,
+    ) -> Result<Vec<ResultColumn>, QueryError> {
         let mut schema = Vec::new();
-        
+
         for field_proj in left_projection {
             schema.push(ResultColumn::new(
                 format!("left_{}", field_proj.output_name()),
-                Type::Identifier { name: "unknown".to_string(), type_args: vec![] },
+                Type::Identifier {
+                    name: "unknown".to_string(),
+                    type_args: vec![],
+                },
                 Some("left".to_string()),
             ));
         }
-        
+
         for field_proj in right_projection {
             schema.push(ResultColumn::new(
                 format!("right_{}", field_proj.output_name()),
-                Type::Identifier { name: "unknown".to_string(), type_args: vec![] },
+                Type::Identifier {
+                    name: "unknown".to_string(),
+                    type_args: vec![],
+                },
                 Some(right_table.schema.name.clone()),
             ));
         }
-        
+
         Ok(schema)
     }
 
     /// Apply projection to join results
-    fn apply_join_projection(&self, joined_rows: &[(RowId, RowId, TableRow, TableRow)], left_projection: &[FieldProjection], right_projection: &[FieldProjection]) -> Result<Vec<(RowId, TableRow)>, QueryError> {
+    fn apply_join_projection(
+        &self,
+        joined_rows: &[(RowId, RowId, TableRow, TableRow)],
+        left_projection: &[FieldProjection],
+        right_projection: &[FieldProjection],
+    ) -> Result<Vec<(RowId, TableRow)>, QueryError> {
         let mut projected_rows = Vec::new();
-        
+
         for (left_row_id, _right_row_id, left_row, right_row) in joined_rows {
             let mut projected_values = HashMap::new();
-            
+
             // Project left side
             for field_proj in left_projection {
                 if let Some(value) = left_row.values.get(&field_proj.source_column) {
-                    projected_values.insert(format!("left_{}", field_proj.output_name()), value.clone());
+                    projected_values
+                        .insert(format!("left_{}", field_proj.output_name()), value.clone());
                 }
             }
-            
+
             // Project right side
             for field_proj in right_projection {
                 if let Some(value) = right_row.values.get(&field_proj.source_column) {
-                    projected_values.insert(format!("right_{}", field_proj.output_name()), value.clone());
+                    projected_values
+                        .insert(format!("right_{}", field_proj.output_name()), value.clone());
                 }
             }
-            
-            projected_rows.push((*left_row_id, TableRow { values: projected_values }));
+
+            projected_rows.push((
+                *left_row_id,
+                TableRow {
+                    values: projected_values,
+                },
+            ));
         }
-        
+
         Ok(projected_rows)
     }
 
@@ -703,7 +1027,7 @@ impl QueryExecutor {
         // Use optimized scanning for join tables - avoid full table scans where possible
         let left_rows = self.get_join_input_rows(left_table, &join_condition.left_column);
         let right_rows = self.get_join_input_rows(right_table, &join_condition.right_column);
-        
+
         statistics.rows_scanned = left_rows.len() + right_rows.len();
 
         // Perform join based on join type
@@ -743,11 +1067,8 @@ impl QueryExecutor {
         };
 
         // Apply projection to joined results
-        let projected_rows = self.apply_join_projection(
-            &joined_rows,
-            &left_projection,
-            &right_projection,
-        )?;
+        let projected_rows =
+            self.apply_join_projection(&joined_rows, &left_projection, &right_projection)?;
 
         // Build result schema
         let schema = self.build_join_result_schema_for_tables(
@@ -780,7 +1101,7 @@ impl QueryExecutor {
 
         // Execute operations sequentially, pipelining results
         let mut current_result = self.execute(operations[0].clone())?;
-        
+
         for operation in operations.iter().skip(1) {
             // For now, treat remaining operations as filters/transformations
             // In a full implementation, this would support complex pipelining
@@ -804,11 +1125,17 @@ impl QueryExecutor {
     ) -> Result<Vec<(RowId, TableRow)>, QueryError> {
         // Analyze WHERE condition for optimization opportunities
         match &where_clause.condition {
-            Expression::BinaryOp { left, operator, right } if matches!(operator, BinaryOperator::Equal) => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } if matches!(operator, BinaryOperator::Equal) => {
                 // Look for equality conditions that can use indexes
-                if let (Expression::Identifier(column_name), Expression::Literal(literal)) = (left.as_ref(), right.as_ref()) {
+                if let (Expression::Identifier(column_name), Expression::Literal(literal)) =
+                    (left.as_ref(), right.as_ref())
+                {
                     let value = self.literal_to_column_value(literal);
-                    
+
                     // Try index lookup first
                     let rows = table.scan_by_column_value(column_name, &value);
                     statistics.rows_scanned = rows.len();
@@ -816,19 +1143,32 @@ impl QueryExecutor {
                     return Ok(rows);
                 }
             }
-            Expression::BinaryOp { left, operator, right } if matches!(operator, BinaryOperator::Greater | BinaryOperator::GreaterEqual | BinaryOperator::Less | BinaryOperator::LessEqual) => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } if matches!(
+                operator,
+                BinaryOperator::Greater
+                    | BinaryOperator::GreaterEqual
+                    | BinaryOperator::Less
+                    | BinaryOperator::LessEqual
+            ) =>
+            {
                 // Range queries - could be optimized with sorted indexes
-                if let (Expression::Identifier(column_name), Expression::Literal(literal)) = (left.as_ref(), right.as_ref()) {
+                if let (Expression::Identifier(column_name), Expression::Literal(literal)) =
+                    (left.as_ref(), right.as_ref())
+                {
                     let value = self.literal_to_column_value(literal);
-                    
+
                     let (min_val, max_val) = match operator {
                         BinaryOperator::Greater => (Some(&value), None),
-                        BinaryOperator::GreaterEqual => (Some(&value), None), 
+                        BinaryOperator::GreaterEqual => (Some(&value), None),
                         BinaryOperator::Less => (None, Some(&value)),
                         BinaryOperator::LessEqual => (None, Some(&value)),
                         _ => (None, None),
                     };
-                    
+
                     let rows = table.scan_by_column_range(column_name, min_val, max_val);
                     statistics.rows_scanned = rows.len();
                     return Ok(rows);
@@ -836,10 +1176,11 @@ impl QueryExecutor {
             }
             _ => {}
         }
-        
+
         // Fall back to filtered scan to avoid materializing all rows
         let rows = table.scan_filtered(|row| {
-            self.evaluate_condition(&where_clause.condition, row, table).unwrap_or(false)
+            self.evaluate_condition(&where_clause.condition, row, table)
+                .unwrap_or(false)
         });
         statistics.rows_scanned = rows.len();
         Ok(rows)
@@ -873,7 +1214,11 @@ impl QueryExecutor {
         table: &TableRuntime,
     ) -> Result<bool, QueryError> {
         match condition {
-            Expression::BinaryOp { left, operator, right } => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
                 let left_value = self.evaluate_expression(left, row, table)?;
                 let right_value = self.evaluate_expression(right, row, table)?;
                 self.apply_binary_operator(&left_value, operator, &right_value)
@@ -904,7 +1249,11 @@ impl QueryExecutor {
                     })
             }
             Expression::Literal(lit) => Ok(self.literal_to_column_value(lit)),
-            Expression::BinaryOp { left, operator, right } => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
                 let left_value = self.evaluate_expression(left, row, table)?;
                 let right_value = self.evaluate_expression(right, row, table)?;
                 self.apply_binary_operation(&left_value, operator, &right_value)
@@ -966,9 +1315,10 @@ impl QueryExecutor {
                 let right_bool = self.value_to_bool(right)?;
                 Ok(left_bool || right_bool)
             }
-            _ => Err(QueryError::ExecutionError(
-                format!("Unsupported operator in WHERE clause: {:?}", operator),
-            )),
+            _ => Err(QueryError::ExecutionError(format!(
+                "Unsupported operator in WHERE clause: {:?}",
+                operator
+            ))),
         }
     }
 
@@ -980,18 +1330,17 @@ impl QueryExecutor {
         right: &ColumnValue,
     ) -> Result<ColumnValue, QueryError> {
         match (left, right) {
-            (ColumnValue::U64(l), ColumnValue::U64(r)) => {
-                match operator {
-                    BinaryOperator::Add => Ok(ColumnValue::U64(l + r)),
-                    BinaryOperator::Sub => Ok(ColumnValue::U64(l - r)),
-                    BinaryOperator::Mul => Ok(ColumnValue::U64(l * r)),
-                    BinaryOperator::Div => Ok(ColumnValue::U64(l / r)),
-                    BinaryOperator::Mod => Ok(ColumnValue::U64(l % r)),
-                    _ => Err(QueryError::ExecutionError(
-                        format!("Unsupported numeric operator: {:?}", operator),
-                    )),
-                }
-            }
+            (ColumnValue::U64(l), ColumnValue::U64(r)) => match operator {
+                BinaryOperator::Add => Ok(ColumnValue::U64(l + r)),
+                BinaryOperator::Sub => Ok(ColumnValue::U64(l - r)),
+                BinaryOperator::Mul => Ok(ColumnValue::U64(l * r)),
+                BinaryOperator::Div => Ok(ColumnValue::U64(l / r)),
+                BinaryOperator::Mod => Ok(ColumnValue::U64(l % r)),
+                _ => Err(QueryError::ExecutionError(format!(
+                    "Unsupported numeric operator: {:?}",
+                    operator
+                ))),
+            },
             (ColumnValue::F64(l), ColumnValue::F64(r)) => {
                 let l_float = f64::from_bits(*l);
                 let r_float = f64::from_bits(*r);
@@ -1000,9 +1349,10 @@ impl QueryExecutor {
                     BinaryOperator::Sub => Ok(ColumnValue::F64((l_float - r_float).to_bits())),
                     BinaryOperator::Mul => Ok(ColumnValue::F64((l_float * r_float).to_bits())),
                     BinaryOperator::Div => Ok(ColumnValue::F64((l_float / r_float).to_bits())),
-                    _ => Err(QueryError::ExecutionError(
-                        format!("Unsupported float operator: {:?}", operator),
-                    )),
+                    _ => Err(QueryError::ExecutionError(format!(
+                        "Unsupported float operator: {:?}",
+                        operator
+                    ))),
                 }
             }
             _ => Err(QueryError::TypeMismatch {
@@ -1023,9 +1373,10 @@ impl QueryExecutor {
                 let bool_value = self.value_to_bool(value)?;
                 Ok(!bool_value)
             }
-            _ => Err(QueryError::ExecutionError(
-                format!("Unsupported unary operator: {:?}", operator),
-            )),
+            _ => Err(QueryError::ExecutionError(format!(
+                "Unsupported unary operator: {:?}",
+                operator
+            ))),
         }
     }
 
@@ -1041,7 +1392,12 @@ impl QueryExecutor {
     }
 
     /// Compare values using a comparison function
-    fn compare_values<F>(&self, left: &ColumnValue, right: &ColumnValue, cmp_fn: F) -> Result<bool, QueryError>
+    fn compare_values<F>(
+        &self,
+        left: &ColumnValue,
+        right: &ColumnValue,
+        cmp_fn: F,
+    ) -> Result<bool, QueryError>
     where
         F: Fn(i32) -> bool,
     {
@@ -1050,14 +1406,18 @@ impl QueryExecutor {
             (ColumnValue::F64(l), ColumnValue::F64(r)) => {
                 let l_float = f64::from_bits(*l);
                 let r_float = f64::from_bits(*r);
-                l_float.partial_cmp(&r_float).unwrap_or(std::cmp::Ordering::Equal) as i32
+                l_float
+                    .partial_cmp(&r_float)
+                    .unwrap_or(std::cmp::Ordering::Equal) as i32
             }
             (ColumnValue::String(l), ColumnValue::String(r)) => l.cmp(r) as i32,
             (ColumnValue::Bool(l), ColumnValue::Bool(r)) => l.cmp(r) as i32,
-            _ => return Err(QueryError::TypeMismatch {
-                expected: "comparable types".to_string(),
-                found: "incomparable types".to_string(),
-            }),
+            _ => {
+                return Err(QueryError::TypeMismatch {
+                    expected: "comparable types".to_string(),
+                    found: "incomparable types".to_string(),
+                })
+            }
         };
 
         Ok(cmp_fn(comparison))
@@ -1093,7 +1453,12 @@ impl QueryExecutor {
                 projected_values.insert(field_proj.output_name().to_string(), value);
             }
 
-            projected_rows.push((*row_id, TableRow { values: projected_values }));
+            projected_rows.push((
+                *row_id,
+                TableRow {
+                    values: projected_values,
+                },
+            ));
         }
 
         Ok(projected_rows)
@@ -1144,8 +1509,19 @@ impl QueryExecutor {
 
         for (left_row_id, left_row) in left_rows {
             for (right_row_id, right_row) in right_rows {
-                if self.evaluate_join_condition(join_condition, left_row, right_row, left_table, right_table)? {
-                    joined_rows.push((*left_row_id, *right_row_id, left_row.clone(), right_row.clone()));
+                if self.evaluate_join_condition(
+                    join_condition,
+                    left_row,
+                    right_row,
+                    left_table,
+                    right_table,
+                )? {
+                    joined_rows.push((
+                        *left_row_id,
+                        *right_row_id,
+                        left_row.clone(),
+                        right_row.clone(),
+                    ));
                 }
             }
         }
@@ -1167,10 +1543,21 @@ impl QueryExecutor {
 
         for (left_row_id, left_row) in left_rows {
             let mut matched = false;
-            
+
             for (right_row_id, right_row) in right_rows {
-                if self.evaluate_join_condition(join_condition, left_row, right_row, left_table, right_table)? {
-                    joined_rows.push((*left_row_id, *right_row_id, left_row.clone(), right_row.clone()));
+                if self.evaluate_join_condition(
+                    join_condition,
+                    left_row,
+                    right_row,
+                    left_table,
+                    right_table,
+                )? {
+                    joined_rows.push((
+                        *left_row_id,
+                        *right_row_id,
+                        left_row.clone(),
+                        right_row.clone(),
+                    ));
                     matched = true;
                 }
             }
@@ -1178,7 +1565,12 @@ impl QueryExecutor {
             // If no match found, include left row with null right row
             if !matched {
                 let null_right_row = self.create_null_row(right_table);
-                joined_rows.push((*left_row_id, RowId(usize::MAX), left_row.clone(), null_right_row));
+                joined_rows.push((
+                    *left_row_id,
+                    RowId(usize::MAX),
+                    left_row.clone(),
+                    null_right_row,
+                ));
             }
         }
 
@@ -1199,10 +1591,21 @@ impl QueryExecutor {
 
         for (right_row_id, right_row) in right_rows {
             let mut matched = false;
-            
+
             for (left_row_id, left_row) in left_rows {
-                if self.evaluate_join_condition(join_condition, left_row, right_row, left_table, right_table)? {
-                    joined_rows.push((*left_row_id, *right_row_id, left_row.clone(), right_row.clone()));
+                if self.evaluate_join_condition(
+                    join_condition,
+                    left_row,
+                    right_row,
+                    left_table,
+                    right_table,
+                )? {
+                    joined_rows.push((
+                        *left_row_id,
+                        *right_row_id,
+                        left_row.clone(),
+                        right_row.clone(),
+                    ));
                     matched = true;
                 }
             }
@@ -1210,7 +1613,12 @@ impl QueryExecutor {
             // If no match found, include right row with null left row
             if !matched {
                 let null_left_row = self.create_null_row(left_table);
-                joined_rows.push((RowId(usize::MAX), *right_row_id, null_left_row, right_row.clone()));
+                joined_rows.push((
+                    RowId(usize::MAX),
+                    *right_row_id,
+                    null_left_row,
+                    right_row.clone(),
+                ));
             }
         }
 
@@ -1228,12 +1636,27 @@ impl QueryExecutor {
         statistics: &mut QueryStatistics,
     ) -> Result<Vec<(RowId, RowId, TableRow, TableRow)>, QueryError> {
         // Combine left outer and right outer join results, removing duplicates
-        let mut left_outer = self.execute_left_outer_join(left_rows, right_rows, join_condition, left_table, right_table, statistics)?;
-        let right_outer = self.execute_right_outer_join(left_rows, right_rows, join_condition, left_table, right_table, statistics)?;
+        let mut left_outer = self.execute_left_outer_join(
+            left_rows,
+            right_rows,
+            join_condition,
+            left_table,
+            right_table,
+            statistics,
+        )?;
+        let right_outer = self.execute_right_outer_join(
+            left_rows,
+            right_rows,
+            join_condition,
+            left_table,
+            right_table,
+            statistics,
+        )?;
 
         // Add right outer results that don't exist in left outer (unmatched right rows)
         for (left_id, right_id, left_row, right_row) in right_outer {
-            if left_id.0 == usize::MAX { // This was an unmatched right row
+            if left_id.0 == usize::MAX {
+                // This was an unmatched right row
                 left_outer.push((left_id, right_id, left_row, right_row));
             }
         }
@@ -1290,10 +1713,12 @@ impl QueryExecutor {
         TableRow { values }
     }
 
-
-
     /// Get optimized rows for join input - avoid full table scans where possible
-    fn get_join_input_rows(&self, table: &TableRuntime, join_column: &str) -> Vec<(RowId, TableRow)> {
+    fn get_join_input_rows(
+        &self,
+        table: &TableRuntime,
+        join_column: &str,
+    ) -> Vec<(RowId, TableRow)> {
         // For now, use full scan but this could be optimized based on join column indexes
         // In a real implementation, this would check if join_column is indexed
         if let Some(ref pk_column) = table.primary_index.column_name {
@@ -1302,26 +1727,36 @@ impl QueryExecutor {
                 return table.scan_all();
             }
         }
-        
+
         // Use iterator-based approach for memory efficiency
         table.iter_rows().collect()
     }
 
     /// Apply an operation to existing query result (for composed queries)
-    fn apply_operation_to_result(&self, mut result: QueryResult, operation: QueryPlan) -> Result<QueryResult, QueryError> {
+    fn apply_operation_to_result(
+        &self,
+        mut result: QueryResult,
+        operation: QueryPlan,
+    ) -> Result<QueryResult, QueryError> {
         // This is a simplified implementation - a full system would support more complex pipelining
         match operation {
             QueryPlan::Filter { predicate, .. } => {
                 // Apply additional filtering to existing result
-                let filtered_rows: Vec<(RowId, TableRow)> = result.rows
+                let filtered_rows: Vec<(RowId, TableRow)> = result
+                    .rows
                     .into_iter()
                     .filter(|(_, row)| {
                         // Create a dummy table for evaluation context
                         // In a real implementation, we'd track the source table properly
-                        self.evaluate_condition(&predicate, row, &self.tables.values().next().unwrap()).unwrap_or(false)
+                        self.evaluate_condition(
+                            &predicate,
+                            row,
+                            &self.tables.values().next().unwrap(),
+                        )
+                        .unwrap_or(false)
                     })
                     .collect();
-                
+
                 result.rows = filtered_rows;
                 result.statistics.rows_returned = result.rows.len();
                 Ok(result)
@@ -1334,54 +1769,76 @@ impl QueryExecutor {
     }
 
     /// Apply final projection to query result
-    fn apply_final_projection(&self, mut result: QueryResult, projection: Vec<FieldProjection>) -> Result<QueryResult, QueryError> {
+    fn apply_final_projection(
+        &self,
+        mut result: QueryResult,
+        projection: Vec<FieldProjection>,
+    ) -> Result<QueryResult, QueryError> {
         // Apply projection to each row
-        let projected_rows: Result<Vec<(RowId, TableRow)>, QueryError> = result.rows
+        let projected_rows: Result<Vec<(RowId, TableRow)>, QueryError> = result
+            .rows
             .iter()
             .map(|(row_id, row)| {
                 let mut projected_values = HashMap::new();
-                
+
                 for field_proj in &projection {
                     let value = if let Some(ref transformation) = field_proj.transformation {
                         // For transformations, we'd need proper expression evaluation
                         // For now, just copy the source column value
-                        row.values.get(&field_proj.source_column).cloned()
+                        row.values
+                            .get(&field_proj.source_column)
+                            .cloned()
                             .ok_or_else(|| QueryError::ColumnNotFound {
                                 table: "intermediate_result".to_string(),
                                 column: field_proj.source_column.clone(),
                             })?
                     } else {
-                        row.values.get(&field_proj.source_column).cloned()
+                        row.values
+                            .get(&field_proj.source_column)
+                            .cloned()
                             .ok_or_else(|| QueryError::ColumnNotFound {
                                 table: "intermediate_result".to_string(),
                                 column: field_proj.source_column.clone(),
                             })?
                     };
-                    
+
                     projected_values.insert(field_proj.output_name().to_string(), value);
                 }
-                
-                Ok((*row_id, TableRow { values: projected_values }))
+
+                Ok((
+                    *row_id,
+                    TableRow {
+                        values: projected_values,
+                    },
+                ))
             })
             .collect();
-        
+
         result.rows = projected_rows?;
-        
+
         // Update schema to reflect projection
-        result.schema = projection.iter().map(|field_proj| {
-            // Find the original column type from existing schema
-            let column_type = result.schema.iter()
-                .find(|col| col.name == field_proj.source_column)
-                .map(|col| col.column_type.clone())
-                .unwrap_or_else(|| Type::Identifier { name: "String".to_string(), type_args: vec![] });
-            
-            ResultColumn::new(
-                field_proj.output_name().to_string(),
-                column_type,
-                None, // Intermediate result
-            )
-        }).collect();
-        
+        result.schema = projection
+            .iter()
+            .map(|field_proj| {
+                // Find the original column type from existing schema
+                let column_type = result
+                    .schema
+                    .iter()
+                    .find(|col| col.name == field_proj.source_column)
+                    .map(|col| col.column_type.clone())
+                    .unwrap_or_else(|| Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    });
+
+                ResultColumn::new(
+                    field_proj.output_name().to_string(),
+                    column_type,
+                    None, // Intermediate result
+                )
+            })
+            .collect();
+
         result.statistics.rows_returned = result.rows.len();
         Ok(result)
     }

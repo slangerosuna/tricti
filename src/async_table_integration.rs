@@ -1,14 +1,14 @@
+use crate::ast::{Expression, FieldProjection, JoinClause, JoinType, QuerySpec, ResourceAccess};
 use crate::async_runtime::{AsyncExecutionError, TaskId, YieldPoint};
-use crate::table_runtime::{TableRuntime, TableError, ColumnValue, RowId, TableRow};
-use crate::ast::{QuerySpec, Expression, JoinClause, JoinType, FieldProjection, ResourceAccess};
-use crate::resource_lifecycle::{ResourceLifecycleManager, AcquisitionResult};
-use crate::error_propagation::{ErrorPropagationManager, ErrorContext, ErrorHandlingResult};
+use crate::error_propagation::{ErrorContext, ErrorHandlingResult, ErrorPropagationManager};
+use crate::resource_lifecycle::{AcquisitionResult, ResourceLifecycleManager};
+use crate::table_runtime::{ColumnValue, RowId, TableError, TableRow, TableRuntime};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock, Mutex};
-use std::time::{Duration, Instant};
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex, RwLock};
 use std::task::{Context, Poll, Waker};
+use std::time::{Duration, Instant};
 
 /// Async table runtime integration for executing queries within systems
 pub struct AsyncTableRuntime {
@@ -231,17 +231,24 @@ impl AsyncTableRuntime {
         let required_resources = self.extract_required_resources(&query_spec).await?;
         for resource_name in &required_resources {
             let access_type = self.determine_access_type(&query_spec, resource_name);
-            
-            match self.resource_manager.acquire_resource(
-                resource_name.clone(),
-                task_id,
-                access_type,
-                Some(self.config.lock_timeout),
-            ).await? {
+
+            match self
+                .resource_manager
+                .acquire_resource(
+                    resource_name.clone(),
+                    task_id,
+                    access_type,
+                    Some(self.config.lock_timeout),
+                )
+                .await?
+            {
                 AcquisitionResult::Acquired(_) => {
                     // Resource acquired successfully
                 }
-                AcquisitionResult::WaitRequired { estimated_wait_time, .. } => {
+                AcquisitionResult::WaitRequired {
+                    estimated_wait_time,
+                    ..
+                } => {
                     // Return a future that will wait for resource availability
                     return Ok(self.create_waiting_future(
                         query_id,
@@ -299,23 +306,29 @@ impl AsyncTableRuntime {
             for resource_name in &resource_group {
                 // Determine the strongest access type needed
                 let access_type = self.determine_batch_access_type(&query_group, resource_name);
-                
-                match self.resource_manager.acquire_resource(
-                    resource_name.clone(),
-                    task_id,
-                    access_type,
-                    Some(self.config.lock_timeout),
-                ).await? {
+
+                match self
+                    .resource_manager
+                    .acquire_resource(
+                        resource_name.clone(),
+                        task_id,
+                        access_type,
+                        Some(self.config.lock_timeout),
+                    )
+                    .await?
+                {
                     AcquisitionResult::Acquired(_) => {
                         // Continue
                     }
                     AcquisitionResult::WaitRequired { .. } | AcquisitionResult::Denied { .. } => {
                         // Release already acquired resources and return error
-                        self.resource_manager.release_all_task_resources(
-                            task_id,
-                            crate::resource_lifecycle::ReleaseReason::TaskCancelled,
-                        ).await?;
-                        
+                        self.resource_manager
+                            .release_all_task_resources(
+                                task_id,
+                                crate::resource_lifecycle::ReleaseReason::TaskCancelled,
+                            )
+                            .await?;
+
                         return Err(AsyncExecutionError::ResourceConflict {
                             system: format!("task_{:?}", task_id),
                             resource: resource_name.clone(),
@@ -327,7 +340,9 @@ impl AsyncTableRuntime {
 
             // Execute queries in this group
             for query_spec in query_group {
-                let future = self.execute_single_query_with_resources(task_id, query_spec).await?;
+                let future = self
+                    .execute_single_query_with_resources(task_id, query_spec)
+                    .await?;
                 futures.push(future);
             }
         }
@@ -342,7 +357,7 @@ impl AsyncTableRuntime {
         isolation_level: IsolationLevel,
     ) -> Result<AsyncTransaction, AsyncExecutionError> {
         let transaction_id = format!("txn_{:?}_{}", task_id, Instant::now().elapsed().as_nanos());
-        
+
         let transaction = AsyncTransaction {
             transaction_id: transaction_id.clone(),
             task_id,
@@ -381,12 +396,18 @@ impl AsyncTableRuntime {
         }
 
         // Release all locks
-        for resource in transaction.read_locks.iter().chain(transaction.write_locks.iter()) {
-            self.resource_manager.release_resource(
-                resource.clone(),
-                transaction.task_id,
-                crate::resource_lifecycle::ReleaseReason::TaskCompleted,
-            ).await?;
+        for resource in transaction
+            .read_locks
+            .iter()
+            .chain(transaction.write_locks.iter())
+        {
+            self.resource_manager
+                .release_resource(
+                    resource.clone(),
+                    transaction.task_id,
+                    crate::resource_lifecycle::ReleaseReason::TaskCompleted,
+                )
+                .await?;
         }
 
         Ok(())
@@ -405,12 +426,18 @@ impl AsyncTableRuntime {
         }
 
         // Release all locks
-        for resource in transaction.read_locks.iter().chain(transaction.write_locks.iter()) {
-            self.resource_manager.release_resource(
-                resource.clone(),
-                transaction.task_id,
-                crate::resource_lifecycle::ReleaseReason::TaskCancelled,
-            ).await?;
+        for resource in transaction
+            .read_locks
+            .iter()
+            .chain(transaction.write_locks.iter())
+        {
+            self.resource_manager
+                .release_resource(
+                    resource.clone(),
+                    transaction.task_id,
+                    crate::resource_lifecycle::ReleaseReason::TaskCancelled,
+                )
+                .await?;
         }
 
         Ok(())
@@ -423,7 +450,7 @@ impl AsyncTableRuntime {
     ) -> Result<Option<QueryResult>, AsyncExecutionError> {
         let cache_key = self.generate_cache_key(query_spec);
         let cache = self.query_cache.read().unwrap();
-        
+
         if let Some(cached_result) = cache.cached_results.get(&cache_key) {
             if cached_result.expires_at > Instant::now() {
                 // Update cache statistics
@@ -440,10 +467,10 @@ impl AsyncTableRuntime {
         query_spec: &QuerySpec,
     ) -> Result<Vec<String>, AsyncExecutionError> {
         let mut resources = Vec::new();
-        
+
         // Primary table
         resources.push(query_spec.from_table.clone());
-        
+
         // Joined tables
         for join in &query_spec.joins {
             resources.push(join.table.clone());
@@ -475,15 +502,13 @@ impl AsyncTableRuntime {
         query_spec: &QuerySpec,
     ) -> Result<QueryExecutionPlan, AsyncExecutionError> {
         let plan_id = format!("plan_{}", Instant::now().elapsed().as_nanos());
-        
+
         // Simplified plan creation
-        let operations = vec![
-            QueryOperation::TableScan {
-                table_name: query_spec.from_table.clone(),
-                filter: query_spec.where_clause.clone().map(|expr| *expr),
-                estimated_rows: 1000, // Placeholder
-            }
-        ];
+        let operations = vec![QueryOperation::TableScan {
+            table_name: query_spec.from_table.clone(),
+            filter: query_spec.where_clause.clone().map(|expr| *expr),
+            estimated_rows: 1000, // Placeholder
+        }];
 
         Ok(QueryExecutionPlan {
             plan_id,
@@ -520,12 +545,17 @@ impl AsyncTableRuntime {
         task_id: TaskId,
         result: QueryResult,
     ) -> QueryFuture {
-        let future = QueryFuture::new(query_id, task_id, QuerySpec {
-            projections: Vec::new(),
-            from_table: String::new(),
-            where_clause: None,
-            joins: Vec::new(),
-        }, Duration::from_secs(0));
+        let future = QueryFuture::new(
+            query_id,
+            task_id,
+            QuerySpec {
+                projections: Vec::new(),
+                from_table: String::new(),
+                where_clause: None,
+                joins: Vec::new(),
+            },
+            Duration::from_secs(0),
+        );
 
         // Complete immediately
         future.complete(Ok(result));
@@ -568,18 +598,20 @@ impl AsyncTableRuntime {
         while !ungrouped_queries.is_empty() {
             let first_query = ungrouped_queries.remove(0);
             let first_resources = self.extract_required_resources(&first_query).await?;
-            
+
             let mut group_queries = vec![first_query];
             let mut group_resources = first_resources.clone();
 
             // Find queries that can share resources
             let mut i = 0;
             while i < ungrouped_queries.len() {
-                let query_resources = self.extract_required_resources(&ungrouped_queries[i]).await?;
-                
+                let query_resources = self
+                    .extract_required_resources(&ungrouped_queries[i])
+                    .await?;
+
                 // Check for resource overlap
                 let has_overlap = query_resources.iter().any(|r| group_resources.contains(r));
-                
+
                 if has_overlap {
                     group_queries.push(ungrouped_queries.remove(i));
                     for resource in query_resources {
@@ -628,7 +660,8 @@ impl AsyncTableRuntime {
             active_queries: active_queries.len(),
             cache_hit_ratio: self.calculate_cache_hit_ratio(&cache.cache_stats),
             average_query_time: Duration::from_millis(100), // Placeholder
-            total_queries_executed: cache.cache_stats.plan_cache_hits + cache.cache_stats.plan_cache_misses,
+            total_queries_executed: cache.cache_stats.plan_cache_hits
+                + cache.cache_stats.plan_cache_misses,
         }
     }
 

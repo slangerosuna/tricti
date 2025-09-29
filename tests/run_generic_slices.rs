@@ -4,7 +4,9 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-fn clang_available() -> bool { Command::new("clang").arg("--version").output().is_ok() }
+fn clang_available() -> bool {
+    Command::new("clang").arg("--version").output().is_ok()
+}
 
 fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
     let program = parser::parse(src.to_string());
@@ -14,11 +16,18 @@ fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
     let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
     gen.generate_program(&program).expect("codegen");
 
-    if Path::new(obj).exists() { let _ = fs::remove_file(obj); }
-    if Path::new(exe).exists() { let _ = fs::remove_file(exe); }
+    if Path::new(obj).exists() {
+        let _ = fs::remove_file(obj);
+    }
+    if Path::new(exe).exists() {
+        let _ = fs::remove_file(exe);
+    }
     gen.write_object_file(obj).expect("write obj");
 
-    let status = Command::new("clang").args(["-o", exe, obj]).status().expect("link");
+    let status = Command::new("clang")
+        .args(["-o", exe, obj])
+        .status()
+        .expect("link");
     assert!(status.success(), "link failed");
 
     let out = Command::new(exe).output().expect("run");
@@ -28,7 +37,10 @@ fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
 
 #[test]
 fn generic_slice_i64() {
-    if !clang_available() { eprintln!("clang not found; skipping"); return; }
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
     let src = r#"
         Slice<T> :: struct {
             ptr: *T,
@@ -54,6 +66,10 @@ fn generic_slice_i64() {
         for x in s { acc = acc + x }
         println(acc)
     "#;
-    let stdout = compile_and_run(src, "tests/tmp_generic_slice.o", "tests/tmp_generic_slice.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_generic_slice.o",
+        "tests/tmp_generic_slice.out",
+    );
     assert_eq!(stdout, "15\n");
 }

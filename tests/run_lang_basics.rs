@@ -154,7 +154,11 @@ fn for_loop_negative_range() {
         for i in 3:0:-1 { println(i) }
     "#;
 
-    let stdout = compile_and_run(src, "tests/tmp_for_range_neg.o", "tests/tmp_for_range_neg.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_for_range_neg.o",
+        "tests/tmp_for_range_neg.out",
+    );
     assert_eq!(stdout, ["3\n", "2\n", "1\n"].concat());
 }
 
@@ -170,7 +174,11 @@ fn for_loop_dynamic_step() {
         for i in 0:6:step { println(i) }
     "#;
 
-    let stdout = compile_and_run(src, "tests/tmp_for_range_dyn.o", "tests/tmp_for_range_dyn.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_for_range_dyn.o",
+        "tests/tmp_for_range_dyn.out",
+    );
     assert_eq!(stdout, ["0\n", "2\n", "4\n"].concat());
 }
 
@@ -187,8 +195,11 @@ fn for_loop_with_dynamic_negative_step() {
         for i in 5:0:step { println(i) }
     "#;
 
-    let stdout =
-        compile_and_run(src, "tests/tmp_for_range_dyn_neg.o", "tests/tmp_for_range_dyn_neg.out");
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_for_range_dyn_neg.o",
+        "tests/tmp_for_range_dyn_neg.out",
+    );
     assert_eq!(stdout, ["5\n", "3\n", "1\n"].concat());
 }
 
