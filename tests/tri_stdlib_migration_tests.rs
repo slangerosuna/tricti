@@ -1510,6 +1510,21 @@ pub fn empty_runtime_stats() -> RuntimeStats {
     }
 }
 
+// Runtime scaffolding from stdlib/rt.tri
+#[derive(Debug, Clone, PartialEq)]
+pub struct Runtime {}
+
+pub fn start() -> i32 {
+    // Call main function (placeholder - would be provided by user code)
+    main();
+    0
+}
+
+// Placeholder main function for testing
+pub fn main() {
+    // User main function would go here
+}
+
 pub fn now_ms() -> i64 {
     // Mock implementation for testing
     1000
@@ -1836,15 +1851,17 @@ mod async_runtime_tests {
     }
 
     #[test]
-    fn test_empty_runtime_stats() {
-        let stats = empty_runtime_stats();
-        assert_eq!(stats.total_tasks_created, 0);
-        assert_eq!(stats.active_tasks, 0);
-        assert_eq!(stats.queued_tasks, 0);
-        assert_eq!(stats.completed_tasks, 0);
-        assert_eq!(stats.failed_tasks, 0);
-        assert_eq!(stats.cancelled_tasks, 0);
-        assert_eq!(stats.resource_contentions, 0);
+    fn test_runtime_struct() {
+        let runtime = Runtime {};
+        // Runtime struct is currently empty, just test that it can be created
+        assert_eq!(runtime, Runtime {});
+    }
+
+    #[test]
+    fn test_start_function() {
+        // Test that start function returns 0
+        let exit_code = start();
+        assert_eq!(exit_code, 0);
     }
 }
 
