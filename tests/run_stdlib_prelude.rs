@@ -1,93 +1,35 @@
-use inkwell::context::Context;
-use peano::{codegen, parser, semantic};
-use std::fs;
-use std::path::Path;
-use std::process::Command;
+/// Tests for stdlib/prelude.tri using the tri_test_helpers macros.
 
-fn clang_available() -> bool {
-    Command::new("clang").arg("--version").output().is_ok()
-}
+#[macro_use]
+extern crate peano;
 
-fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
-    let program = parser::parse(src.to_string());
-    let sem = semantic::analyze_program(&program).expect("semantic analysis");
-
-    let context = Context::create();
-    let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
-    gen.generate_program(&program).expect("codegen");
-
-    if Path::new(obj).exists() {
-        let _ = fs::remove_file(obj);
-    }
-    if Path::new(exe).exists() {
-        let _ = fs::remove_file(exe);
-    }
-
-    gen.write_object_file(obj).expect("write obj");
-
-    let status = Command::new("clang")
-        .args(["-o", exe, obj])
-        .status()
-        .expect("link");
-    assert!(status.success(), "link failed");
-
-    let out = Command::new(exe).output().expect("run");
-    assert!(out.status.success(), "program failed to run");
-    String::from_utf8_lossy(&out.stdout).to_string()
-}
-
-#[test]
-fn stdlib_prelude_id_and_print_i64() {
-    if !clang_available() {
-        eprintln!("clang not found; skipping");
-        return;
-    }
-    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
+#[cfg(test)]
+mod tests {
+    tri_test_with_prelude!(
+        stdlib_prelude_id_and_print_i64,
+        r#"
         main :: () => {
             print(123)
             println(id(42))
         }
-    "#;
-    let src = format!("{}\n{}", prelude, user);
-    let stdout = compile_and_run(
-        &src,
-        "tests/tmp_stdlib_prelude1.o",
-        "tests/tmp_stdlib_prelude1.out",
+        "#,
+        "123\n42\n"
     );
-    assert_eq!(stdout, "123\n42\n");
-}
 
-#[test]
-fn stdlib_prelude_len_and_streq() {
-    if !clang_available() {
-        eprintln!("clang not found; skipping");
-        return;
-    }
-    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
+    tri_test_with_prelude!(
+        stdlib_prelude_len_and_streq,
+        r#"
         main :: () => {
             println(len("hé"))
             println(streq("a", "a"))
         }
-    "#;
-    let src = format!("{}\n{}", prelude, user);
-    let stdout = compile_and_run(
-        &src,
-        "tests/tmp_stdlib_prelude2.o",
-        "tests/tmp_stdlib_prelude2.out",
+        "#,
+        "3\ntrue\n"
     );
-    assert_eq!(stdout, "3\ntrue\n");
-}
 
-#[test]
-fn stdlib_prelude_math_and_array_helpers() {
-    if !clang_available() {
-        eprintln!("clang not found; skipping");
-        return;
-    }
-    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
+    tri_test_with_prelude!(
+        stdlib_prelude_math_and_array_helpers,
+        r#"
         main :: () => {
             println(clamp_i64(-5, 0, 10))
             println(sign_i64(-42))
@@ -106,12 +48,44 @@ fn stdlib_prelude_math_and_array_helpers() {
             println(array_any(mapped, (x) => x > 4))
             println(array_fold(mapped, 0i64, (acc, x) => acc + x))
         }
-    "#;
-    let src = format!("{}\n{}", prelude, user);
-    let stdout = compile_and_run(
-        &src,
-        "tests/tmp_stdlib_prelude_math.o",
-        "tests/tmp_stdlib_prelude_math.out",
+        "#,
+        "0\n-1\n0\n1\ntrue\ntrue\n2\n4\n6\ntrue\ntrue\n12\n"
     );
-    assert_eq!(stdout, "0\n-1\n0\n1\ntrue\ntrue\n2\n4\n6\ntrue\ntrue\n12\n");
+
+    tri_test_with_prelude!(
+        stdlib_prelude_modern_error_types,
+        r#"
+        main :: () => {
+            # Test creating different error types
+            msg_err := std_error_message_only("simple message")
+            panic_err := std_error_panic("panic occurred", some "source info")
+            invalid_arg_err := std_error_invalid_argument("param1", "invalid value")
+            unsupported_err := std_error_unsupported("experimental feature")
+
+            # Test error message extraction
+            println(std_error_message(msg_err))
+            println(std_error_message(panic_err))
+            println(std_error_message(invalid_arg_err))
+            println(std_error_message(unsupported_err))
+
+            # Test result types
+            ok_result := std_ok(42)
+            err_result := std_err(msg_err)
+
+            # Test result helper functions
+            println(std_result_is_ok(ok_result))
+            println(std_result_is_ok(err_result))
+
+            println(std_result_unwrap(ok_result))
+
+            match std_result_error(err_result) {
+                some error => println(std_error_message(error)),
+                none => println("no error"),
+            }
+
+            println("Modern error types test completed successfully!")
+        }
+        "#,
+        "simple message\npanic occurred\ninvalid value\nexperimental feature\ntrue\nfalse\n42\nsimple message\nModern error types test completed successfully!\n"
+    );
 }

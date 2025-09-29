@@ -1,0 +1,40 @@
+use prelude
+
+# Test the modern enum-based error and result types
+test_modern_errors :: () => {
+    # Test creating different error types
+    msg_err := std_error_message_only("simple message")
+    panic_err := std_error_panic("panic occurred", some "source info")
+    invalid_arg_err := std_error_invalid_argument("param1", "invalid value")
+    unsupported_err := std_error_unsupported("experimental feature")
+
+    # Test error message extraction
+    assert_eq(std_error_message(msg_err), "simple message")
+    assert_eq(std_error_message(panic_err), "panic occurred")
+    assert_eq(std_error_message(invalid_arg_err), "invalid value")
+    assert_eq(std_error_message(unsupported_err), "experimental feature")
+
+    # Test result types
+    ok_result := std_ok(42)
+    err_result := std_err(msg_err)
+
+    # Test result pattern matching
+    match ok_result {
+        StdResult::Ok { value } => assert_eq(value, 42),
+        StdResult::Err { .. } => panic("Expected Ok result"),
+    }
+
+    match err_result {
+        StdResult::Ok { .. } => panic("Expected Err result"),
+        StdResult::Err { error } => assert_eq(std_error_message(error), "simple message"),
+    }
+
+    # Test result helper functions
+    assert(std_result_is_ok(ok_result))
+    assert(!std_result_is_ok(err_result))
+
+    assert_eq(std_result_unwrap(ok_result), 42)
+    assert(std_result_error(err_result) ~= none)
+
+    println("All modern error and result tests passed!")
+}

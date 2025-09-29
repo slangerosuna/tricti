@@ -1,109 +1,54 @@
 # Peano Prelude (very early draft)
 # Re-export core functions/types that user code may `use` later.
 
-# NOTE: Scoped module imports are still under construction, so the foundational types that live
-# in `stdlib/core` are not re-exported here yet. Once the parser supports those constructs we can
-# wire them through the prelude instead of inlining temporary shims.
+# Import modern enum-based error and result types from core modules
+use core/errors
+use core/result
 
+# Re-export the modern types for convenience
+pub use StdError
+pub use StdResult
+pub use std_error_message
+pub use std_ok
+pub use std_err
 
-StdErrorKind :: enum {
-	Message,
-	Panic,
-	InvalidArgument,
-	Unsupported,
-}
-
-StdError :: struct {
-	kind: StdErrorKind,
-	message: string,
-	parameter: ?string,
-	feature: ?string,
-	source: ?string,
-}
-
-std_error_message :: (error: StdError) -> string => {
-	error.message
-}
-
-std_error_kind :: (error: StdError) -> StdErrorKind => {
-	error.kind
-}
-
-std_error_with_source :: (
-	kind: StdErrorKind,
-	message: string,
-	source: ?string,
-) -> StdError => {
-	{
-		kind: kind,
-		message: message,
-		parameter: none,
-		feature: none,
-		source: source,
-	}
-}
-
-std_error_invalid_argument :: (
-	parameter: string,
-	message: string,
-) -> StdError => {
-	{
-		kind: StdErrorKind::InvalidArgument,
-		message: message,
-		parameter: some parameter,
-		feature: none,
-		source: none,
-	}
-}
-
-std_error_unsupported :: (feature: string) -> StdError => {
-	{
-		kind: StdErrorKind::Unsupported,
-		message: feature,
-		parameter: none,
-		feature: some feature,
-		source: none,
-	}
-}
-
-StdResult<T> :: struct {
-	is_ok: bool,
-	value: ?T,
-	error: ?StdError,
-}
-
-std_ok<T> :: (value: T) -> StdResult<T> => {
-	{
-		is_ok: true,
-		value: some value,
-		error: none,
-	}
-}
-
-std_err<T> :: (error: StdError) -> StdResult<T> => {
-	{
-		is_ok: false,
-		value: none,
-		error: some error,
-	}
-}
-
+# Legacy result functions for backward compatibility during migration
 std_result_is_ok<T> :: (result: StdResult<T>) -> bool => {
-	result.is_ok
+	match result {
+		StdResult::Ok { .. } => true,
+		StdResult::Err { .. } => false,
+	}
 }
 
 std_result_unwrap<T> :: (result: StdResult<T>) -> T => {
-	if !result.is_ok {
-		panic("attempted to unwrap error result")
-	}
-	match result.value {
-		some value => value,
-		none => panic("missing value for ok result"),
+	match result {
+		StdResult::Ok { value } => value,
+		StdResult::Err { error } => panic(std_error_message(error)),
 	}
 }
 
 std_result_error<T> :: (result: StdResult<T>) -> ?StdError => {
-	result.error
+	match result {
+		StdResult::Ok { .. } => none,
+		StdResult::Err { error } => some error,
+	}
+}
+
+# Helper functions for creating modern error types
+std_error_message_only :: (message: string) -> StdError => {
+	StdError::Message { message: message }
+}
+
+std_error_panic :: (message: string, source: ?string) -> StdError => {
+	StdError::Panic { message: message, source: source }
+}
+
+std_error_invalid_argument :: (parameter: string, message: string) -> StdError => {
+	StdError::InvalidArgument { parameter: parameter, message: message }
+}
+
+std_error_unsupported :: (feature: string) -> StdError => {
+	StdError::Unsupported { feature: feature }
 }
 
 LogLevel :: enum {
