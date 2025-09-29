@@ -1,0 +1,20 @@
+# Core error definitions for the TriCTI standard library foundations
+# These types are intended to be shared across stdlib modules and eventually exported through the prelude.
+
+use prelude
+
+StdError :: enum {
+    Message { message: string },
+    Panic { message: string, source: ?string },
+    InvalidArgument { parameter: string, message: string },
+    Unsupported { feature: string },
+}
+
+std_error_message :: (err: StdError) -> string => {
+    match err {
+        Message { message } => message,
+        Panic { message, .. } => message,
+        InvalidArgument { message, .. } => message,
+        Unsupported { feature } => feature,
+    }
+}

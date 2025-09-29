@@ -264,8 +264,8 @@ submit_task :: (
         dependencies: [],
     }
 
-    runtime.active_tasks = append_async_task(runtime.active_tasks, task)
-    runtime.queued_task_ids = append_u64(runtime.queued_task_ids, id)
+    runtime.active_tasks = array_append(runtime.active_tasks, task)
+    runtime.queued_task_ids = array_append(runtime.queued_task_ids, id)
 
     runtime.resource_summary.total_tasks_created = runtime.resource_summary.total_tasks_created + 1
     runtime.resource_summary.active_tasks = runtime.resource_summary.active_tasks + 1
@@ -278,7 +278,7 @@ mark_task_running :: (
     runtime: &mut AsyncRuntimeState,
     task_id: u64,
 ) -> none => {
-    idx := find_task_index(runtime.active_tasks, task_id)? else {
+    idx := array_find_index(runtime.active_tasks, (task) => task.id == task_id)? else {
         panic("mark_task_running: unknown task id")
     }
 
@@ -287,7 +287,7 @@ mark_task_running :: (
         started_at_ms: now_ms(),
     }
 
-    runtime.active_tasks = set_task_at(runtime.active_tasks, idx, task)
+    runtime.active_tasks = array_set_at(runtime.active_tasks, idx, task)
 }
 
 complete_task :: (
@@ -295,20 +295,20 @@ complete_task :: (
     task_id: u64,
     state: TaskState,
 ) -> none => {
-    if contains_u64(runtime.queued_task_ids, task_id) {
-        runtime.queued_task_ids = remove_u64_value(runtime.queued_task_ids, task_id)
+    if array_contains(runtime.queued_task_ids, (value) => value == task_id) {
+        runtime.queued_task_ids = array_remove_where(runtime.queued_task_ids, (value) => value == task_id)
         runtime.resource_summary.queued_tasks = max_i64(runtime.resource_summary.queued_tasks - 1, 0)
     }
 
-    waker_idx := find_waker_index(runtime.wakers, task_id)
+    waker_idx := array_find_index(runtime.wakers, (waker) => waker.task_id == task_id)
     match waker_idx {
         some idx => {
-            runtime.wakers = remove_waker_at(runtime.wakers, idx)
+            runtime.wakers = array_remove_at(runtime.wakers, idx)
         }
         none => {}
     }
 
-    idx := find_task_index(runtime.active_tasks, task_id)? else {
+    idx := array_find_index(runtime.active_tasks, (task) => task.id == task_id)? else {
         panic("complete_task: unknown task id")
     }
 
@@ -319,8 +319,8 @@ complete_task :: (
 
     release_task_resources(runtime, task)
 
-    runtime.active_tasks = remove_task_at(runtime.active_tasks, idx)
-    runtime.completed_tasks = append_completed(runtime.completed_tasks, {
+    runtime.active_tasks = array_remove_at(runtime.active_tasks, idx)
+    runtime.completed_tasks = array_append(runtime.completed_tasks, {
         id: task_id,
         state: state,
     })
@@ -345,7 +345,7 @@ suspend_task :: (
     yield_point: YieldPoint,
     intermediate_state: ?[ParameterValue],
 ) -> none => {
-    idx := find_task_index(runtime.active_tasks, task_id)? else {
+    idx := array_find_index(runtime.active_tasks, (task) => task.id == task_id)? else {
         panic("suspend_task: unknown task id")
     }
 
@@ -356,14 +356,14 @@ suspend_task :: (
         intermediate_state: intermediate_state,
     }
 
-    runtime.active_tasks = set_task_at(runtime.active_tasks, idx, task)
+    runtime.active_tasks = array_set_at(runtime.active_tasks, idx, task)
 }
 
 resume_task :: (
     runtime: &mut AsyncRuntimeState,
     task_id: u64,
 ) -> TaskResumeResult => {
-    idx := find_task_index(runtime.active_tasks, task_id)? else {
+    idx := array_find_index(runtime.active_tasks, (task) => task.id == task_id)? else {
         ret {
             resumed: false,
             intermediate_state: none,
@@ -374,10 +374,10 @@ resume_task :: (
     match task.state {
         TaskState::Suspended { intermediate_state, .. } => {
             task.state = TaskState::Pending
-            runtime.active_tasks = set_task_at(runtime.active_tasks, idx, task)
+            runtime.active_tasks = array_set_at(runtime.active_tasks, idx, task)
 
-            if !contains_u64(runtime.queued_task_ids, task_id) {
-                runtime.queued_task_ids = append_u64(runtime.queued_task_ids, task_id)
+            if !array_contains(runtime.queued_task_ids, (value) => value == task_id) {
+                runtime.queued_task_ids = array_append(runtime.queued_task_ids, task_id)
                 runtime.resource_summary.queued_tasks = runtime.resource_summary.queued_tasks + 1
             }
 
@@ -394,8 +394,8 @@ resume_task :: (
             }
         }
         TaskState::Pending => {
-            if !contains_u64(runtime.queued_task_ids, task_id) {
-                runtime.queued_task_ids = append_u64(runtime.queued_task_ids, task_id)
+            if !array_contains(runtime.queued_task_ids, (value) => value == task_id) {
+                runtime.queued_task_ids = array_append(runtime.queued_task_ids, task_id)
                 runtime.resource_summary.queued_tasks = runtime.resource_summary.queued_tasks + 1
             }
             ret {
@@ -416,8 +416,8 @@ cancel_task :: (
     runtime: &mut AsyncRuntimeState,
     task_id: u64,
 ) -> none => {
-    if contains_u64(runtime.queued_task_ids, task_id) {
-        runtime.queued_task_ids = remove_u64_value(runtime.queued_task_ids, task_id)
+    if array_contains(runtime.queued_task_ids, (value) => value == task_id) {
+        runtime.queued_task_ids = array_remove_where(runtime.queued_task_ids, (value) => value == task_id)
         runtime.resource_summary.queued_tasks = max_i64(runtime.resource_summary.queued_tasks - 1, 0)
     }
 
@@ -433,8 +433,8 @@ fail_task :: (
     task_id: u64,
     error: AsyncExecutionError,
 ) -> none => {
-    if contains_u64(runtime.queued_task_ids, task_id) {
-        runtime.queued_task_ids = remove_u64_value(runtime.queued_task_ids, task_id)
+    if array_contains(runtime.queued_task_ids, (value) => value == task_id) {
+        runtime.queued_task_ids = array_remove_where(runtime.queued_task_ids, (value) => value == task_id)
         runtime.resource_summary.queued_tasks = max_i64(runtime.resource_summary.queued_tasks - 1, 0)
     }
 
@@ -513,7 +513,7 @@ begin_next_task :: (
     task_id := next.id
     mark_task_running(runtime, task_id)
 
-    idx := find_task_index(runtime.active_tasks, task_id)? else {
+    idx := array_find_index(runtime.active_tasks, (task) => task.id == task_id)? else {
         ret none
     }
 
@@ -534,7 +534,7 @@ take_completed_task :: (
     }
 
     record := runtime.completed_tasks[0]
-    runtime.completed_tasks = remove_completed_at(runtime.completed_tasks, 0)
+    runtime.completed_tasks = array_remove_at(runtime.completed_tasks, 0)
     some record
 }
 
@@ -542,12 +542,12 @@ take_task_intermediate_state :: (
     runtime: &mut AsyncRuntimeState,
     task_id: u64,
 ) -> ?[ParameterValue] => {
-    idx := find_intermediate_state_index(runtime.resume_buffers, task_id)? else {
+    idx := array_find_index(runtime.resume_buffers, (state) => state.task_id == task_id)? else {
         ret none
     }
 
     record := runtime.resume_buffers[idx]
-    runtime.resume_buffers = remove_intermediate_state_at(runtime.resume_buffers, idx)
+    runtime.resume_buffers = array_remove_at(runtime.resume_buffers, idx)
     some record.values
 }
 
@@ -561,13 +561,13 @@ store_task_intermediate_state :: (
         values: values,
     }
 
-    idx := find_intermediate_state_index(runtime.resume_buffers, task_id)
+    idx := array_find_index(runtime.resume_buffers, (state) => state.task_id == task_id)
     match idx {
         some i => {
-            runtime.resume_buffers = set_intermediate_state_at(runtime.resume_buffers, i, record)
+            runtime.resume_buffers = array_set_at(runtime.resume_buffers, i, record)
         }
         none => {
-            runtime.resume_buffers = append_intermediate_state(runtime.resume_buffers, record)
+            runtime.resume_buffers = array_append(runtime.resume_buffers, record)
         }
     }
 }
@@ -576,10 +576,10 @@ clear_task_intermediate_state :: (
     runtime: &mut AsyncRuntimeState,
     task_id: u64,
 ) -> none => {
-    idx := find_intermediate_state_index(runtime.resume_buffers, task_id)
+    idx := array_find_index(runtime.resume_buffers, (state) => state.task_id == task_id)
     match idx {
         some i => {
-            runtime.resume_buffers = remove_intermediate_state_at(runtime.resume_buffers, i)
+            runtime.resume_buffers = array_remove_at(runtime.resume_buffers, i)
         }
         none => {}
     }
@@ -614,7 +614,7 @@ acquire_resources_for_task :: (
             ret false
         }
 
-        acquired_names = append_string(acquired_names, request.resource_name)
+        acquired_names = array_append(acquired_names, request.resource_name)
     }
 
     true
@@ -625,26 +625,26 @@ release_resource_for_task :: (
     task_id: u64,
     resource_name: string,
 ) -> none => {
-    lease_idx := find_active_lease_index(runtime.resource_leases, task_id, resource_name)
+    lease_idx := array_find_index(runtime.resource_leases, (lease) => lease.task_id == task_id && lease.resource_name == resource_name)
     match lease_idx {
         some idx => {
-            runtime.resource_leases = remove_active_lease_at(runtime.resource_leases, idx)
+            runtime.resource_leases = array_remove_at(runtime.resource_leases, idx)
         }
         none => {}
     }
 
     wake_waiters_for_resource(runtime, resource_name)
 
-    task_idx := find_task_index(runtime.active_tasks, task_id)? else {
+    task_idx := array_find_index(runtime.active_tasks, (task) => task.id == task_id)? else {
         ret
     }
 
     task := runtime.active_tasks[task_idx]
-    handle_idx := find_resource_handle_index(task.resource_handles, resource_name)
+    handle_idx := array_find_index(task.resource_handles, (handle) => handle.resource_name == resource_name)
     match handle_idx {
         some idx => {
-            task.resource_handles = remove_resource_handle_at(task.resource_handles, idx)
-            runtime.active_tasks = set_task_at(runtime.active_tasks, task_idx, task)
+            task.resource_handles = array_remove_at(task.resource_handles, idx)
+            runtime.active_tasks = array_set_at(runtime.active_tasks, task_idx, task)
         }
         none => {}
     }
@@ -656,7 +656,7 @@ release_task_resources :: (
 ) -> none => {
     for i in 0:task.resource_handles.len() {
         handle := task.resource_handles[i]
-        runtime.resource_leases = remove_active_lease(runtime.resource_leases, task.id, handle.resource_name)
+        runtime.resource_leases = array_remove_where(runtime.resource_leases, (lease) => lease.task_id == task.id && lease.resource_name == handle.resource_name)
         wake_waiters_for_resource(runtime, handle.resource_name)
     }
 }
@@ -669,13 +669,13 @@ try_acquire_resource :: (
     lease_duration_ms: ?i64,
     enqueue_on_conflict: bool,
 ) -> bool => {
-    task_idx := find_task_index(runtime.active_tasks, task_id)? else {
+    task_idx := array_find_index(runtime.active_tasks, (task) => task.id == task_id)? else {
         ret false
     }
 
     task := runtime.active_tasks[task_idx]
 
-    existing_handle_idx := find_resource_handle_index(task.resource_handles, resource_name)
+    existing_handle_idx := array_find_index(task.resource_handles, (handle) => handle.resource_name == resource_name)
     match existing_handle_idx {
         some _ => {
             ret true
@@ -702,7 +702,7 @@ try_acquire_resource :: (
 
     if conflict {
         if enqueue_on_conflict {
-            existing_waiter := find_waiter_index(runtime.resource_waiters, task_id, resource_name)
+            existing_waiter := array_find_index(runtime.resource_waiters, (waiter) => waiter.task_id == task_id && waiter.resource_name == resource_name)
             match existing_waiter {
                 some _ => {}
                 none => {
@@ -714,7 +714,7 @@ try_acquire_resource :: (
                         lease_duration_ms: lease_duration_ms,
                     }
 
-                    runtime.resource_waiters = append_resource_waiter(runtime.resource_waiters, waiter)
+                    runtime.resource_waiters = array_append(runtime.resource_waiters, waiter)
                     runtime.resource_summary.resource_contentions = runtime.resource_summary.resource_contentions + 1
                 }
             }
@@ -732,8 +732,8 @@ try_acquire_resource :: (
         lease_duration_ms: lease_duration_ms,
     }
 
-    task.resource_handles = append_resource_handle(task.resource_handles, handle)
-    runtime.active_tasks = set_task_at(runtime.active_tasks, task_idx, task)
+    task.resource_handles = array_append(task.resource_handles, handle)
+    runtime.active_tasks = array_set_at(runtime.active_tasks, task_idx, task)
 
     lease_record := {
         resource_name: resource_name,
@@ -743,7 +743,7 @@ try_acquire_resource :: (
         lease_duration_ms: lease_duration_ms,
     }
 
-    runtime.resource_leases = append_active_lease(runtime.resource_leases, lease_record)
+    runtime.resource_leases = array_append(runtime.resource_leases, lease_record)
 
     true
 }
@@ -762,7 +762,7 @@ wake_waiters_for_resource :: (
 
         acquired := try_acquire_resource(runtime, waiter.task_id, waiter.resource_name, waiter.access_type, waiter.lease_duration_ms, false)
         if acquired {
-            runtime.resource_waiters = remove_resource_waiter_at(runtime.resource_waiters, idx)
+            runtime.resource_waiters = array_remove_at(runtime.resource_waiters, idx)
             _ := resume_task(runtime, waiter.task_id)
         } else {
             idx = idx + 1
@@ -780,13 +780,13 @@ register_task_waker :: (
         token: token,
     }
 
-    idx := find_waker_index(runtime.wakers, task_id)
+    idx := array_find_index(runtime.wakers, (existing) => existing.task_id == task_id)
     match idx {
         some i => {
-            runtime.wakers = set_waker_at(runtime.wakers, i, waker)
+            runtime.wakers = array_set_at(runtime.wakers, i, waker)
         }
         none => {
-            runtime.wakers = append_waker(runtime.wakers, waker)
+            runtime.wakers = array_append(runtime.wakers, waker)
         }
     }
 }
@@ -795,12 +795,12 @@ take_task_waker :: (
     runtime: &mut AsyncRuntimeState,
     task_id: u64,
 ) -> ?TaskWaker => {
-    idx := find_waker_index(runtime.wakers, task_id)? else {
+    idx := array_find_index(runtime.wakers, (waker) => waker.task_id == task_id)? else {
         ret none
     }
 
     waker := runtime.wakers[idx]
-    runtime.wakers = remove_waker_at(runtime.wakers, idx)
+    runtime.wakers = array_remove_at(runtime.wakers, idx)
     some waker
 }
 
@@ -952,10 +952,10 @@ next_ready_task :: (
     }
 
     task_id := runtime.queued_task_ids[0]
-    runtime.queued_task_ids = remove_u64_at(runtime.queued_task_ids, 0)
+    runtime.queued_task_ids = array_remove_at(runtime.queued_task_ids, 0)
     runtime.resource_summary.queued_tasks = max_i64(runtime.resource_summary.queued_tasks - 1, 0)
 
-    idx := find_task_index(runtime.active_tasks, task_id)? else {
+    idx := array_find_index(runtime.active_tasks, (task) => task.id == task_id)? else {
         ret none
     }
 
@@ -985,323 +985,8 @@ now_ms :: () -> i64 => {
     panic("now_ms requires host clock integration")
 }
 
-append_async_task :: (tasks: [AsyncTask], task: AsyncTask) -> [AsyncTask] => {
-    new_len := tasks.len() + 1
-    output := new [AsyncTask; new_len]
-    for i in 0:tasks.len() {
-        output[i] = tasks[i]
-    }
-    output[new_len - 1] = task
-    output
-}
 
-append_u64 :: (values: [u64], value: u64) -> [u64] => {
-    new_len := values.len() + 1
-    output := new [u64; new_len]
-    for i in 0:values.len() {
-        output[i] = values[i]
-    }
-    output[new_len - 1] = value
-    output
-}
-
-append_completed :: (completed: [CompletedTaskRecord], record: CompletedTaskRecord) -> [CompletedTaskRecord] => {
-    new_len := completed.len() + 1
-    output := new [CompletedTaskRecord; new_len]
-    for i in 0:completed.len() {
-        output[i] = completed[i]
-    }
-    output[new_len - 1] = record
-    output
-}
-
-append_waker :: (wakers: [TaskWaker], waker: TaskWaker) -> [TaskWaker] => {
-    new_len := wakers.len() + 1
-    output := new [TaskWaker; new_len]
-    for i in 0:wakers.len() {
-        output[i] = wakers[i]
-    }
-    output[new_len - 1] = waker
-    output
-}
-
-set_waker_at :: (wakers: [TaskWaker], idx: i64, waker: TaskWaker) -> [TaskWaker] => {
-    output := new [TaskWaker; wakers.len()]
-    for i in 0:wakers.len() {
-        if i == idx {
-            output[i] = waker
-        } else {
-            output[i] = wakers[i]
-        }
-    }
-    output
-}
-
-remove_waker_at :: (wakers: [TaskWaker], remove_idx: i64) -> [TaskWaker] => {
-    if wakers.len() == 0 {
-        ret []
-    }
-
-    new_len := wakers.len() - 1
-    if new_len <= 0 {
-        ret []
-    }
-
-    output := new [TaskWaker; new_len]
-    out_idx := 0
-    for i in 0:wakers.len() {
-        if i == remove_idx {
-            continue
-        }
-        output[out_idx] = wakers[i]
-        out_idx = out_idx + 1
-    }
-    output
-}
-
-find_task_index :: (tasks: [AsyncTask], task_id: u64) -> ?i64 => {
-    for i in 0:tasks.len() {
-        if tasks[i].id == task_id {
-            ret i
-        }
-    }
-    none
-}
-
-find_waker_index :: (wakers: [TaskWaker], task_id: u64) -> ?i64 => {
-    for i in 0:wakers.len() {
-        if wakers[i].task_id == task_id {
-            ret i
-        }
-    }
-    none
-}
-
-remove_task_at :: (tasks: [AsyncTask], remove_idx: i64) -> [AsyncTask] => {
-    new_len := tasks.len() - 1
-    output := new [AsyncTask; new_len]
-    out_idx := 0
-    for i in 0:tasks.len() {
-        if i == remove_idx {
-            continue
-        }
-        output[out_idx] = tasks[i]
-        out_idx = out_idx + 1
-    }
-    output
-}
-
-remove_u64_at :: (values: [u64], remove_idx: i64) -> [u64] => {
-    new_len := values.len() - 1
-    output := new [u64; new_len]
-    out_idx := 0
-    for i in 0:values.len() {
-        if i == remove_idx {
-            continue
-        }
-        output[out_idx] = values[i]
-        out_idx = out_idx + 1
-    }
-    output
-}
-
-remove_u64_value :: (values: [u64], target: u64) -> [u64] => {
-    if values.len() == 0 {
-        ret []
-    }
-
-    count := values.len()
-    output := new [u64; count]
-    out_idx := 0
-    for i in 0:values.len() {
-        if values[i] == target {
-            continue
-        }
-        output[out_idx] = values[i]
-        out_idx = out_idx + 1
-    }
-    trimmed := new [u64; out_idx]
-    for i in 0:out_idx {
-        trimmed[i] = output[i]
-    }
-    trimmed
-}
-
-set_task_at :: (tasks: [AsyncTask], idx: i64, task: AsyncTask) -> [AsyncTask] => {
-    output := new [AsyncTask; tasks.len()]
-    for i in 0:tasks.len() {
-        if i == idx {
-            output[i] = task
-        } else {
-            output[i] = tasks[i]
-        }
-    }
-    output
-}
-
-max_i64 :: (a: i64, b: i64) -> i64 => {
-    if a > b { a } else { b }
-}
-
-contains_u64 :: (values: [u64], target: u64) -> bool => {
-    for i in 0:values.len() {
-        if values[i] == target {
-            ret true
-        }
-    }
-    false
-}
-
-append_string :: (values: [string], value: string) -> [string] => {
-    new_len := values.len() + 1
-    output := new [string; new_len]
-    for i in 0:values.len() {
-        output[i] = values[i]
-    }
-    output[new_len - 1] = value
-    output
-}
-
-append_resource_handle :: (handles: [ResourceHandle], handle: ResourceHandle) -> [ResourceHandle] => {
-    new_len := handles.len() + 1
-    output := new [ResourceHandle; new_len]
-    for i in 0:handles.len() {
-        output[i] = handles[i]
-    }
-    output[new_len - 1] = handle
-    output
-}
-
-remove_resource_handle_at :: (handles: [ResourceHandle], remove_idx: i64) -> [ResourceHandle] => {
-    if handles.len() == 0 {
-        ret []
-    }
-
-    new_len := handles.len() - 1
-    if new_len <= 0 {
-        ret []
-    }
-
-    output := new [ResourceHandle; new_len]
-    out_idx := 0
-    for i in 0:handles.len() {
-        if i == remove_idx {
-            continue
-        }
-        output[out_idx] = handles[i]
-        out_idx = out_idx + 1
-    }
-    output
-}
-
-find_resource_handle_index :: (handles: [ResourceHandle], resource_name: string) -> ?i64 => {
-    for i in 0:handles.len() {
-        if handles[i].resource_name == resource_name {
-            ret i
-        }
-    }
-    none
-}
-
-append_active_lease :: (leases: [ActiveResourceLease], lease: ActiveResourceLease) -> [ActiveResourceLease] => {
-    new_len := leases.len() + 1
-    output := new [ActiveResourceLease; new_len]
-    for i in 0:leases.len() {
-        output[i] = leases[i]
-    }
-    output[new_len - 1] = lease
-    output
-}
-
-remove_active_lease :: (leases: [ActiveResourceLease], task_id: u64, resource_name: string) -> [ActiveResourceLease] => {
-    if leases.len() == 0 {
-        ret []
-    }
-
-    output := new [ActiveResourceLease; leases.len()]
-    out_idx := 0
-    for i in 0:leases.len() {
-        lease := leases[i]
-        if lease.task_id == task_id && lease.resource_name == resource_name {
-            continue
-        }
-        output[out_idx] = lease
-        out_idx = out_idx + 1
-    }
-
-    trimmed := new [ActiveResourceLease; out_idx]
-    for i in 0:out_idx {
-        trimmed[i] = output[i]
-    }
-
-    trimmed
-}
-
-remove_active_lease_at :: (leases: [ActiveResourceLease], remove_idx: i64) -> [ActiveResourceLease] => {
-    if leases.len() == 0 {
-        ret []
-    }
-
-    new_len := leases.len() - 1
-    if new_len <= 0 {
-        ret []
-    }
-
-    output := new [ActiveResourceLease; new_len]
-    out_idx := 0
-    for i in 0:leases.len() {
-        if i == remove_idx {
-            continue
-        }
-        output[out_idx] = leases[i]
-        out_idx = out_idx + 1
-    }
-    output
-}
-
-find_active_lease_index :: (leases: [ActiveResourceLease], task_id: u64, resource_name: string) -> ?i64 => {
-    for i in 0:leases.len() {
-        lease := leases[i]
-        if lease.task_id == task_id && lease.resource_name == resource_name {
-            ret i
-        }
-    }
-    none
-}
-
-append_resource_waiter :: (waiters: [ResourceWaiter], waiter: ResourceWaiter) -> [ResourceWaiter] => {
-    new_len := waiters.len() + 1
-    output := new [ResourceWaiter; new_len]
-    for i in 0:waiters.len() {
-        output[i] = waiters[i]
-    }
-    output[new_len - 1] = waiter
-    output
-}
-
-remove_resource_waiter_at :: (waiters: [ResourceWaiter], remove_idx: i64) -> [ResourceWaiter] => {
-    if waiters.len() == 0 {
-        ret []
-    }
-
-    new_len := waiters.len() - 1
-    if new_len <= 0 {
-        ret []
-    }
-
-    output := new [ResourceWaiter; new_len]
-    out_idx := 0
-    for i in 0:waiters.len() {
-        if i == remove_idx {
-            continue
-        }
-        output[out_idx] = waiters[i]
-        out_idx = out_idx + 1
-    }
-    output
-}
-
-resource_access_conflict :: (existing: ResourceAccess, requested: ResourceAccess) -> bool => {
+resource_access_conflict :: (existing: &ResourceAccess, requested: &ResourceAccess) -> bool => {
     match existing {
         ResourceAccess::Immutable => match requested {
             ResourceAccess::Immutable => false,
@@ -1312,92 +997,7 @@ resource_access_conflict :: (existing: ResourceAccess, requested: ResourceAccess
     }
 }
 
-find_waiter_index :: (waiters: [ResourceWaiter], task_id: u64, resource_name: string) -> ?i64 => {
-    for i in 0:waiters.len() {
-        waiter := waiters[i]
-        if waiter.task_id == task_id && waiter.resource_name == resource_name {
-            ret i
-        }
-    }
-    none
-}
-
-append_intermediate_state :: (states: [TaskIntermediateState], state: TaskIntermediateState) -> [TaskIntermediateState] => {
-    new_len := states.len() + 1
-    output := new [TaskIntermediateState; new_len]
-    for i in 0:states.len() {
-        output[i] = states[i]
-    }
-    output[new_len - 1] = state
-    output
-}
-
-set_intermediate_state_at :: (states: [TaskIntermediateState], idx: i64, state: TaskIntermediateState) -> [TaskIntermediateState] => {
-    output := new [TaskIntermediateState; states.len()]
-    for i in 0:states.len() {
-        if i == idx {
-            output[i] = state
-        } else {
-            output[i] = states[i]
-        }
-    }
-    output
-}
-
-remove_intermediate_state_at :: (states: [TaskIntermediateState], remove_idx: i64) -> [TaskIntermediateState] => {
-    if states.len() == 0 {
-        ret []
-    }
-
-    new_len := states.len() - 1
-    if new_len <= 0 {
-        ret []
-    }
-
-    output := new [TaskIntermediateState; new_len]
-    out_idx := 0
-    for i in 0:states.len() {
-        if i == remove_idx {
-            continue
-        }
-        output[out_idx] = states[i]
-        out_idx = out_idx + 1
-    }
-    output
-}
-
-find_intermediate_state_index :: (states: [TaskIntermediateState], task_id: u64) -> ?i64 => {
-    for i in 0:states.len() {
-        if states[i].task_id == task_id {
-            ret i
-        }
-    }
-    none
-}
-
-remove_completed_at :: (records: [CompletedTaskRecord], remove_idx: i64) -> [CompletedTaskRecord] => {
-    if records.len() == 0 {
-        ret []
-    }
-
-    new_len := records.len() - 1
-    if new_len <= 0 {
-        ret []
-    }
-
-    output := new [CompletedTaskRecord; new_len]
-    out_idx := 0
-    for i in 0:records.len() {
-        if i == remove_idx {
-            continue
-        }
-        output[out_idx] = records[i]
-        out_idx = out_idx + 1
-    }
-    output
-}
-
-count_running_tasks :: (tasks: [AsyncTask]) -> i64 => {
+count_running_tasks :: (tasks: &[AsyncTask]) -> i64 => {
     total := 0
     for i in 0:tasks.len() {
         match tasks[i].state {

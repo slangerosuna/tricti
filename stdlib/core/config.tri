@@ -1,0 +1,31 @@
+# Shared configuration structures that other stdlib modules can reuse.
+
+use prelude
+
+StdConfig :: {
+    runtime: RuntimeConfigOptions,
+    io: IOConfigOptions,
+}
+
+RuntimeConfigOptions :: {
+    enable_preemption: bool,
+    scheduling_quantum_ms: i64,
+}
+
+IOConfigOptions :: {
+    default_timeout_ms: i64,
+    enable_tracing: bool,
+}
+
+std_default_config :: () -> StdConfig => {
+    {
+        runtime: {
+            enable_preemption: true,
+            scheduling_quantum_ms: 10,
+        },
+        io: {
+            default_timeout_ms: 5_000,
+            enable_tracing: false,
+        },
+    }
+}

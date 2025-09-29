@@ -1,0 +1,18 @@
+# Foundational result type for TriCTI stdlib consumers
+# This is a simple tagged union until richer generics/error propagation land in the language.
+
+use prelude
+use core/errors
+
+StdResult<T> :: enum {
+    Ok { value: T },
+    Err { error: StdError },
+}
+
+std_ok<T> :: (value: T) -> StdResult<T> => {
+    StdResult::Ok { value: value }
+}
+
+std_err<T> :: (error: StdError) -> StdResult<T> => {
+    StdResult::Err { error: error }
+}

@@ -1,13 +1,11 @@
 use crate::ast::{ResourceAccess, SystemDef, SystemParameter};
 use crate::async_runtime::{
     AsyncExecutionError, AsyncResult, AsyncSystemRuntime, CompletedTaskInfo, RuntimeConfig,
-    SystemExecutionResult, SystemFuture, TaskId, TaskPriority,
+    SystemFuture, TaskId, TaskPriority,
 };
-use crate::scheduler::{ConflictType, ResourceTracker, SchedulerError, SystemScheduler};
+use crate::scheduler::{ConflictType, SystemPriority, SystemScheduler};
 use crate::semantic::SemanticContext;
-use crate::system_executor::{
-    SystemStateMachine, SystemStateMachineBuilder, SystemStateMachineExecutor,
-};
+use crate::system_executor::{SystemStateMachineBuilder, SystemStateMachineExecutor};
 use crate::table_runtime::{ColumnValue, TableRuntime};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -136,7 +134,7 @@ impl AsyncSystemScheduler {
     pub async fn schedule_systems(
         &self,
         systems: Vec<SystemExecutionRequest>,
-    ) -> Result<Vec<SystemFuture<SystemExecutionResult>>, AsyncExecutionError> {
+    ) -> Result<Vec<SystemFuture>, AsyncExecutionError> {
         let mut futures = Vec::new();
 
         // Analyze conflicts and dependencies
@@ -166,7 +164,7 @@ impl AsyncSystemScheduler {
     pub async fn schedule_single_system(
         &self,
         request: SystemExecutionRequest,
-    ) -> Result<SystemFuture<SystemExecutionResult>, AsyncExecutionError> {
+    ) -> Result<SystemFuture, AsyncExecutionError> {
         // Update statistics
         {
             let mut stats = self.stats.lock().unwrap();
@@ -228,6 +226,25 @@ impl AsyncSystemScheduler {
         {
             let mut stats = self.stats.lock().unwrap();
             stats.average_scheduling_time = start_time.elapsed();
+        }
+
+        {
+            let mut cache = self.conflict_cache.lock().unwrap();
+            cache.clear();
+
+            for batch in &execution_batches {
+                for request in &batch.systems {
+                    cache.insert(
+                        request.system_def.name.clone(),
+                        ConflictResolution {
+                            can_execute_concurrently: batch.systems.len() > 1,
+                            execution_order: Vec::new(),
+                            resource_scheduling: HashMap::new(),
+                            estimated_completion_time: batch.estimated_duration,
+                        },
+                    );
+                }
+            }
         }
 
         let total_time = self.estimate_total_execution_time(&execution_batches);
@@ -365,8 +382,12 @@ impl AsyncSystemScheduler {
         &self,
         request: &SystemExecutionRequest,
     ) -> Result<(), AsyncExecutionError> {
-        // This would check against currently running systems
-        // For now, assume no conflicts
+        let mut scheduler = self.safety_scheduler.lock().unwrap();
+        scheduler
+            .add_system(request.system_def.clone())
+            .map_err(AsyncExecutionError::from)?;
+        scheduler.set_system_priority(&request.system_def.name, convert_priority(request.priority));
+
         Ok(())
     }
 
@@ -433,10 +454,23 @@ impl AsyncSystemScheduler {
     /// Wait for batch completion
     async fn wait_for_batch_completion(
         &self,
-        futures: &[SystemFuture<SystemExecutionResult>],
+        futures: &[SystemFuture],
     ) -> Result<(), AsyncExecutionError> {
-        // This would use an async runtime to wait for all futures
-        // For now, this is a placeholder
+        if futures.is_empty() {
+            return Ok(());
+        }
+
+        {
+            let mut stats = self.stats.lock().unwrap();
+            stats.concurrent_executions = stats.concurrent_executions.max(futures.len());
+        }
+
+        // Futures are driven by the async runtime; here we just observe their state to avoid blocking.
+        let _completed = futures
+            .iter()
+            .filter(|future| future.is_completed())
+            .count();
+
         Ok(())
     }
 
@@ -473,8 +507,16 @@ impl AsyncSystemScheduler {
 
     /// Update completed tasks and resolve dependencies
     async fn update_completed_tasks(&self) -> Result<(), AsyncExecutionError> {
-        // This would check for completed tasks and update the dependency graph
-        // For now, this is a placeholder
+        let completions = self.async_runtime.drain_completed_tasks();
+
+        if completions.is_empty() {
+            return Ok(());
+        }
+
+        for completion in &completions {
+            self.record_task_completion(completion);
+        }
+
         Ok(())
     }
 
@@ -591,5 +633,14 @@ impl Default for SchedulingStats {
             failed_executions: 0,
             preempted_executions: 0,
         }
+    }
+}
+
+fn convert_priority(priority: TaskPriority) -> SystemPriority {
+    match priority {
+        TaskPriority::Low => SystemPriority::Low,
+        TaskPriority::Normal => SystemPriority::Normal,
+        TaskPriority::High => SystemPriority::High,
+        TaskPriority::Critical => SystemPriority::Critical,
     }
 }

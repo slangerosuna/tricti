@@ -119,10 +119,13 @@ MyStruct :: enum {
     },
 }
 
+struct Image :: { }
+
 display_apps :: sys (
    query: select (image: &Image, title: &String)
           from Apps where display == true,
    gui: res &mut Gui,
+
    input_size: f32
 ) -> !none => {
   # code for system
@@ -132,6 +135,7 @@ RedrawRequested :: Signal<Spmc, Overwrite, none>
 
 @trigger RedrawRequested, Database
 redraw :: compose {
+   # commented because only `display_apps` and `emmitter_sys` are implemented
    # get_input_size -> display_apps,
    # update_ui -> finalize_frame -> emmitter_sys,
   

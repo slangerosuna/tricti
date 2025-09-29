@@ -290,7 +290,7 @@ impl EventLoopManager {
         priority: TaskPriority,
         timeout: Option<Duration>,
         table_runtimes: HashMap<String, TableRuntime>,
-    ) -> Result<SystemFuture<SystemExecutionResult>, AsyncExecutionError> {
+    ) -> Result<SystemFuture, AsyncExecutionError> {
         let request = SystemExecutionRequest {
             system_def: system_def.clone(),
             parameters: parameters.clone(),

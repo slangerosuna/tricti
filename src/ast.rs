@@ -122,6 +122,10 @@ pub enum Expression {
     StructLiteral {
         fields: HashMap<String, Expression>,
     },
+    ArrayNew {
+        element_type: Type,
+        dimensions: Vec<Expression>,
+    },
     Matrix {
         rows: Vec<Vec<Expression>>,
     },

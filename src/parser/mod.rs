@@ -77,7 +77,8 @@ fn parse_integer_literal(pair: pest::iterators::Pair<Rule>) -> Literal {
         panic!("integer literal missing digits: {}", text);
     }
 
-    let value = digits
+    let normalized_digits: String = digits.chars().filter(|c| *c != '_').collect();
+    let value = normalized_digits
         .parse::<u128>()
         .unwrap_or_else(|_| panic!("invalid integer literal: {}", text));
 
@@ -146,7 +147,10 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut inner = pair.into_inner();
 
     let mut extern_linkage = None;
-    let first = inner.next().unwrap();
+    let mut first = inner.next().unwrap();
+    while first.as_rule() == Rule::attributes {
+        first = inner.next().unwrap();
+    }
     let name;
     if first.as_str() == "extern" {
         // Check if next is string
@@ -164,7 +168,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
 
     let mut type_params = Vec::new();
     let mut type_annotation = None;
-    let mut value_pair = None;
+    let mut value: Option<ConstValue> = None;
 
     for pair in inner {
         match pair.as_rule() {
@@ -176,33 +180,48 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
                 }
             }
             Rule::r#type => {
-                if type_annotation.is_none() {
-                    type_annotation = Some(parse_type(pair.clone()));
+                if type_annotation.is_none() && value.is_none() {
+                    type_annotation = Some(parse_type(pair));
+                } else {
+                    value = Some(ConstValue::Type(parse_type(pair)));
                 }
-                value_pair = Some(pair);
             }
-            Rule::expression => value_pair = Some(pair),
-            Rule::table_def => value_pair = Some(pair),
-            Rule::sys_def => value_pair = Some(pair),
-            Rule::compose_def => value_pair = Some(pair),
-            Rule::db_def => value_pair = Some(pair),
+            Rule::const_body => {
+                let mut body_inner = pair.into_inner();
+                let body_pair = body_inner
+                    .next()
+                    .expect("const body should contain a value");
+                let const_value = match body_pair.as_rule() {
+                    Rule::r#type => ConstValue::Type(parse_type(body_pair)),
+                    Rule::expression => ConstValue::Expression(parse_expression(body_pair)),
+                    Rule::table_def => ConstValue::TableDef(parse_table_def(body_pair, &name)),
+                    Rule::sys_def => ConstValue::SystemDef(parse_sys_def(body_pair, &name)),
+                    Rule::compose_def => ConstValue::ComposeDef(parse_compose_def(body_pair)),
+                    Rule::db_def => ConstValue::DatabaseDef(parse_db_def(body_pair)),
+                    _ => panic!("Unexpected const body rule: {:?}", body_pair.as_rule()),
+                };
+                value = Some(const_value);
+            }
+            Rule::expression => {
+                value = Some(ConstValue::Expression(parse_expression(pair)));
+            }
+            Rule::table_def => {
+                value = Some(ConstValue::TableDef(parse_table_def(pair, &name)));
+            }
+            Rule::sys_def => {
+                value = Some(ConstValue::SystemDef(parse_sys_def(pair, &name)));
+            }
+            Rule::compose_def => {
+                value = Some(ConstValue::ComposeDef(parse_compose_def(pair)));
+            }
+            Rule::db_def => {
+                value = Some(ConstValue::DatabaseDef(parse_db_def(pair)));
+            }
             _ => {}
         }
     }
 
-    let value = if let Some(pair) = value_pair {
-        match pair.as_rule() {
-            Rule::r#type => ConstValue::Type(parse_type(pair)),
-            Rule::expression => ConstValue::Expression(parse_expression(pair)),
-            Rule::table_def => ConstValue::TableDef(parse_table_def(pair, &name)),
-            Rule::sys_def => ConstValue::SystemDef(parse_sys_def(pair, &name)),
-            Rule::compose_def => ConstValue::ComposeDef(parse_compose_def(pair)),
-            Rule::db_def => ConstValue::DatabaseDef(parse_db_def(pair)),
-            _ => panic!("Unexpected const value rule: {:?}", pair.as_rule()),
-        }
-    } else {
-        panic!("Expected const value");
-    };
+    let value = value.expect("Expected const value");
 
     Statement::ConstDecl {
         name,
@@ -251,6 +270,7 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::unary => parse_unary(pair),
         Rule::post_fix => parse_postfix_expression(pair),
         Rule::primary => parse_primary_expression(pair),
+        Rule::array_new => parse_array_new(pair),
         Rule::function => parse_function(pair),
         Rule::literal => parse_literal(pair),
         Rule::identifier => Expression::Identifier(pair.as_str().to_string()),
@@ -318,6 +338,16 @@ fn parse_unary(pair: pest::iterators::Pair<Rule>) -> Expression {
                     Rule::post_fix => parse_postfix_expression(operand_pair),
                     _ => parse_expression(operand_pair),
                 };
+                if op_str == "some" {
+                    return Expression::Call {
+                        function: Box::new(Expression::Identifier("some".to_string())),
+                        type_args: vec![],
+                        arguments: vec![Argument {
+                            name: None,
+                            value: operand_expr,
+                        }],
+                    };
+                }
                 let op = match op_str {
                     "-" => UnaryOperator::Negate,
                     "!" => UnaryOperator::Not,
@@ -389,26 +419,15 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     for suffix_pair in inner {
         match suffix_pair.as_rule() {
             Rule::call_suffix => {
-                let mut type_args = Vec::new();
                 let mut arguments = Vec::new();
                 for arg_pair in suffix_pair.into_inner() {
-                    match arg_pair.as_rule() {
-                        Rule::type_args => {
-                            for t in arg_pair.into_inner() {
-                                if t.as_rule() == Rule::r#type {
-                                    type_args.push(parse_type(t));
-                                }
-                            }
-                        }
-                        Rule::argument => {
-                            arguments.push(parse_argument(arg_pair));
-                        }
-                        _ => {}
+                    if arg_pair.as_rule() == Rule::argument {
+                        arguments.push(parse_argument(arg_pair));
                     }
                 }
                 expr = Expression::Call {
                     function: Box::new(expr),
-                    type_args,
+                    type_args: Vec::new(),
                     arguments,
                 };
             }
@@ -463,6 +482,24 @@ fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     }
 }
 
+fn parse_array_new(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let element_type_pair = inner
+        .next()
+        .unwrap_or_else(|| panic!("array new missing element type"));
+    let element_type = parse_type(element_type_pair);
+    let mut dimensions: Vec<Expression> = Vec::new();
+    for dim in inner {
+        if dim.as_rule() == Rule::expression {
+            dimensions.push(parse_expression(dim));
+        }
+    }
+    Expression::ArrayNew {
+        element_type,
+        dimensions,
+    }
+}
+
 fn parse_matrix(pair: pest::iterators::Pair<Rule>) -> Expression {
     // matrix = "[" ~ (row ~ ";")* ~ row ~ ";"? ~ "]"
     let mut rows: Vec<Vec<Expression>> = Vec::new();
@@ -494,23 +531,50 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let value_pair = it.next().expect("match missing value expression");
     let value = parse_expression(value_pair);
     let mut arms: Vec<MatchArm> = Vec::new();
-    // Remaining are pattern/body expression pairs; punctuation tokens are silent in grammar
-    loop {
-        let pat_pair = match it.next() {
-            Some(p) => p,
-            None => break,
-        };
-        let body_pair = match it.next() {
-            Some(p) => p,
-            None => break,
-        };
-        let pattern = parse_expression(pat_pair);
-        let body = parse_expression(body_pair);
+    for arm_pair in it {
+        if arm_pair.as_rule() != Rule::match_arm {
+            continue;
+        }
+        let mut arm_inner = arm_pair.into_inner();
+        let pattern_pair = arm_inner
+            .next()
+            .expect("match arm missing pattern expression");
+        let body_pair = arm_inner
+            .next()
+            .expect("match arm missing body expression");
+        let pattern = parse_expression(pattern_pair);
+        let body = parse_match_arm_body(body_pair);
         arms.push(MatchArm { pattern, body });
     }
     Expression::Match {
         value: Box::new(value),
         arms,
+    }
+}
+
+fn parse_match_arm_body(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let body_pair = inner
+        .next()
+        .expect("match arm body missing expression or block");
+    match body_pair.as_rule() {
+        Rule::block => Expression::Block {
+            statements: parse_block(body_pair),
+        },
+        Rule::return_statement => {
+            let stmt = parse_return_statement(body_pair);
+            Expression::Block {
+                statements: vec![stmt],
+            }
+        }
+        Rule::break_statement => {
+            let stmt = parse_break_statement(body_pair);
+            Expression::Block {
+                statements: vec![stmt],
+            }
+        }
+        Rule::expression => parse_expression(body_pair),
+        _ => parse_expression(body_pair),
     }
 }
 
@@ -1129,7 +1193,7 @@ fn parse_table_annotation(pair: pest::iterators::Pair<Rule>) -> TableAnnotation 
 
 // System Execution Model parsing functions
 fn parse_sys_def(pair: pest::iterators::Pair<Rule>, name: &str) -> SystemDef {
-    let mut is_async = false;
+    let mut is_async = pair.as_str().trim_start().starts_with("async");
     let mut parameters = Vec::new();
     let mut return_type = None;
     let mut body = Vec::new();
@@ -1157,6 +1221,9 @@ fn parse_sys_def(pair: pest::iterators::Pair<Rule>, name: &str) -> SystemDef {
                     }
                 }
             }
+            Rule::identifier if inner_pair.as_str() == "async" => {
+                is_async = true;
+            }
             _ => {}
         }
     }
@@ -1172,63 +1239,116 @@ fn parse_sys_def(pair: pest::iterators::Pair<Rule>, name: &str) -> SystemDef {
 
 fn parse_system_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter {
     let mut inner = pair.into_inner();
-    let first = inner.next().unwrap();
+    let first = inner
+        .next()
+        .expect("system parameter should contain a value");
 
     match first.as_rule() {
-        Rule::identifier => {
-            let first_word = first.as_str().to_string();
-
-            // Check if this is a query parameter
-            if first_word == "query" {
-                let param_name = inner.next().unwrap().as_str().to_string();
-                let _colon = inner.next(); // skip colon
-                let query_spec = parse_query_spec(inner.next().unwrap());
-                return SystemParameter::Query {
-                    name: param_name,
-                    query_spec,
-                };
-            }
-
-            // Otherwise it's either resource or regular parameter
-            let param_type = first_word;
-            let param_name = inner.next().unwrap().as_str().to_string();
-            let _colon = inner.next(); // skip colon
-            let next = inner.next().unwrap();
-
-            if next.as_str() == "res" {
-                // Resource parameter
-                let access_pair = inner.next().unwrap();
-                let access = parse_resource_access(access_pair);
-                let type_pair = inner.next().unwrap();
-                let resource_type = parse_type(type_pair);
-                SystemParameter::Resource {
-                    param_type,
-                    name: param_name,
-                    resource_type,
-                    access,
-                }
-            } else {
-                // Regular parameter
-                let value_type = parse_type(next);
-                let default_value = inner.next().map(|expr| parse_expression(expr));
-                SystemParameter::Regular {
-                    param_type,
-                    name: param_name,
-                    value_type,
-                    default_value,
-                }
+        Rule::query_param => parse_query_parameter(first),
+        Rule::resource_param => parse_resource_parameter(first),
+        Rule::regular_param => parse_regular_parameter(first),
+        Rule::function_param => {
+            let param = parse_function_param(first);
+            SystemParameter::Regular {
+                param_type: "value".to_string(),
+                name: param.name,
+                value_type: param.param_type.unwrap_or(Type::None),
+                default_value: param.default_value,
             }
         }
         _ => {
-            // Handle function_param case - fallback
-            let param_name = first.as_str().to_string();
+            // Fallback for unexpected parameter shape
             SystemParameter::Regular {
-                param_type: "unknown".to_string(),
-                name: param_name,
+                param_type: "value".to_string(),
+                name: first.as_str().to_string(),
                 value_type: Type::None,
                 default_value: None,
             }
         }
+    }
+}
+
+fn parse_query_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter {
+    let mut name: Option<String> = None;
+    let mut query_spec: Option<QuerySpec> = None;
+
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::identifier => {
+                if name.is_none() {
+                    name = Some(inner_pair.as_str().to_string());
+                }
+            }
+            Rule::query_spec => {
+                query_spec = Some(parse_query_spec(inner_pair));
+            }
+            _ => {}
+        }
+    }
+
+    SystemParameter::Query {
+        name: name.unwrap_or_else(|| "query".to_string()),
+        query_spec: query_spec.expect("query parameter requires a query spec"),
+    }
+}
+
+fn parse_resource_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter {
+    let mut name = String::new();
+    let mut access = ResourceAccess::Owned;
+    let mut resource_type: Option<Type> = None;
+
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::identifier => {
+                if name.is_empty() {
+                    name = inner_pair.as_str().to_string();
+                }
+            }
+            Rule::resource_ref => {
+                access = parse_resource_access(inner_pair);
+            }
+            Rule::r#type => {
+                resource_type = Some(parse_type(inner_pair));
+            }
+            _ => {}
+        }
+    }
+
+    SystemParameter::Resource {
+        param_type: "resource".to_string(),
+        name,
+        resource_type: resource_type.expect("resource parameter requires a type"),
+        access,
+    }
+}
+
+fn parse_regular_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter {
+    let mut name = String::new();
+    let mut value_type: Option<Type> = None;
+    let mut default_value: Option<Expression> = None;
+
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::identifier => {
+                if name.is_empty() {
+                    name = inner_pair.as_str().to_string();
+                }
+            }
+            Rule::r#type => {
+                value_type = Some(parse_type(inner_pair));
+            }
+            Rule::expression => {
+                default_value = Some(parse_expression(inner_pair));
+            }
+            _ => {}
+        }
+    }
+
+    SystemParameter::Regular {
+        param_type: "value".to_string(),
+        name,
+        value_type: value_type.unwrap_or(Type::None),
+        default_value,
     }
 }
 
@@ -1241,11 +1361,7 @@ fn parse_query_spec(pair: pest::iterators::Pair<Rule>) -> QuerySpec {
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
             Rule::field_projections => {
-                for proj_pair in inner_pair.into_inner() {
-                    if proj_pair.as_rule() == Rule::field_projection {
-                        projections.push(parse_field_projection(proj_pair));
-                    }
-                }
+                projections.extend(parse_field_projection_container(inner_pair));
             }
             Rule::identifier => {
                 from_table = inner_pair.as_str().to_string();
@@ -1292,10 +1408,39 @@ fn parse_field_projection(pair: pest::iterators::Pair<Rule>) -> FieldProjection 
         }
     }
 
+    if let (Some(access_mode), Some(inner_type)) = (access.clone(), field_type.take()) {
+        let wrapped_type = match access_mode {
+            ResourceAccess::Mutable => Type::Reference {
+                is_mutable: true,
+                inner: Box::new(inner_type),
+            },
+            ResourceAccess::Immutable => Type::Reference {
+                is_mutable: false,
+                inner: Box::new(inner_type),
+            },
+            ResourceAccess::Owned => inner_type,
+        };
+        field_type = Some(wrapped_type);
+    }
+
     FieldProjection {
         name,
         field_type,
         access,
+    }
+}
+
+fn parse_field_projection_container(pair: pest::iterators::Pair<Rule>) -> Vec<FieldProjection> {
+    match pair.as_rule() {
+        Rule::field_projections | Rule::field_projection_group | Rule::field_projection_list => {
+            let mut projections = Vec::new();
+            for inner in pair.into_inner() {
+                projections.extend(parse_field_projection_container(inner));
+            }
+            projections
+        }
+        Rule::field_projection => vec![parse_field_projection(pair)],
+        _ => Vec::new(),
     }
 }
 

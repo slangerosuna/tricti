@@ -153,6 +153,11 @@ impl DependencyGraph {
                     Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
                 }
             }
+            Expression::ArrayNew { dimensions, .. } => {
+                for expr in dimensions {
+                    Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
+                }
+            }
             Expression::Matrix { rows } => {
                 for row in rows {
                     for expr in row {

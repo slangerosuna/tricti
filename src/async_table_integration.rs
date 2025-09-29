@@ -1,8 +1,8 @@
-use crate::ast::{Expression, FieldProjection, JoinClause, JoinType, QuerySpec, ResourceAccess};
-use crate::async_runtime::{AsyncExecutionError, TaskId, YieldPoint};
-use crate::error_propagation::{ErrorContext, ErrorHandlingResult, ErrorPropagationManager};
+use crate::ast::{Expression, JoinType, QuerySpec, ResourceAccess};
+use crate::async_runtime::{AsyncExecutionError, TaskId};
+use crate::error_propagation::ErrorPropagationManager;
 use crate::resource_lifecycle::{AcquisitionResult, ResourceLifecycleManager};
-use crate::table_runtime::{ColumnValue, RowId, TableError, TableRow, TableRuntime};
+use crate::table_runtime::{ColumnValue, RowId, TableRow, TableRuntime};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
@@ -16,8 +16,8 @@ pub struct AsyncTableRuntime {
     table_runtime: Arc<Mutex<TableRuntime>>,
     /// Resource lifecycle manager
     resource_manager: Arc<ResourceLifecycleManager>,
-    /// Error propagation manager
-    error_manager: Arc<ErrorPropagationManager>,
+    /// Error propagation manager (reserved for future error routing)
+    _error_manager: Arc<ErrorPropagationManager>,
     /// Query execution cache
     query_cache: Arc<RwLock<QueryCache>>,
     /// Active query futures
@@ -205,7 +205,7 @@ impl AsyncTableRuntime {
         Self {
             table_runtime: Arc::new(Mutex::new(table_runtime)),
             resource_manager,
-            error_manager,
+            _error_manager: error_manager,
             query_cache: Arc::new(RwLock::new(QueryCache::new())),
             active_queries: Arc::new(RwLock::new(HashMap::new())),
             config,
@@ -388,12 +388,10 @@ impl AsyncTableRuntime {
             });
         }
 
-        // Apply all changes atomically
-        {
-            let mut table_runtime = self.table_runtime.lock().unwrap();
-            // Apply transaction changes
-            // This would involve flushing all pending changes
-        }
+        // Apply all changes atomically (pending detailed implementation)
+        let _table_runtime_guard = self.table_runtime.lock().unwrap();
+        // Apply transaction changes
+        // This would involve flushing all pending changes
 
         // Release all locks
         for resource in transaction
@@ -418,12 +416,10 @@ impl AsyncTableRuntime {
         &self,
         transaction: AsyncTransaction,
     ) -> Result<(), AsyncExecutionError> {
-        // Revert all changes
-        {
-            let mut table_runtime = self.table_runtime.lock().unwrap();
-            // Revert transaction changes
-            // This would involve rolling back to transaction start state
-        }
+        // Revert all changes (pending detailed implementation)
+        let _table_runtime_guard = self.table_runtime.lock().unwrap();
+        // Revert transaction changes
+        // This would involve rolling back to transaction start state
 
         // Release all locks
         for resource in transaction
@@ -480,7 +476,11 @@ impl AsyncTableRuntime {
     }
 
     /// Determine access type for a resource
-    fn determine_access_type(&self, query_spec: &QuerySpec, resource_name: &str) -> ResourceAccess {
+    fn determine_access_type(
+        &self,
+        query_spec: &QuerySpec,
+        _resource_name: &str,
+    ) -> ResourceAccess {
         // Check if this is a read-only query
         if self.is_read_only_query(query_spec) {
             ResourceAccess::Immutable
@@ -490,7 +490,7 @@ impl AsyncTableRuntime {
     }
 
     /// Check if query is read-only
-    fn is_read_only_query(&self, query_spec: &QuerySpec) -> bool {
+    fn is_read_only_query(&self, _query_spec: &QuerySpec) -> bool {
         // For now, assume all queries through QuerySpec are reads
         // In a full implementation, this would check for INSERT/UPDATE/DELETE operations
         true
@@ -526,6 +526,7 @@ impl AsyncTableRuntime {
         query_id: QueryId,
         execution_plan: QueryExecutionPlan,
     ) -> Result<(), AsyncExecutionError> {
+        let _ = query_id;
         // This would start the actual query execution in a background task
         // For now, we'll simulate completion
         // Simplified execution - in real implementation would use proper async execution
@@ -568,7 +569,7 @@ impl AsyncTableRuntime {
         query_id: QueryId,
         task_id: TaskId,
         query_spec: QuerySpec,
-        resource_name: String,
+        _resource_name: String,
         wait_time: Duration,
     ) -> QueryFuture {
         let future = QueryFuture::new(query_id, task_id, query_spec, wait_time);
@@ -634,7 +635,7 @@ impl AsyncTableRuntime {
     fn determine_batch_access_type(
         &self,
         queries: &[QuerySpec],
-        resource_name: &str,
+        _resource_name: &str,
     ) -> ResourceAccess {
         // If any query needs mutable access, the whole batch needs it
         for query in queries {
@@ -655,6 +656,8 @@ impl AsyncTableRuntime {
     pub fn get_stats(&self) -> AsyncTableStats {
         let cache = self.query_cache.read().unwrap();
         let active_queries = self.active_queries.read().unwrap();
+        let _total_cached_plans = cache.cached_plans.len();
+        let _total_cached_results = cache.cached_results.len();
 
         AsyncTableStats {
             active_queries: active_queries.len(),

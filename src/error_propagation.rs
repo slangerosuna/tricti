@@ -1,9 +1,5 @@
-use crate::async_runtime::{AsyncExecutionError, SystemExecutionResult, TaskId};
-use crate::resource_lifecycle::{LifecycleEvent, ReleaseReason};
-use crate::scheduler::SchedulerError;
-use crate::table_runtime::TableError;
+use crate::async_runtime::{AsyncExecutionError, TaskId};
 use std::collections::{HashMap, VecDeque};
-use std::fmt;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -381,7 +377,7 @@ impl ErrorPropagationManager {
         &self,
         task_id: TaskId,
         error: AsyncExecutionError,
-        context: ErrorContext,
+        _context: ErrorContext,
     ) {
         let event = ErrorEvent {
             event_id: format!("err_{:?}_{}", task_id, Instant::now().elapsed().as_nanos()),
@@ -408,11 +404,6 @@ impl ErrorPropagationManager {
         task_id: TaskId,
         strategy_name: &str,
     ) -> Result<RecoveryResult, AsyncExecutionError> {
-        let strategy = {
-            let strategies = self.recovery_strategies.read().unwrap();
-            strategies.get(strategy_name).cloned()
-        };
-
         let strategy = {
             let strategies = self.recovery_strategies.read().unwrap();
             if let Some(strategy) = strategies.get(strategy_name) {
@@ -515,15 +506,17 @@ impl ErrorPropagationManager {
         let delay = self.calculate_backoff_delay(&backoff_strategy, retry_count);
 
         // Schedule retry (this would integrate with the task scheduler)
-        Ok(RecoveryResult::Success)
+        Ok(RecoveryResult::PartialSuccess {
+            remaining_issues: vec![format!("Retry scheduled in {:?}", delay)],
+        })
     }
 
     /// Execute fallback recovery strategy
     async fn execute_fallback_recovery(
         &self,
-        task_id: TaskId,
-        fallback_system: String,
-        fallback_parameters: HashMap<String, String>,
+        _task_id: TaskId,
+        _fallback_system: String,
+        _fallback_parameters: HashMap<String, String>,
     ) -> Result<RecoveryResult, AsyncExecutionError> {
         // This would start a fallback system
         Ok(RecoveryResult::Success)
@@ -532,9 +525,9 @@ impl ErrorPropagationManager {
     /// Execute isolation recovery strategy
     async fn execute_isolation_recovery(
         &self,
-        task_id: TaskId,
-        release_resources: bool,
-        notify_dependents: bool,
+        _task_id: TaskId,
+        _release_resources: bool,
+        _notify_dependents: bool,
     ) -> Result<RecoveryResult, AsyncExecutionError> {
         // This would isolate the failing task
         Ok(RecoveryResult::Success)
@@ -543,9 +536,9 @@ impl ErrorPropagationManager {
     /// Execute restart recovery strategy
     async fn execute_restart_recovery(
         &self,
-        task_id: TaskId,
-        restart_delay: Duration,
-        preserve_state: bool,
+        _task_id: TaskId,
+        _restart_delay: Duration,
+        _preserve_state: bool,
     ) -> Result<RecoveryResult, AsyncExecutionError> {
         // This would restart the task
         Ok(RecoveryResult::Success)
@@ -554,22 +547,33 @@ impl ErrorPropagationManager {
     /// Execute propagation recovery strategy
     async fn execute_propagation_recovery(
         &self,
-        task_id: TaskId,
+        _task_id: TaskId,
         target_tasks: Vec<TaskId>,
     ) -> Result<RecoveryResult, AsyncExecutionError> {
         // This would propagate the error to dependent tasks
-        Ok(RecoveryResult::Success)
+        let summaries = target_tasks
+            .into_iter()
+            .map(|task| format!("Propagated error to {:?}", task))
+            .collect();
+        Ok(RecoveryResult::PartialSuccess {
+            remaining_issues: summaries,
+        })
     }
 
     /// Execute circuit breaker recovery strategy
     async fn execute_circuit_breaker_recovery(
         &self,
-        task_id: TaskId,
+        _task_id: TaskId,
         failure_threshold: u32,
         recovery_timeout: Duration,
     ) -> Result<RecoveryResult, AsyncExecutionError> {
         // This would implement circuit breaker logic
-        Ok(RecoveryResult::Success)
+        Ok(RecoveryResult::Failure {
+            reason: format!(
+                "Circuit breaker triggered: threshold={}, timeout={:?}",
+                failure_threshold, recovery_timeout
+            ),
+        })
     }
 
     /// Check if retry condition is met
@@ -579,11 +583,11 @@ impl ErrorPropagationManager {
         task_id: TaskId,
     ) -> Result<bool, AsyncExecutionError> {
         match condition {
-            RetryCondition::ErrorType(error_type) => {
+            RetryCondition::ErrorType(_error_type) => {
                 // Check if current error is of specified type
                 Ok(true) // Simplified
             }
-            RetryCondition::ResourceAvailable(resource_name) => {
+            RetryCondition::ResourceAvailable(_resource_name) => {
                 // Check if resource is available
                 Ok(true) // Simplified
             }
@@ -596,7 +600,7 @@ impl ErrorPropagationManager {
                     Ok(true)
                 }
             }
-            RetryCondition::DependencyResolved(dependency_task) => {
+            RetryCondition::DependencyResolved(_dependency_task) => {
                 // Check if dependency task is resolved
                 Ok(true) // Simplified
             }

@@ -1,0 +1,32 @@
+# Placeholder logging hooks for stdlib modules.
+# Until the host exposes structured logging, these functions forward to println for visibility.
+
+use prelude
+
+LogLevel :: enum {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+log_message :: (level: LogLevel, message: string) -> none => {
+    label := match level {
+        LogLevel::Trace => "[trace]",
+        LogLevel::Debug => "[debug]",
+        LogLevel::Info => "[info]",
+        LogLevel::Warn => "[warn]",
+        LogLevel::Error => "[error]",
+    }
+    println(label)
+    println(message)
+}
+
+log_info :: (message: string) -> none => {
+    log_message(LogLevel::Info, message)
+}
+
+log_error :: (message: string) -> none => {
+    log_message(LogLevel::Error, message)
+}

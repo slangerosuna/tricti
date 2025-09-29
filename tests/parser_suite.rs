@@ -59,6 +59,293 @@ fn parse_struct_and_method_syntax() {
 }
 
 #[test]
+fn parse_struct_with_optional_field() {
+    let src = r#"
+        StdError :: struct {
+            parameter: ?string,
+        }
+    "#
+    .to_string();
+
+    let program = parser::parse(src.to_string());
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ConstDecl { value, .. } = &program.statements[0] {
+        match value {
+            ConstValue::Type(Type::Struct { fields }) => {
+                assert_eq!(fields.len(), 1);
+                let ty = fields.get("parameter").expect("parameter field");
+                match ty {
+                    Type::Optional { inner } => match inner.as_ref() {
+                        Type::Identifier { name, .. } => assert_eq!(name, "string"),
+                        other => panic!("expected optional string, got {:?}", other),
+                    },
+                    other => panic!("expected optional type, got {:?}", other),
+                }
+            }
+            other => panic!("expected struct type, got {:?}", other),
+        }
+    } else {
+        panic!("expected const declaration");
+    }
+}
+
+#[test]
+fn parse_new_array_expression() {
+    let src = r#"
+        output := new [i64; 0]
+    "#
+    .to_string();
+
+    let program = parser::parse(src);
+    assert_eq!(program.statements.len(), 1);
+    match &program.statements[0] {
+        Statement::VariableDecl { value, .. } => match value {
+            Expression::ArrayNew {
+                element_type,
+                dimensions,
+            } => {
+                match element_type {
+                    Type::Identifier { name, .. } => assert_eq!(name, "i64"),
+                    other => panic!("expected identifier type, got {:?}", other),
+                }
+                assert_eq!(dimensions.len(), 1);
+                match &dimensions[0] {
+                    Expression::Literal(Literal::Integer(int_lit)) => {
+                        assert_eq!(int_lit.value, 0);
+                    }
+                    other => panic!("expected integer literal dimension, got {:?}", other),
+                }
+            }
+            other => panic!("expected array_new expression, got {:?}", other),
+        },
+        other => panic!("expected variable declaration, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_if_expression_in_block() {
+    let src = r#"
+        abs_i64 :: (x: i64) -> i64 => { if x < 0 { -x } else { x } }
+    "#
+    .to_string();
+
+    let program = parser::parse(src);
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn parse_identifier_comparison_expression() {
+    let src = r#"
+        result := value < 10
+    "#
+    .to_string();
+
+    let program = parser::parse(src);
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn parse_literal_comparison_expression() {
+    let src = r#"
+        result := 1 < 2
+    "#
+    .to_string();
+
+    let program = parser::parse(src);
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn parse_identifier_division_expression() {
+    let src = r#"
+        q := a / b
+    "#
+    .to_string();
+
+    let program = parser::parse(src);
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn parse_integer_with_underscores() {
+    let src = r#"
+        value := 5_000
+    "#
+    .to_string();
+
+    let program = parser::parse(src);
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn parse_match_with_return_and_value_arms() {
+    let src = r#"
+        result := match input {
+            some value => value,
+            none => ret default,
+        }
+    "#
+    .to_string();
+
+    let program = parser::parse(src);
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn parse_async_system_with_query_and_resource() {
+    let src = r#"
+        display_apps :: async sys (
+            query apps: select (image: &Image, title: &String)
+                from Apps
+                where display == true,
+            renderer: res &mut Gui,
+            input_size: f32 = 1.5,
+        ) -> none => {
+            println("hi")
+        }
+    "#;
+
+    let program = parser::parse(src.to_string());
+    assert_eq!(program.statements.len(), 1);
+
+    match &program.statements[0] {
+        Statement::ConstDecl { name, value, .. } => {
+            assert_eq!(name, "display_apps");
+            match value {
+                ConstValue::SystemDef(system) => {
+                    assert!(system.is_async, "system should be marked async");
+                    assert_eq!(system.parameters.len(), 3);
+
+                    match &system.parameters[0] {
+                        SystemParameter::Query { name, query_spec } => {
+                            assert_eq!(name, "apps");
+                            assert_eq!(query_spec.from_table, "Apps");
+                            assert_eq!(query_spec.projections.len(), 2);
+                            assert_eq!(query_spec.projections[0].name, "image");
+                            assert_eq!(
+                                query_spec.projections[0].access,
+                                Some(ResourceAccess::Immutable)
+                            );
+                            match &query_spec.projections[0].field_type {
+                                Some(Type::Reference { is_mutable, inner }) => {
+                                    assert!(!is_mutable);
+                                    assert_eq!(
+                                        inner.as_ref(),
+                                        &Type::Identifier {
+                                            name: "Image".to_string(),
+                                            type_args: vec![],
+                                        }
+                                    );
+                                }
+                                other => panic!(
+                                    "expected immutable reference projection, got {:?}",
+                                    other
+                                ),
+                            }
+                        }
+                        other => panic!("expected query parameter, got {:?}", other),
+                    }
+
+                    match &system.parameters[1] {
+                        SystemParameter::Resource {
+                            name,
+                            access,
+                            resource_type,
+                            ..
+                        } => {
+                            assert_eq!(name, "renderer");
+                            assert_eq!(*access, ResourceAccess::Mutable);
+                            assert_eq!(
+                                resource_type,
+                                &Type::Identifier {
+                                    name: "Gui".to_string(),
+                                    type_args: vec![],
+                                }
+                            );
+                        }
+                        other => panic!("expected resource parameter, got {:?}", other),
+                    }
+
+                    match &system.parameters[2] {
+                        SystemParameter::Regular {
+                            name,
+                            value_type,
+                            default_value,
+                            ..
+                        } => {
+                            assert_eq!(name, "input_size");
+                            assert_eq!(
+                                value_type,
+                                &Type::Identifier {
+                                    name: "f32".to_string(),
+                                    type_args: vec![],
+                                }
+                            );
+                            match default_value {
+                                Some(Expression::Literal(Literal::Float(value))) => {
+                                    assert!((value - 1.5).abs() < f64::EPSILON);
+                                }
+                                other => {
+                                    panic!("expected float literal default value, got {:?}", other)
+                                }
+                            }
+                        }
+                        other => panic!("expected regular parameter, got {:?}", other),
+                    }
+                }
+                other => panic!("expected system definition, got {:?}", other),
+            }
+        }
+        other => panic!("expected const declaration, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_system_query_without_name_defaults() {
+    let src = r#"
+        redraw :: sys (
+            query: select (id: &u64)
+                from Apps,
+            renderer: res &Gui,
+        ) => {
+            println("ok")
+        }
+    "#;
+
+    let program = parser::parse(src.to_string());
+    assert_eq!(program.statements.len(), 1);
+
+    match &program.statements[0] {
+        Statement::ConstDecl { value, .. } => match value {
+            ConstValue::SystemDef(system) => {
+                assert!(!system.is_async);
+                assert_eq!(system.parameters.len(), 2);
+
+                match &system.parameters[0] {
+                    SystemParameter::Query { name, query_spec } => {
+                        assert_eq!(name, "query");
+                        assert_eq!(query_spec.from_table, "Apps");
+                        assert_eq!(query_spec.projections.len(), 1);
+                        assert_eq!(query_spec.projections[0].name, "id");
+                    }
+                    other => panic!("expected query parameter, got {:?}", other),
+                }
+
+                match &system.parameters[1] {
+                    SystemParameter::Resource { name, access, .. } => {
+                        assert_eq!(name, "renderer");
+                        assert_eq!(*access, ResourceAccess::Immutable);
+                    }
+                    other => panic!("expected resource parameter, got {:?}", other),
+                }
+            }
+            other => panic!("expected system definition, got {:?}", other),
+        },
+        other => panic!("expected const declaration, got {:?}", other),
+    }
+}
+
+#[test]
 fn parse_trait_type_and_impl_for() {
     let src = r#"
         my_iterator :: trait {
