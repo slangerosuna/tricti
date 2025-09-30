@@ -136,6 +136,11 @@ impl DependencyGraph {
                     Self::extract_statement_dependencies(stmt, dependencies, column_names)?;
                 }
             }
+            Expression::UnsafeBlock { statements } => {
+                for stmt in statements {
+                    Self::extract_statement_dependencies(stmt, dependencies, column_names)?;
+                }
+            }
             Expression::Tuple(exprs) => {
                 for expr in exprs {
                     Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
@@ -148,7 +153,7 @@ impl DependencyGraph {
                     Self::extract_dependencies_recursive(&arm.body, dependencies, column_names)?;
                 }
             }
-            Expression::StructLiteral { fields } => {
+            Expression::StructLiteral { type_name, fields } => {
                 for expr in fields.values() {
                     Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
                 }
@@ -174,6 +179,9 @@ impl DependencyGraph {
             }
             Expression::Question(expr) | Expression::Unwrap(expr) => {
                 Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
+            }
+            Expression::Cast { value, .. } => {
+                Self::extract_dependencies_recursive(value, dependencies, column_names)?;
             }
             Expression::Query(_) => {
                 // Query expressions might have dependencies, but for now we'll treat them as having none

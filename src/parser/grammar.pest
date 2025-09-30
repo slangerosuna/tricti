@@ -1,5 +1,5 @@
-WHITESPACE   = _{ " " | "\t" | "\n" | "\r" }
-COMMENT      = _{ "#" ~ (!"\n" ~ ANY)* }
+WHITESPACE   = _{ " " | "\t" | "\n" | "\r" | COMMENT }
+COMMENT      = _{ (("#" | "//") ~ (!"\n" ~ ANY)*) | ("/*" ~ (!"*/" ~ ANY)*) }
 
 identifier   = @{ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
 int_body     = { ASCII_DIGIT+ ~ ("_" ~ ASCII_DIGIT+)* }
@@ -22,6 +22,7 @@ statement    = {
     | for_loop
     | return_statement
     | break_statement
+    | ifdef_statement
     | expression)
     ~ ";"?
 }
@@ -30,9 +31,12 @@ use_statement = { "use" ~ identifier ~ ("::" ~ (identifier | "*"))* ~ ";"? }
 mod_decl = { "mod" ~ identifier ~ (";" | ("{" ~ statement* ~ "}")) }
 return_statement = { "ret" ~ expression? }
 break_statement = { "break" ~ expression? }
-impl_block    = { "impl" ~ identifier ~ ("for" ~ identifier)? ~ "{" ~ impl_methods ~ "}" }
-impl_methods  = _{ (const_decl ~ ","?)* }
+ifdef_statement = { "@ifdef" ~ "(" ~ expression ~ ")" ~ block ~ ("@else" ~ block)? }
+impl_block    = { "impl" ~ type ~ ("for" ~ type)? ~ "{" ~ impl_methods ~ "}" }
+impl_method   = { attributes? ~ identifier ~ "::" ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
+impl_methods  = _{ ((impl_method | const_decl) ~ ","?)* }
 block = { "{" ~ statement* ~ "}" }
+unsafe_block = { "unsafe" ~ block }
 
 for_loop     = { "for" ~ identifier ~ (":" ~ type)? ~ "in" ~ expression ~ block }
 loop         = { "loop" ~ block }
@@ -43,6 +47,7 @@ attributes      = { attribute* }
 
 const_decl = {
     attributes? ~
+    WHITESPACE* ~
     ("extern" ~ string?)? ~
     identifier ~ type_params? ~
     (":" ~ type)? ~
@@ -91,12 +96,14 @@ db_entry = { identifier ~ (":" ~ identifier)? }
 
 expression    = { or }
 
-op_or         = { "or" | "xor" }
+op_or         = { "or" | "xor" | "||" }
 or            = { and ~ (WHITESPACE* ~ op_or ~ WHITESPACE* ~ and )* }
-op_and        = { "and" }
+op_and        = { "and" | "&&" }
 and           = { comparison ~ (WHITESPACE* ~ op_and ~ WHITESPACE* ~ comparison )* }
 op_cmp        = { "==" | "~=" | "<=" | ">=" | ">" | "<" }
-comparison    = { addition ~ (WHITESPACE* ~ op_cmp ~ WHITESPACE* ~ addition )* }
+comparison    = { shift ~ (WHITESPACE* ~ op_cmp ~ WHITESPACE* ~ shift )* }
+op_shift      = { "<<" | ">>" }
+shift         = { addition ~ (WHITESPACE* ~ op_shift ~ WHITESPACE* ~ addition )* }
 op_add        = { "+" | "-" }
 addition      = { multiplication ~ (WHITESPACE* ~ op_add ~ WHITESPACE* ~ multiplication )* }
 op_mul        = { "*" | ".*" | "/" | "./" | "\\" | "%" | ".%" }
@@ -106,20 +113,26 @@ op_unary      = { "-" | "~" | "*" | "&mut" | "&" | "!" | "some" }
 unary         = { op_unary? ~ post_fix }
 static_path_suffix = { "::" ~ identifier }
 field_suffix  = { "." ~ identifier }
-post_fix      = { primary ~ (call_suffix | static_path_suffix | field_suffix | "?" | "!" | ("[" ~ (expression ~ ","?)+ ~ "]"))* }
+post_fix      = { primary ~ (call_suffix | cast_suffix | static_path_suffix | field_suffix | struct_literal | "?" | "!" | ("[" ~ (expression ~ ","?)+ ~ "]"))* }
 tuple_expr    = { "(" ~ expression ~ ("," ~ expression)+ ~ ","? ~ ")" }
-primary       = { number | loop | conditional | match | function | literal | block | array_new | matrix | shader | tuple_expr | identifier | "(" ~ expression ~ ")" }
+primary       = { block | unsafe_block | number | loop | conditional | match | function | literal | array_new | matrix | shader | tuple_expr | path_struct | identifier | "(" ~ expression ~ ")" }
+path_struct    = { identifier ~ ("::" ~ identifier)+ ~ struct_literal }
 
-call_suffix   = { "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
+call_suffix   = { type_args? ~ "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
+cast_suffix   = { "as" ~ type }
 argument      = { (identifier ~ ":")? ~ expression }
 literal       = { integer | float | string | boolean | char | struct_literal }
 
 char          = @{ "'" ~ ( "\\" ~ ("'" | "\\" | "n" | "t" | "r" | "0" | "u" ~ "{" ~ ASCII_HEX_DIGIT+ ~ "}" ) | (!"\\" ~ !"'" ~ ANY) ) ~ "'" }
 
-struct_literal = { "{" ~ (identifier ~ ":" ~ expression ~ ","?)* ~ "}" }
+struct_literal = { "{" ~ (shorthand_field | full_field | ".." ~ ","?)* ~ "}" }
+shorthand_field = { identifier ~ ","? }
+full_field = { identifier ~ ":" ~ expression ~ ","? }
+
+pattern       = { path_struct | identifier | "_" }
 
 match         = { "match" ~ expression ~ "{" ~ match_arm+ ~ ("," ~ WHITESPACE* ~ &"}")? ~ "}" }
-match_arm     = { expression ~ "=>" ~ match_body ~ ("," ~ WHITESPACE* ~ !"}")? }
+match_arm     = { pattern ~ "=>" ~ match_body ~ ("," ~ WHITESPACE* ~ !"}")? }
 match_body    = { block | return_statement | break_statement | expression }
 
 array_new     = { "new" ~ "[" ~ type ~ (";" ~ expression ~ ("," ~ expression)* ~ ","?)? ~ "]" }
@@ -128,7 +141,7 @@ row           = { (expression ~ ","?)+ }
 
 type_params   = { "<" ~ identifier ~ ("," ~ identifier)* ~ ">" }
 type_args     = { "<" ~ type ~ ("," ~ type)* ~ ">" }
-function      = { "async"? ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
+function      = { attributes? ~ "async"? ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
 function_params = { (function_param | ("self" | "&self" | "&mut self" | "*self")) ~ ("," ~ function_param)* ~ ","? }
 function_param = { identifier ~ (":" ~ type)? ~ ("=" ~ expression)? }
 return_type   = { "->" ~ type}

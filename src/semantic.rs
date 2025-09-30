@@ -1211,6 +1211,13 @@ fn analyze_statement(
     Ok(())
 }
 
+fn type_name_str(ty: &Type) -> &str {
+    match ty {
+        Type::Identifier { name, .. } => name,
+        _ => panic!("Expected identifier type for impl"),
+    }
+}
+
 fn mangle_method_name(trait_name: Option<&str>, type_name: &str, method_name: &str) -> String {
     match trait_name {
         Some(tn) => format!("{}_{}_{}", tn, type_name, method_name),
@@ -2305,6 +2312,11 @@ fn extract_column_references_recursive(
                 extract_statement_column_references(stmt, references, column_names);
             }
         }
+        Expression::UnsafeBlock { statements } => {
+            for stmt in statements {
+                extract_statement_column_references(stmt, references, column_names);
+            }
+        }
         Expression::Tuple(exprs) => {
             for expr in exprs {
                 extract_column_references_recursive(expr, references, column_names);
@@ -2317,7 +2329,7 @@ fn extract_column_references_recursive(
                 extract_column_references_recursive(&arm.body, references, column_names);
             }
         }
-        Expression::StructLiteral { fields } => {
+        Expression::StructLiteral { type_name, fields } => {
             for expr in fields.values() {
                 extract_column_references_recursive(expr, references, column_names);
             }

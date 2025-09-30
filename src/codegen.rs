@@ -38,6 +38,13 @@ impl fmt::Display for CodegenError {
 
 impl Error for CodegenError {}
 
+fn type_name_str(ty: &Type) -> &str {
+    match ty {
+        Type::Identifier { name, .. } => name,
+        _ => panic!("Expected identifier type for impl"),
+    }
+}
+
 pub struct CodeGenerator<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
@@ -902,7 +909,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             name: struct_name,
                             type_args: _,
                         }),
-                        Expression::StructLiteral { fields },
+                        Expression::StructLiteral { type_name, fields },
                     ) = (type_annotation, expr)
                     {
                         let (st_copy, order_clone) =
@@ -1120,7 +1127,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         name: struct_name,
                         type_args: _,
                     }),
-                    Expression::StructLiteral { fields },
+                    Expression::StructLiteral { type_name, fields },
                 ) = (type_annotation, value)
                 {
                     // limit borrow scope and clone needed data
@@ -3447,6 +3454,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
             }
 
+            Expression::Cast { value, to_type } => {
+                let val = self.generate_expression(value)?;
+                self.cast_value(val, to_type)
+            }
+
             Expression::Call {
                 function,
                 type_args,
@@ -3805,6 +3817,36 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
             }
 
+            BinaryOperator::ShiftLeft => {
+                if left.is_int_value() && right.is_int_value() {
+                    let (l, r, _ty) = self.unify_ints(left, right)?;
+                    let result = self
+                        .builder
+                        .build_left_shift(l, r, "shltmp")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    Ok(result.into())
+                } else {
+                    Err(CodegenError::InvalidOperation(
+                        "Invalid types for left shift".to_string(),
+                    ))
+                }
+            }
+
+            BinaryOperator::ShiftRight => {
+                if left.is_int_value() && right.is_int_value() {
+                    let (l, r, _ty) = self.unify_ints(left, right)?;
+                    let result = self
+                        .builder
+                        .build_right_shift(l, r, true, "shrtmp")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    Ok(result.into())
+                } else {
+                    Err(CodegenError::InvalidOperation(
+                        "Invalid types for right shift".to_string(),
+                    ))
+                }
+            }
+
             _ => Err(CodegenError::InvalidOperation(format!(
                 "Binary operator {:?} not implemented",
                 operator
@@ -3889,6 +3931,19 @@ impl<'ctx> CodeGenerator<'ctx> {
                 "Unary operator {:?} not implemented",
                 operator
             ))),
+        }
+    }
+
+    fn cast_value(
+        &mut self,
+        value: BasicValueEnum<'ctx>,
+        to_type: &Type,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let target_ty = self.map_ast_type(to_type).unwrap_or(value.get_type());
+        if value.get_type() == target_ty {
+            Ok(value)
+        } else {
+            self.cast_basic_to_type(value, target_ty)
         }
     }
 
@@ -6189,6 +6244,93 @@ impl<'ctx> CodeGenerator<'ctx> {
                         self.functions.insert(fname, f);
                     }
                 }
+                Statement::ImplMethod {
+                    name,
+                    type_params: _,
+                    parameters,
+                    return_type,
+                    body,
+                } => {
+                    // Generate method function
+                    let mangled = format!("{}_{}", self.current_impl_struct.as_deref().unwrap_or("unknown"), name);
+                    let ret_ty = return_type
+                        .as_ref()
+                        .and_then(|t| self.map_ast_type(t))
+                        .unwrap_or(self.context.i64_type().into());
+                    let mut param_tys_bte: Vec<BasicTypeEnum<'ctx>> = Vec::new();
+                    // Prepend receiver pointer parameter for methods
+                    param_tys_bte.push(self.context.ptr_type(AddressSpace::default()).into());
+                    param_tys_bte.extend(parameters.iter().map(|p| {
+                        p.param_type
+                            .as_ref()
+                            .and_then(|t| self.map_ast_type(t))
+                            .unwrap_or(self.context.i64_type().into())
+                    }));
+                    let param_meta: Vec<inkwell::types::BasicMetadataTypeEnum> =
+                        param_tys_bte.iter().map(|t| (*t).into()).collect();
+                    let fn_type = match ret_ty {
+                        BasicTypeEnum::IntType(it) => it.fn_type(&param_meta, false),
+                        BasicTypeEnum::FloatType(ft) => ft.fn_type(&param_meta, false),
+                        BasicTypeEnum::PointerType(pt) => pt.fn_type(&param_meta, false),
+                        BasicTypeEnum::StructType(st) => st.fn_type(&param_meta, false),
+                        BasicTypeEnum::ArrayType(at) => at.fn_type(&param_meta, false),
+                        _ => self.context.i64_type().fn_type(&param_meta, false),
+                    };
+                    let function = self.module.add_function(&mangled, fn_type, None);
+                    self.functions.insert(mangled.clone(), function);
+
+                    // Define the function body
+                    let entry = self.context.append_basic_block(function, "entry");
+                    let prev_insert_block = self.builder.get_insert_block();
+                    let prev_fn = self.current_function;
+                    let prev_vars = std::mem::take(&mut self.variables);
+                    self.current_function = Some(function);
+                    self.builder.position_at_end(entry);
+
+                    // Bind parameters to allocas
+                    for (i, param) in function.get_param_iter().enumerate() {
+                        let param_ty = param_tys_bte[i];
+                        let alloca = self.create_entry_block_alloca(&format!("arg{}", i), param_ty)?;
+                        self.builder.build_store(alloca, param).map_err(|e| {
+                            CodegenError::CompilationError(e.to_string())
+                        })?;
+                        if i == 0 {
+                            // Receiver (self)
+                            self.variables.insert("self".to_string(), (alloca, param_ty));
+                        } else {
+                            let param_name = parameters.get(i - 1).map(|p| p.name.clone()).unwrap_or(format!("arg{}", i - 1));
+                            self.variables.insert(param_name, (alloca, param_ty));
+                        }
+                    }
+
+                    // Generate body
+                    match body {
+                        FunctionBody::Expression(expr) => {
+                            let val = self.generate_expression(expr)?;
+                            self.builder.build_return(Some(&val)).map_err(|e| {
+                                CodegenError::CompilationError(e.to_string())
+                            })?;
+                        }
+                        FunctionBody::Block(statements) => {
+                            for stmt in statements {
+                                self.generate_statement(stmt)?;
+                            }
+                            // If no return, add implicit return
+                            if !statements.iter().any(|s| matches!(s, Statement::Return(_))) {
+                                self.builder.build_return(None).map_err(|e| {
+                                    CodegenError::CompilationError(e.to_string())
+                                })?;
+                            }
+                        }
+                    }
+
+                    // Restore state
+                    self.variables = prev_vars;
+                    self.current_function = prev_fn;
+                    if let Some(bb) = prev_insert_block {
+                        self.builder.position_at_end(bb);
+                    }
+                }
                 Statement::ImplBlock {
                     trait_name,
                     type_name,
@@ -6301,7 +6443,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 // If returning a struct and the body is a struct literal or a block whose last expr is a struct literal, build using known struct layout
                                 if let BasicTypeEnum::StructType(st_ret) = ret_ty {
                                     // Direct struct literal
-                                    if let Expression::StructLiteral { fields } = expr.as_ref() {
+                                    if let Expression::StructLiteral { type_name, fields } = expr.as_ref() {
                                         if let Some((struct_name, (st_known, order))) = self
                                             .struct_types
                                             .iter()
@@ -6336,7 +6478,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                                 let _ = self.generate_statement(s);
                                             }
                                             if let Statement::Expression(
-                                                Expression::StructLiteral { fields },
+                                                Expression::StructLiteral { type_name, fields },
                                             ) = last
                                             {
                                                 if let Some((struct_name, (st_known, order))) = self
@@ -6435,7 +6577,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                         Statement::Expression(expr) => {
                                             // If returning a struct and the last expr is a struct literal, build it using layout
                                             if let BasicTypeEnum::StructType(st_ret) = ret_ty {
-                                                if let Expression::StructLiteral { fields } = expr {
+                                                if let Expression::StructLiteral { type_name, fields } = expr {
                                                     if let Some((struct_name, (st_known, order))) =
                                                         self.struct_types.iter().find(
                                                             |(_, (llvm_st, _))| *llvm_st == st_ret,

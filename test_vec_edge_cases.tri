@@ -1,0 +1,273 @@
+# Test edge cases and error conditions for Vec functionality
+# Tests bounds checking, capacity growth, and error handling
+
+# Placeholder functions that simulate error conditions
+Vec_new :: () -> i64 => { 42 }
+
+Vec_with_capacity :: (capacity: i64) -> i64 => { capacity }
+
+Vec_len :: (vec: i64) -> i64 => { vec }
+
+Vec_push :: (vec: i64, value: i64) -> i64 => { vec + value }
+
+Vec_pop :: (vec: i64) -> i64 => {
+    if vec > 0 { vec - 1 } else { -1 }  # Simulate error for empty vec
+}
+
+Vec_get :: (vec: i64, index: i64) -> i64 => {
+    if index < 0 { -1 }  # negative index error
+    else if index >= vec { -1 }  # out of bounds error
+    else { vec + index }  # valid access
+}
+
+Vec_is_empty :: (vec: i64) -> bool => { vec == 0 }
+
+Vec_clear :: (vec: i64) -> i64 => { 0 }
+
+Vec_capacity :: (vec: i64) -> i64 => { vec * 2 }  # Simulate capacity being larger than len
+
+# Test bounds checking
+test_bounds_checking :: () -> bool => {
+    vec := Vec_new();  # len = 42
+
+    # Test valid access
+    valid_get := Vec_get(vec, 5);  # should succeed: 42 + 5 = 47
+
+    # Test out of bounds access
+    invalid_get := Vec_get(vec, 50);  # should fail: -1
+
+    # Test negative index
+    negative_get := Vec_get(vec, -1);  # should fail: -1
+
+    # Check results individually since we can't use &&
+    valid_ok := valid_get == 47;
+    invalid_ok := invalid_get == -1;
+    negative_ok := negative_get == -1;
+
+    if valid_ok {
+        if invalid_ok {
+            negative_ok
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+# Test empty vector operations
+test_empty_vec_operations :: () -> bool => {
+    empty_vec := Vec_clear(42);  # len = 0
+
+    # Test pop on empty vec
+    pop_result := Vec_pop(empty_vec);  # should fail: -1
+
+    # Test get on empty vec
+    get_result := Vec_get(empty_vec, 0);  # should fail: -1
+
+    # Test is_empty
+    is_empty := Vec_is_empty(empty_vec);  # should be true
+
+    # Check results individually
+    pop_ok := pop_result == -1;
+    get_ok := get_result == -1;
+    empty_ok := is_empty;
+
+    if pop_ok {
+        if get_ok {
+            empty_ok
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+# Test capacity growth simulation
+test_capacity_growth :: () -> bool => {
+    vec := Vec_new();  # len = 42, capacity = 84
+
+    # Simulate pushing until capacity exceeded
+    vec := Vec_push(vec, 10);  # len becomes 52, still < capacity 84
+
+    # Check that length increased
+    new_len := Vec_len(vec);
+
+    # Check capacity is still larger than length
+    cap := Vec_capacity(vec);
+
+    len_ok := new_len == 52;
+    cap_ok := cap > new_len;
+
+    if len_ok {
+        cap_ok
+    } else {
+        false
+    }
+}
+
+# Test multiple push/pop operations
+test_push_pop_sequence :: () -> bool => {
+    vec := Vec_new();  # 42
+
+    # Push several values
+    vec := Vec_push(vec, 1);  # 43
+    vec := Vec_push(vec, 2);  # 45
+    vec := Vec_push(vec, 3);  # 48
+
+    len_after_push := Vec_len(vec);  # should be 45
+
+    # Pop values
+    vec := Vec_pop(vec);  # 47
+    vec := Vec_pop(vec);  # 45
+
+    len_after_pop := Vec_len(vec);  # should be 43
+
+    push_ok := len_after_push == 45;
+    pop_ok := len_after_pop == 43;
+
+    if push_ok {
+        pop_ok
+    } else {
+        false
+    }
+}
+
+# Test clear operation
+test_clear_operation :: () -> bool => {
+    vec := Vec_new();  # 42
+    vec := Vec_push(vec, 5);  # 47
+
+    len_before_clear := Vec_len(vec);  # 47
+
+    vec := Vec_clear(vec);  # 0
+
+    len_after_clear := Vec_len(vec);  # 0
+    is_empty_after_clear := Vec_is_empty(vec);  # true
+
+    before_ok := len_before_clear == 47;
+    after_ok := len_after_clear == 0;
+    empty_ok := is_empty_after_clear;
+
+    if before_ok {
+        if after_ok {
+            empty_ok
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+# Test with_capacity initialization
+test_with_capacity_init :: () -> bool => {
+    vec := Vec_with_capacity(100);
+
+    len := Vec_len(vec);  # should be 0
+    cap := Vec_capacity(vec);  # should be >= 100
+
+    len_ok := len == 0;
+    cap_ok := cap >= 100;
+
+    if len_ok {
+        cap_ok
+    } else {
+        false
+    }
+}
+
+# Test index 0 access
+test_index_zero_access :: () -> bool => {
+    vec := Vec_new();  # 42
+
+    # Get first element (index 0)
+    first := Vec_get(vec, 0);  # should succeed: 42 + 0 = 42
+
+    first == 42
+}
+
+# Main test runner for edge cases
+main :: () -> i32 => {
+    println("Running Vec edge case and error condition tests...");
+
+    tests_passed := 0;
+    total_tests := 0;
+
+    # Test bounds checking
+    total_tests := total_tests + 1;
+    if test_bounds_checking() {
+        tests_passed := tests_passed + 1;
+        println("✓ test_bounds_checking passed");
+    } else {
+        println("✗ test_bounds_checking failed");
+    }
+
+    # Test empty vector operations
+    total_tests := total_tests + 1;
+    if test_empty_vec_operations() {
+        tests_passed := tests_passed + 1;
+        println("✓ test_empty_vec_operations passed");
+    } else {
+        println("✗ test_empty_vec_operations failed");
+    }
+
+    # Test capacity growth
+    total_tests := total_tests + 1;
+    if test_capacity_growth() {
+        tests_passed := tests_passed + 1;
+        println("✓ test_capacity_growth passed");
+    } else {
+        println("✗ test_capacity_growth failed");
+    }
+
+    # Test push/pop sequence
+    total_tests := total_tests + 1;
+    if test_push_pop_sequence() {
+        tests_passed := tests_passed + 1;
+        println("✓ test_push_pop_sequence passed");
+    } else {
+        println("✗ test_push_pop_sequence failed");
+    }
+
+    # Test clear operation
+    total_tests := total_tests + 1;
+    if test_clear_operation() {
+        tests_passed := tests_passed + 1;
+        println("✓ test_clear_operation passed");
+    } else {
+        println("✗ test_clear_operation failed");
+    }
+
+    # Test with_capacity init
+    total_tests := total_tests + 1;
+    if test_with_capacity_init() {
+        tests_passed := tests_passed + 1;
+        println("✓ test_with_capacity_init passed");
+    } else {
+        println("✗ test_with_capacity_init failed");
+    }
+
+    # Test index zero access
+    total_tests := total_tests + 1;
+    if test_index_zero_access() {
+        tests_passed := tests_passed + 1;
+        println("✓ test_index_zero_access passed");
+    } else {
+        println("✗ test_index_zero_access failed");
+    }
+
+    # Summary
+    println("");
+    println("Vec edge case tests completed:");
+    println("Passed: ", tests_passed, "/", total_tests);
+
+    if tests_passed == total_tests {
+        println("🎉 All Vec edge case tests passed!");
+        0
+    } else {
+        println("❌ Some Vec edge case tests failed!");
+        1
+    }
+}

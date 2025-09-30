@@ -7,6 +7,13 @@ use std::collections::HashMap;
 #[grammar = "src/parser/grammar.pest"]
 struct PnParser;
 
+fn type_name_str(ty: &Type) -> String {
+    match ty {
+        Type::Identifier { name, .. } => name.clone(),
+        _ => panic!("Expected identifier type for impl"),
+    }
+}
+
 pub fn parse(file: String) -> Program {
     let successful_parse =
         PnParser::parse(Rule::program, &file).unwrap_or_else(|e| panic!("Parse error: {}", e));
@@ -114,6 +121,7 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
         Rule::use_statement => parse_use_statement(inner_pair),
         Rule::mod_decl => parse_mod_decl(inner_pair),
         Rule::impl_block => parse_impl_block(inner_pair),
+        Rule::ifdef_statement => parse_ifdef_statement(inner_pair),
         Rule::expression => Statement::Expression(parse_expression(inner_pair)),
         _ => panic!("Unexpected statement rule: {:?}", inner_pair.as_rule()),
     }
@@ -264,6 +272,7 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::or => parse_binary_expression(pair),
         Rule::and => parse_binary_expression(pair),
         Rule::comparison => parse_binary_expression(pair),
+        Rule::shift => parse_binary_expression(pair),
         Rule::addition => parse_binary_expression(pair),
         Rule::multiplication => parse_binary_expression(pair),
         Rule::with_range => parse_with_range(pair),
@@ -390,9 +399,13 @@ fn parse_binary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
             "*" => BinaryOperator::Mul,
             "/" => BinaryOperator::Div,
             "%" => BinaryOperator::Mod,
+            "<<" => BinaryOperator::ShiftLeft,
+            ">>" => BinaryOperator::ShiftRight,
             "and" => BinaryOperator::And,
             "or" => BinaryOperator::Or,
             "xor" => BinaryOperator::Xor,
+            "&&" => BinaryOperator::LogicalAnd,
+            "||" => BinaryOperator::LogicalOr,
             "==" => BinaryOperator::Equal,
             "~=" => BinaryOperator::NotEqual,
             "<" => BinaryOperator::Less,
@@ -419,16 +432,33 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     for suffix_pair in inner {
         match suffix_pair.as_rule() {
             Rule::call_suffix => {
+                let mut type_args = Vec::new();
                 let mut arguments = Vec::new();
                 for arg_pair in suffix_pair.into_inner() {
-                    if arg_pair.as_rule() == Rule::argument {
-                        arguments.push(parse_argument(arg_pair));
+                    match arg_pair.as_rule() {
+                        Rule::type_args => {
+                            for type_pair in arg_pair.into_inner() {
+                                type_args.push(parse_type(type_pair));
+                            }
+                        }
+                        Rule::argument => {
+                            arguments.push(parse_argument(arg_pair));
+                        }
+                        _ => {}
                     }
                 }
                 expr = Expression::Call {
                     function: Box::new(expr),
-                    type_args: Vec::new(),
+                    type_args,
                     arguments,
+                };
+            }
+            Rule::cast_suffix => {
+                let mut inner = suffix_pair.into_inner();
+                let to_type = parse_type(inner.next().unwrap());
+                expr = Expression::Cast {
+                    value: Box::new(expr),
+                    to_type,
                 };
             }
             Rule::static_path_suffix => {
@@ -445,6 +475,18 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
                 expr = Expression::FieldAccess {
                     object: Box::new(expr),
                     field: name,
+                };
+            }
+            Rule::struct_literal => {
+                let fields = parse_struct_literal_fields(suffix_pair);
+                let type_name = if let Expression::Identifier(id) = &expr {
+                    Some(id.clone())
+                } else {
+                    None // shouldn't happen
+                };
+                expr = Expression::StructLiteral {
+                    type_name,
+                    fields,
                 };
             }
             _ if suffix_pair.as_str().starts_with("[") => {
@@ -473,13 +515,38 @@ fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::block => Expression::Block {
             statements: parse_block(inner_pair),
         },
+        Rule::unsafe_block => Expression::UnsafeBlock {
+            statements: parse_block(inner_pair.into_inner().next().unwrap()),
+        },
         Rule::function => parse_function(inner_pair),
         Rule::conditional => parse_if_expression(inner_pair),
         Rule::r#match => parse_match_expression(inner_pair),
         Rule::matrix => parse_matrix(inner_pair),
         Rule::tuple_expr => parse_tuple_expression(inner_pair),
+        Rule::path_struct => parse_path_struct_expression(inner_pair),
         _ => parse_expression(inner_pair),
     }
+}
+
+fn parse_path_struct_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let mut path_parts = Vec::new();
+    
+    while let Some(part) = inner.next() {
+        match part.as_rule() {
+            Rule::identifier => path_parts.push(part.as_str().to_string()),
+            Rule::struct_literal => {
+                let fields = parse_struct_literal_fields(part);
+                let mangled_name = path_parts.join("_");
+                return Expression::StructLiteral {
+                    type_name: Some(mangled_name),
+                    fields,
+                };
+            }
+            _ => panic!("Unexpected path struct part: {:?}", part.as_rule()),
+        }
+    }
+    panic!("Path struct missing struct literal");
 }
 
 fn parse_array_new(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -542,13 +609,22 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         let body_pair = arm_inner
             .next()
             .expect("match arm missing body expression");
-        let pattern = parse_expression(pattern_pair);
+        let pattern = parse_pattern(pattern_pair);
         let body = parse_match_arm_body(body_pair);
         arms.push(MatchArm { pattern, body });
     }
     Expression::Match {
         value: Box::new(value),
         arms,
+    }
+}
+
+fn parse_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let inner = pair.into_inner().next().unwrap();
+    match inner.as_rule() {
+        Rule::path_struct => parse_path_struct_expression(inner),
+        Rule::identifier => Expression::Identifier(inner.as_str().to_string()),
+        _ => panic!("Unexpected pattern rule: {:?}", inner.as_rule()),
     }
 }
 
@@ -576,6 +652,31 @@ fn parse_match_arm_body(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::expression => parse_expression(body_pair),
         _ => parse_expression(body_pair),
     }
+}
+
+fn parse_struct_literal_fields(pair: pest::iterators::Pair<Rule>) -> HashMap<String, Expression> {
+    let mut fields: HashMap<String, Expression> = HashMap::new();
+    for field_pair in pair.into_inner() {
+        match field_pair.as_rule() {
+            Rule::shorthand_field => {
+                let name = field_pair.into_inner().next().unwrap().as_str().to_string();
+                fields.insert(name.clone(), Expression::Identifier(name));
+            }
+            Rule::full_field => {
+                let mut inner = field_pair.into_inner();
+                let name = inner.next().unwrap().as_str().to_string();
+                // Skip the ':'
+                inner.next();
+                let expr = parse_expression(inner.next().unwrap());
+                fields.insert(name, expr);
+            }
+            Rule::struct_literal => {
+                // This is the ".." case, skip
+            }
+            _ => panic!("Unexpected rule in struct_literal: {:?}", field_pair.as_rule()),
+        }
+    }
+    fields
 }
 
 fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -611,7 +712,7 @@ fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Expression {
                 let value_expr = parse_expression(expr_pair);
                 fields.insert(name, value_expr);
             }
-            Expression::StructLiteral { fields }
+            Expression::StructLiteral { type_name: None, fields }
         }
         _ => parse_expression(inner_pair),
     }
@@ -1068,27 +1169,28 @@ fn parse_mod_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
 
 fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut it = pair.into_inner();
-    // In grammar: impl identifier ("for" ~ identifier)? { impl_methods }
+    // In grammar: impl type ("for" ~ type)? { impl_methods }
     // Pest doesn't yield the raw "for" token, so we see either:
-    //  - identifier, impl_methods   (inherent impl)
-    //  - identifier, identifier, impl_methods  (trait impl)
-    let first_ident = it.next().expect("impl missing identifier");
+    //  - type, impl_methods   (inherent impl)
+    //  - type, type, impl_methods  (trait impl)
+    let first_type = it.next().expect("impl missing type");
     let mut trait_name: Option<String> = None;
     let type_name: String;
 
-    // Peek next; if it's an identifier, interpret as trait impl
+    // Collect rest
     let mut rest: Vec<pest::iterators::Pair<Rule>> = it.collect();
-    if !rest.is_empty() && rest[0].as_rule() == Rule::identifier {
-        trait_name = Some(first_ident.as_str().to_string());
-        type_name = rest.remove(0).as_str().to_string();
+    if !rest.is_empty() && rest[0].as_rule() == Rule::r#type {
+        trait_name = Some(type_name_str(&parse_type(first_type)));
+        type_name = type_name_str(&parse_type(rest.remove(0)));
     } else {
-        type_name = first_ident.as_str().to_string();
+        type_name = type_name_str(&parse_type(first_type));
     }
 
     let mut methods: Vec<Statement> = Vec::new();
     for inner in rest.into_iter() {
         match inner.as_rule() {
             Rule::const_decl => methods.push(parse_const_decl(inner)),
+            Rule::impl_method => methods.push(parse_impl_method(inner)),
             // impl_methods is silent, so we don't see it here; const_decl arrives directly
             _ => {}
         }
@@ -1097,6 +1199,81 @@ fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
         trait_name,
         type_name,
         methods,
+    }
+}
+
+fn parse_impl_method(pair: pest::iterators::Pair<Rule>) -> Statement {
+    let mut params: Vec<Parameter> = Vec::new();
+    let mut return_ty: Option<Type> = None;
+    let mut body_opt: Option<FunctionBody> = None;
+    let mut type_params: Vec<String> = Vec::new();
+    let mut name = String::new();
+
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::identifier => {
+                name = inner.as_str().to_string();
+            }
+            Rule::type_params => {
+                for tp in inner.into_inner() {
+                    if tp.as_rule() == Rule::identifier {
+                        type_params.push(tp.as_str().to_string());
+                    }
+                }
+            }
+            Rule::function_params => {
+                for p in inner.into_inner() {
+                    match p.as_rule() {
+                        Rule::function_param => {
+                            let mut it = p.into_inner();
+                            let name = it.next().unwrap().as_str().to_string();
+                            let mut ty: Option<Type> = None;
+                            let mut default_value: Option<Expression> = None;
+                            for part in it {
+                                match part.as_rule() {
+                                    Rule::r#type => ty = Some(parse_type(part)),
+                                    Rule::expression => {
+                                        default_value = Some(parse_expression(part))
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            params.push(Parameter {
+                                name,
+                                param_type: ty,
+                                default_value,
+                            });
+                        }
+                        _ => { /* self variants ignored */ }
+                    }
+                }
+            }
+            Rule::return_type => {
+                let ty_pair = inner.into_inner().next().unwrap();
+                return_ty = Some(parse_type(ty_pair));
+            }
+            Rule::function_body => {
+                if let Some(first) = inner.into_inner().next() {
+                    match first.as_rule() {
+                        Rule::expression => {
+                            body_opt =
+                                Some(FunctionBody::Expression(Box::new(parse_expression(first))))
+                        }
+                        Rule::block => body_opt = Some(FunctionBody::Block(parse_block(first))),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Statement::ImplMethod {
+        name,
+        type_params,
+        parameters: params,
+        return_type: return_ty,
+        body: body_opt.unwrap_or(FunctionBody::Block(Vec::new())),
     }
 }
 
@@ -1625,5 +1802,19 @@ fn parse_function_param(pair: pest::iterators::Pair<Rule>) -> Parameter {
         name,
         param_type,
         default_value,
+    }
+}
+
+fn parse_ifdef_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
+    let mut inner = pair.into_inner();
+    let condition_pair = inner.next().unwrap();
+    let condition = condition_pair.as_str().to_string();
+    let then_branch = parse_block(inner.next().unwrap());
+    let else_branch = inner.next().map(parse_block);
+
+    Statement::IfDef {
+        condition,
+        then_branch,
+        else_branch,
     }
 }

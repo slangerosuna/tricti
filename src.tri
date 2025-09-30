@@ -36,7 +36,7 @@ main :: () => {
         println("div(1, 0) didn't return an error")
         println("Foo is {}", foo) # the value can be accessed in the branch where it was truthy
         # can also be done like
-        # foo := div(1, 0)? else { println("can't divide by 0") ret }
+        # foo := div(1, 0)? else { println("can't divide by 0"); ret }
     } else {
         println("div(1, 0) returned an error")
     } 

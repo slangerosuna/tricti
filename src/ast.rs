@@ -35,6 +35,13 @@ pub enum Statement {
         type_name: String,
         methods: Vec<Statement>,
     },
+    ImplMethod {
+        name: String,
+        type_params: Vec<String>,
+        parameters: Vec<Parameter>,
+        return_type: Option<Type>,
+        body: FunctionBody,
+    },
     ForLoop {
         variable: String,
         type_annotation: Option<Type>,
@@ -45,6 +52,11 @@ pub enum Statement {
     ModuleDecl {
         name: String,
         items: Option<Vec<Statement>>, // None => external file module to be loaded by driver
+    },
+    IfDef {
+        condition: String,
+        then_branch: Vec<Statement>,
+        else_branch: Option<Vec<Statement>>,
     },
 }
 
@@ -83,6 +95,10 @@ pub enum Expression {
         operator: UnaryOperator,
         operand: Box<Expression>,
     },
+    Cast {
+        value: Box<Expression>,
+        to_type: Type,
+    },
     Call {
         function: Box<Expression>,
         type_args: Vec<Type>,
@@ -107,6 +123,9 @@ pub enum Expression {
     Block {
         statements: Vec<Statement>,
     },
+    UnsafeBlock {
+        statements: Vec<Statement>,
+    },
     Function {
         is_async: bool,
         type_params: Vec<String>,
@@ -120,6 +139,7 @@ pub enum Expression {
         arms: Vec<MatchArm>,
     },
     StructLiteral {
+        type_name: Option<String>,
         fields: HashMap<String, Expression>,
     },
     ArrayNew {
@@ -281,8 +301,12 @@ pub enum BinaryOperator {
     ElementMul,
     ElementDiv,
     ElementMod,
+    ShiftLeft,
+    ShiftRight,
     And,
     Or,
+    LogicalAnd,
+    LogicalOr,
     Xor,
     Equal,
     NotEqual,

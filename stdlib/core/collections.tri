@@ -3,6 +3,10 @@
 
 use prelude
 
+# =============================================================================
+# VEC - Dynamic length array
+# =============================================================================
+
 Vec<T> :: {
     data: *T,
     len: u64,
@@ -20,13 +24,13 @@ impl<T> Vec<T> {
 
     // next power of two >= n (returns 1 for n == 0)
     // undefined for n = u64::MAX. this is ok because that exceeds the 64-bit addressing scheme anyways
-    @allow(dead_code) # because the part after the @ifdef is unreachable if it's defined
+    // @allow(dead_code) # because the part after the @ifdef is unreachable if it's defined
     ceil_power_2 :: (n: u64) -> u64 => {
         if n == 0 { ret 1 }
 
-        @ifdef(__builtin_clzll) {
-            ret 1u64 << (64 - __builtin_clzll(n - 1))
-        }
+        // @ifdef(__builtin_clzll) {
+        //     ret 1u64 << (64 - __builtin_clzll(n - 1))
+        // }
 
         m := n - 1
 
@@ -146,7 +150,7 @@ impl<T> Vec<T> {
     is_empty :: (&self) -> bool => { self.len == 0 }
 }
 
-impl Drop for Vec<T>
+impl Drop for Vec<T> {
     free :: (self) => {
         if self.data == none { ret }
 
@@ -154,7 +158,7 @@ impl Drop for Vec<T>
         for i in 0:self.len {
             unsafe { drop(*(self.data + i)) }
         }
-
+ 
         unsafe { dealloc(self.data as *none) }
         self.data = unsafe { none }
         self.len = 0
@@ -162,431 +166,38 @@ impl Drop for Vec<T>
     }
 }
 
-LinkedList<T> :: {
-    head: ?*LinkedListNode<T>,
-    tail: ?&LinkedListNode<T>,
-    len: i64,
-}
+# =============================================================================
+# LINKEDLIST - Doubly linked list
+# =============================================================================
 
-LinkedListNode<T> :: {
-    value: T,
-    next: ?*LinkedListNode<T>,
-    prev: ?&LinkedListNode<T>,
-}
-
-impl<T> LinkedList<T> {
-    new :: () -> LinkedList<T> => {
-        {
-            head: none,
-            tail: none,
-            len: 0,
-        }
-    }
-
-    push_back :: (&mut self, value: T) -> none => {
-        node := {
-            value: value,
-            next: none,
-            prev: self.tail,
-        }
-
-        match self.tail {
-            some tail_node => {
-                tail_node.next = some node
-            }
-            none => {
-                self.head = some node
-            }
-        }
-
-        self.tail = some node
-        self.len = self.len + 1
-    }
-
-    push_front :: (&mut self, value: T) -> none => {
-        node := {
-            value: value,
-            next: self.head,
-            prev: none,
-        }
-
-        match self.head {
-            some head_node => {
-                head_node.prev = some node
-            }
-            none => {
-                self.tail = some node
-            }
-        }
-
-        self.head = some node
-        self.len = self.len + 1
-    }
-
-    pop_back :: (&mut self) -> ?T => {
-        match self.tail {
-            some tail_node => {
-                value := tail_node.value
-
-                match tail_node.prev {
-                    some prev_node => {
-                        prev_node.next = none
-                        self.tail = some prev_node
-                    }
-                    none => {
-                        self.head = none
-                        self.tail = none
-                    }
-                }
-
-                self.len = self.len - 1
-                some value
-            }
-            none => none
-        }
-    }
-
-    pop_front :: (&mut self) -> ?T => {
-        match self.head {
-            some head_node => {
-                value := head_node.value
-
-                match head_node.next {
-                    some next_node => {
-                        next_node.prev = none
-                        self.head = some next_node
-                    }
-                    none => {
-                        self.head = none
-                        self.tail = none
-                    }
-                }
-
-                self.len = self.len - 1
-                some value
-            }
-            none => none
-        }
-    }
-
-    front :: (&self) -> ?T => {
-        match self.head {
-            some node => some node.value
-            none => none
-        }
-    }
-
-    back :: (&self) -> ?T => {
-        match self.tail {
-            some node => some node.value
-            none => none
-        }
-    }
-
-    len :: (&self) -> i64 => {
-        self.len
-    }
-
-    is_empty :: (&self) -> bool => {
-        self.len == 0
-    }
-}
+# TODO
 
 # =============================================================================
 # HASHMAP - Hash table map
 # =============================================================================
 
-HashMap<K, V> :: {
-    buckets: [HashMapBucket<K, V>],
-    len: i64,
-    capacity: i64,
-}
-
-HashMapBucket<K, V> :: {
-    entries: [HashMapEntry<K, V>],
-}
-
-HashMapEntry<K, V> :: {
-    key: K,
-    value: V,
-    hash: i64,
-}
-
-impl<K, V> HashMap<K, V> {
-    new :: () -> HashMap<K, V> => {
-        {
-            buckets: [],
-            len: 0,
-            capacity: 16, # Default capacity
-        }
-    }
-
-    insert :: (&mut self, key: K, value: V) -> ?V => {
-        # Placeholder - would compute hash and insert/replace
-        # For now, just track length
-        old_value := self.get(key)
-        self.len = self.len + 1
-        old_value
-    }
-
-    get :: (&self, key: K) -> ?V => {
-        # Placeholder - would compute hash and lookup
-        none
-    }
-
-    remove :: (&mut self, key: K) -> ?V => {
-        # Placeholder - would compute hash and remove
-        if self.len > 0 {
-            self.len = self.len - 1
-            # Return some dummy value for skeleton
-            none
-        } else {
-            none
-        }
-    }
-
-    contains_key :: (&self, key: K) -> bool => {
-        self.get(key).is_some()
-    }
-
-    len :: (&self) -> i64 => {
-        self.len
-    }
-
-    is_empty :: (&self) -> bool => {
-        self.len == 0
-    }
-
-    clear :: (&mut self) -> none => {
-        self.buckets = []
-        self.len = 0
-    }
-}
+# TODO
 
 # =============================================================================
 # BTREEMAP - B-tree map (ordered map)
 # =============================================================================
 
-BTreeMap<K, V> :: {
-    root: ?BTreeNode<K, V>,
-    len: i64,
-    height: i64,
-}
-
-BTreeNode<K, V> :: {
-    keys: [K],
-    values: [V],
-    children: [BTreeNode<K, V>],
-    is_leaf: bool,
-}
-
-impl<K, V> BTreeMap<K, V> {
-    new :: () -> BTreeMap<K, V> => {
-        {
-            root: none,
-            len: 0,
-            height: 0,
-        }
-    }
-
-    insert :: (&mut self, key: K, value: V) -> ?V => {
-        # Placeholder - would perform B-tree insertion
-        old_value := self.get(key)
-        self.len = self.len + 1
-        old_value
-    }
-
-    get :: (&self, key: K) -> ?V => {
-        # Placeholder - would perform B-tree search
-        none
-    }
-
-    remove :: (&mut self, key: K) -> ?V => {
-        # Placeholder - would perform B-tree deletion
-        if self.len > 0 {
-            self.len = self.len - 1
-            none
-        } else {
-            none
-        }
-    }
-
-    contains_key :: (&self, key: K) -> bool => {
-        self.get(key).is_some()
-    }
-
-    len :: (&self) -> i64 => {
-        self.len
-    }
-
-    is_empty :: (&self) -> bool => {
-        self.len == 0
-    }
-
-    first_key :: (&self) -> ?K => {
-        # Placeholder - would find minimum key
-        none
-    }
-
-    last_key :: (&self) -> ?K => {
-        # Placeholder - would find maximum key
-        none
-    }
-}
+# TODO
 
 # =============================================================================
 # HASHSET - Hash table set
 # =============================================================================
 
-HashSet<T> :: {
-    map: HashMap<T, bool>,
-}
-
-impl<T> HashSet<T> {
-    new :: () -> HashSet<T> => {
-        {
-            map: HashMap::new(),
-        }
-    }
-
-    insert :: (&mut self, value: T) -> bool => {
-        old_value := self.map.insert(value, true)
-        old_value.is_none()
-    }
-
-    contains :: (&self, value: T) -> bool => {
-        self.map.contains_key(value)
-    }
-
-    remove :: (&mut self, value: T) -> bool => {
-        old_value := self.map.remove(value)
-        old_value.is_some()
-    }
-
-    len :: (&self) -> i64 => {
-        self.map.len()
-    }
-
-    is_empty :: (&self) -> bool => {
-        self.map.is_empty()
-    }
-
-    clear :: (&mut self) -> none => {
-        self.map.clear()
-    }
-}
+# TODO
 
 # =============================================================================
 # BTREESET - B-tree set (ordered set)
 # =============================================================================
 
-BTreeSet<T> :: {
-    map: BTreeMap<T, bool>,
-}
-
-impl<T> BTreeSet<T> {
-    new :: () -> BTreeSet<T> => {
-        {
-            map: BTreeMap::new(),
-        }
-    }
-
-    insert :: (&mut self, value: T) -> bool => {
-        old_value := self.map.insert(value, true)
-        old_value.is_none()
-    }
-
-    contains :: (&self, value: T) -> bool => {
-        self.map.contains_key(value)
-    }
-
-    remove :: (&mut self, value: T) -> bool => {
-        old_value := self.map.remove(value)
-        old_value.is_some()
-    }
-
-    len :: (&self) -> i64 => {
-        self.map.len()
-    }
-
-    is_empty :: (&self) -> bool => {
-        self.map.is_empty()
-    }
-
-    first :: (&self) -> ?T => {
-        self.map.first_key()
-    }
-
-    last :: (&self) -> ?T => {
-        self.map.last_key()
-    }
-
-}
+# TODO
 
 # =============================================================================
 # BINARYMAP - Binary search tree map
 # =============================================================================
 
-BinaryMap<K, V> :: {
-    root: ?BinaryNode<K, V>,
-    len: i64,
-}
-
-BinaryNode<K, V> :: {
-    key: K,
-    value: V,
-    left: ?BinaryNode<K, V>,
-    right: ?BinaryNode<K, V>,
-}
-
-impl<K, V> BinaryMap<K, V> {
-    new :: () -> BinaryMap<K, V> => {
-        {
-            root: none,
-            len: 0,
-        }
-    }
-
-    insert :: (&mut self, key: K, value: V) -> ?V => {
-        # Placeholder - would perform BST insertion
-        old_value := self.get(key)
-        self.len = self.len + 1
-        old_value
-    }
-
-    get :: (&self, key: K) -> ?V => {
-        # Placeholder - would perform BST search
-        none
-    }
-
-    remove :: (&mut self, key: K) -> ?V => {
-        # Placeholder - would perform BST deletion
-        if self.len > 0 {
-            self.len = self.len - 1
-            none
-        } else {
-            none
-        }
-    }
-
-    contains_key :: (&self, key: K) -> bool => {
-        self.get(key).is_some()
-    }
-
-    len :: (&self) -> i64 => {
-        self.len
-    }
-
-    is_empty :: (&self) -> bool => {
-        self.len == 0
-    }
-
-    min_key :: (&self) -> ?K => {
-        # Placeholder - would find leftmost node
-        none
-    }
-
-    max_key :: (&self) -> ?K => {
-        # Placeholder - would find rightmost node
-        none
-    }
+# TODO
