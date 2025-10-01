@@ -1,109 +1,53 @@
 use prelude
 use rt
 
-# can check stuff like trait implementations with the same T: ... like in Rust
+# -------------------------------
+# Generic and utility functions
+# -------------------------------
 generic_identity <T> :: (value: T) -> T => value
 
-# programs can have as many entry points as they want handled by the scheduler
-# things like this where the entry point is a function are typically used to create triggers via signals
-@trigger Init
-main :: () => {
-    hello := "Hello, world!"
-    println(hello)
-
-    x: i32 := 1 # explicit type annotation
-    y := 2 # type inference
-    z: i32 := x + y
-
-    println(z)
-
-    println(add(1, 2))
-
-    a := 2
-
-    if a == 2 { # if statements don't require parentheses
-        println("a is 2")
-    } else {
-        println("a is not 2")
-    }
-
-    if a { # if statements can take any expression that has a type that implements `truthy`. In this case, a is an i32, which is truthy if it is not 0
-        println("a is truthy")
-    }
-    if foo := div(1, 0)? { # an assignment with error propagation propagates to a falsy value if an error is returned rather than returning the error
-        println("div(1, 0) didn't return an error")
-        println("Foo is {}", foo) # the value can be accessed in the branch where it was truthy
-        # can also be done like
-        # foo := div(1, 0)? else { println("can't divide by 0"); ret }
-    } else {
-        println("div(1, 0) returned an error")
-    } 
-
-    for i in 0:10 { # range syntax (upper-bound exclusive)
-        println(i)
-    }
-
-    arr := [1, 2, 3] # slices are a thing, can also be written as 1:4, 1:4:1, or [1 2 3] like in MATLAB
-    add_one := add.bind(y: 1) # bind
-    println(arr.map(add_one)) # map is a thing
-    println(arr.filter((x) => (x % 2 == 0))) # filter is a thing
-
-    matrix := [1 0 0;
-		           0 1 0; # default matrix formatting puts them on separate lines, but they can be on one line as whitespace is whitespace. The semicolon is used to separate rows
-			         0 0 1] # matrix syntax, can also be written as [1, 0, 0; 0, 1, 0; 0, 0, 1] or identity(3)
-
-    matrix *= [0 1 0; # you can do `*=`, `+=`, etc.
-               1 0 1;
-               0 1 0]
-
-    println(matrix) # should print [0 1 0; 1 0 1; 0 1 0]
-
-    c := 1
-    println(arr.reduce((acc, x) => acc + x + c)) # reduce is a thing, and anonymous functions are closures
-
-    for i in arr { # iterating over a slice
-        println(i)
-    }
-
-    short: u16 := 1
-    normal: u32 := 1
-    long: u64 := 1
-
-    test: u64 := long + normal + short # when adding different integer types, the result is the largest type, which is the only form of implicit casting
-
-    println(test)
-
-    to_be_shadowed: i32 := 1
-    to_be_shadowed = 1 # this mutates the value of `to_be_shadowed`
-    to_be_shadowed: i32 := 2 # this shadows the previous declaration
-
-    println(to_be_shadowed) # technically, this implicitly returns (), but when you have a function that returns (), and there would be an implicit return that wouldn't return (), it's ignored
-}
-
-add :: (x: i32, y: i32) => x + y # return types can be inferred, although this is only really supposed to be used for closures and/or inline functions
-
-div :: (x: i32, y: i32) -> !i32 => { # `!` indicates that the function may return an error
+add :: (x: i32, y: i32) => x + y
+div :: (x: i32, y: i32) -> !i32 => {
     if y == 0 {
         ret !"Cannot divide by zero"
     }
-    x / y # implicit return, as the scope of the function is an expression
+    x / y
 }
 
+# -------------------------------
+# Compile-time evaluation
+# -------------------------------
+@par_const
+PI_APPROX :: f32 := 3.14159
+
+# Compile-time evaluated function with heap allocation
+@par_const
+make_array :: (n: i32) -> [i32] => {
+    arr := [0] * n
+    for i in 0:n { arr[i] = i * i }
+    arr
+}
+
+# -------------------------------
+# Memoized functions
+# -------------------------------
 @memoize
 fib :: (n: i32) -> i32 => match n {
     0 => 0,
-    1 => 1, 
-    n => fib(n - 1) + fib(n - 2), # trailing commas allowed
+    1 => 1,
+    n => fib(n - 1) + fib(n - 2),
 }
 
-default_args :: (a: i32 = 17) => {} # accepts default_args(), default_args(5), default_args(a: 5)
+default_args :: (a: i32 = 17) => {}
 
+# -------------------------------
+# Structs, enums, references
+# -------------------------------
 MyStruct :: {
-    a: ?i32, # optional i32
-    b: ?&i32, # optional shared reference to an i32, in Rust, you would need a lifetime parameter here, but that's not a thing in BPlang, as lifetimes are inferred
-    c: &mut i32, # mutable reference to an i32
-    d: ?*MyStruct, # types can contain references to themselves if and only if they're optional (if it's in an enum, it's considered optional if there's more than one variant)
-                    # pointer syntax here just means that the reference is owned (equivalent to rust Box), things like pointer arithmetic require an unsafe block and work for both references and owned pointers
+    a: ?i32,
+    b: ?&i32,
+    c: &mut i32,
+    d: ?*MyStruct,
 }
 
 impl MyStruct {
@@ -112,98 +56,105 @@ impl MyStruct {
 
 MyStruct :: enum {
     A: MyStruct,
-    B: {
-        a: ?i32,
-        b: ?i32,
-    },
+    B: { a: ?i32, b: ?i32 },
 }
 
-Image :: { }
+Image :: {}
+Gui :: @resource {}
 
+# -------------------------------
+# Database and tables
+# -------------------------------
+Apps :: table {
+    @primary id: u64,
+    title: String,
+    image: Image,
+    display: bool = false,
+}
+
+Database :: db { Apps: Apps, Gui }
+
+# -------------------------------
+# Signals
+# -------------------------------
+ExampleSignal :: Signal<Mpsc, Buffer, String>
+RedrawRequested :: Signal<Spmc, Overwrite, none>
+
+# -------------------------------
+# Systems
+# -------------------------------
 display_apps :: sys (
-   query: select (image: &Image, title: &String)
-          from Apps where display == true,
+   query: select (image: &Image, title: &String) from Apps where display == true,
    gui: res &mut Gui,
-
    @sys_input input_size: f32
 ) -> !none => {
   query.for_each((row: (image: &Image, title: &string)) => {
-    gui.display(image, title)
+      gui.display(image, title)
   })
 }
 
-# Example of allowed loops in compose
-Foo :: { }
-Bar :: { }
-Quux :: { }
-
-init_foobar :: sys (
-  query: select (Bar) from Table,
-) -> ?Quux {
-  # code here
+# Example system offloaded to GPU for vectorized computation
+@gpu
+vector_add :: sys (@sys_input arr_a: [f32], @sys_input arr_b: [f32]) -> [f32] => {
+    n := arr_a.len
+    out := [0.0] * n
+    for i in 0:n {
+        out[i] = arr_a[i] + arr_b[i]
+    }
+    out
 }
 
-foo :: sys (
-  query: select (Foo) from Table,
-  @sys_input quux: Quux
-) -> Baz {
-  # code here
-}
+emitter_sys :: sys () => { emit(ExampleSignal, "Frame Finalized") }
+receiver_sys :: sys (@trigger_recv msg: String) => { println("Received: {}", msg) }
 
-bar :: sys (
-  query: select (Bar) from Table
-  @sys_input baz: Baz
-) -> ?Quux {
-  # code here
-}
+# -------------------------------
+# Interaction composition
+# -------------------------------
+Foo :: {}
+Bar :: {}
+Quux :: {}
+
+init_foobar :: sys (query: select (Bar) from Table) -> ?Quux { }
+foo :: sys (query: select (Foo) from Table, @sys_input quux: Quux) -> Baz { }
+bar :: sys (query: select (Bar) from Table, @sys_input baz: Baz) -> ?Quux { }
 
 compose {
-  init_foobar ?-> (a: foo) -> (b: bar),
-  (b: bar) ?-> (a: foo),
+    init_foobar ?-> (a: foo) -> (b: bar),
+    (b: bar) ?-> (a: foo),
 }
 
-RedrawRequested :: Signal<Spmc, Overwrite, none>
+# -------------------------------
+# Triggers
+# -------------------------------
+@trigger Init
+setup_signals :: () => {
+    println("Initializing signals and DAGs")
+}
 
-@trigger RedrawRequested, Database
+@trigger ExampleSignal, Database
 redraw :: compose {
-   # commented because only `display_apps` and `emmitter_sys` are implemented
-   # get_input_size -> display_apps,
-   # update_ui -> finalize_frame -> emmitter_sys,
-  
-   # can fan out `foo -> (bar, baz)`
-   # and merge `(foo, bar) -> baz`
-   # and tags to allow any arbitrary DAG (semantic error on cycles (although they can be allowed with ?-> for optional continuation on optional outputs))
-   # foo -> ((a: bar), (b: baz)), (a: bar) -> (b: baz)
-   # this composes and decomposes tuples
+    # DAG example: system fan-out and merging
 }
 
-Apps :: table {
-   @primary id: u64,
-   title: String,
-   image: Image,
-   display: bool = false,
+# -------------------------------
+# Vector and matrix operations
+# -------------------------------
+example_arrays :: sys () => {
+    arr := [1, 2, 3]
+    println(arr.map(add.bind(y: 1)))
+    println(arr.filter((x) => x % 2 == 0))
+
+    matrix := [1 0 0; 0 1 0; 0 0 1]
+    matrix *= [0 1 0; 1 0 1; 0 1 0]
+    println(matrix)
 }
 
-@plugins(
-    PluginA,
-    # PluginB,
-)
-Database :: db { Apps: Apps, Gui }
-
-PluginA :: plugin {
-    # plugins work a lot like databases
+# -------------------------------
+# GPGPU example usage
+# -------------------------------
+gpu_example :: sys () => {
+    a := [1.0, 2.0, 3.0]
+    b := [4.0, 5.0, 6.0]
+    c := vector_add(a, b) # executed on GPU via OpenCL kernel
+    println(c)
 }
-
-Qux :: { s: String }
-
-# These are the only way to communicate between Databases
-ExampleSignal :: Signal<Mpsc, Buffer, Qux>
-
-emmitter_sys :: sys () => {
-    emit(ExampleSignal, Qux { s: "Frame Finalized" })
-}
-
-RecvDb :: db { }
-
-@trigger ExampleSignal, RecvDb
-receiver_sys ::sys (@trigger_recv qux: Qux) => { }
