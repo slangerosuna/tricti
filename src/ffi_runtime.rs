@@ -1,10 +1,18 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::cell::RefCell;
+use std::sync::Mutex;
 
 #[cfg(unix)]
 use libloading::os::unix::Symbol as RawSymbol;
 #[cfg(windows)]
 use libloading::os::windows::Symbol as RawSymbol;
+
+thread_local! {
+    static LAST_ERROR: RefCell<Option<String>> = RefCell::new(None);
+}
+
+static ERROR_BUFFER: Mutex<Option<CString>> = Mutex::new(None);
 
 #[no_mangle]
 pub extern "C" fn ffi_dlopen(path: *const u8) -> *mut std::ffi::c_void {
@@ -22,8 +30,15 @@ pub extern "C" fn ffi_dlopen(path: *const u8) -> *mut std::ffi::c_void {
     {
         use libloading::os::unix::Library;
         match unsafe { Library::new(path_str) } {
-            Ok(lib) => Box::into_raw(Box::new(lib)) as *mut std::ffi::c_void,
-            Err(_) => std::ptr::null_mut(),
+            Ok(lib) => {
+                // Clear error on success
+                LAST_ERROR.with(|err| *err.borrow_mut() = None);
+                Box::into_raw(Box::new(lib)) as *mut std::ffi::c_void
+            },
+            Err(e) => {
+                LAST_ERROR.with(|err| *err.borrow_mut() = Some(e.to_string()));
+                std::ptr::null_mut()
+            },
         }
     }
     
@@ -31,8 +46,15 @@ pub extern "C" fn ffi_dlopen(path: *const u8) -> *mut std::ffi::c_void {
     {
         use libloading::os::windows::Library;
         match unsafe { Library::new(path_str) } {
-            Ok(lib) => Box::into_raw(Box::new(lib)) as *mut std::ffi::c_void,
-            Err(_) => std::ptr::null_mut(),
+            Ok(lib) => {
+                // Clear error on success
+                LAST_ERROR.with(|err| *err.borrow_mut() = None);
+                Box::into_raw(Box::new(lib)) as *mut std::ffi::c_void
+            },
+            Err(e) => {
+                LAST_ERROR.with(|err| *err.borrow_mut() = Some(e.to_string()));
+                std::ptr::null_mut()
+            },
         }
     }
     
@@ -47,15 +69,22 @@ pub extern "C" fn ffi_dlsym(handle: *mut std::ffi::c_void, symbol: *const u8) ->
     }
     
     let symbol_cstr = unsafe { CStr::from_ptr(symbol as *const c_char) };
-    let symbol_bytes = symbol_cstr.to_bytes();
+    let symbol_bytes = symbol_cstr.to_bytes_with_nul();
     
     #[cfg(unix)]
     {
         use libloading::os::unix::Library;
         let lib = unsafe { &*(handle as *const Library) };
         match unsafe { lib.get::<*mut std::ffi::c_void>(symbol_bytes) } {
-            Ok(sym) => *sym,
-            Err(_) => std::ptr::null_mut(),
+            Ok(sym) => {
+                // Clear error on success
+                LAST_ERROR.with(|err| *err.borrow_mut() = None);
+                *sym
+            },
+            Err(e) => {
+                LAST_ERROR.with(|err| *err.borrow_mut() = Some(e.to_string()));
+                std::ptr::null_mut()
+            },
         }
     }
     
@@ -64,8 +93,15 @@ pub extern "C" fn ffi_dlsym(handle: *mut std::ffi::c_void, symbol: *const u8) ->
         use libloading::os::windows::Library;
         let lib = unsafe { &*(handle as *const Library) };
         match unsafe { lib.get::<*mut std::ffi::c_void>(symbol_bytes) } {
-            Ok(sym) => *sym,
-            Err(_) => std::ptr::null_mut(),
+            Ok(sym) => {
+                // Clear error on success
+                LAST_ERROR.with(|err| *err.borrow_mut() = None);
+                *sym
+            },
+            Err(e) => {
+                LAST_ERROR.with(|err| *err.borrow_mut() = Some(e.to_string()));
+                std::ptr::null_mut()
+            },
         }
     }
     
@@ -85,6 +121,8 @@ pub extern "C" fn ffi_dlclose(handle: *mut std::ffi::c_void) -> i32 {
         unsafe {
             let _ = Box::from_raw(handle as *mut Library);
         }
+        // Clear error on success
+        LAST_ERROR.with(|err| *err.borrow_mut() = None);
         0
     }
     
@@ -94,6 +132,8 @@ pub extern "C" fn ffi_dlclose(handle: *mut std::ffi::c_void) -> i32 {
         unsafe {
             let _ = Box::from_raw(handle as *mut Library);
         }
+        // Clear error on success
+        LAST_ERROR.with(|err| *err.borrow_mut() = None);
         0
     }
     
@@ -103,7 +143,19 @@ pub extern "C" fn ffi_dlclose(handle: *mut std::ffi::c_void) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn ffi_dlerror() -> *const u8 {
-    std::ptr::null()
+    // Read-and-clear semantics (like dlerror)
+    LAST_ERROR.with(|err| {
+        let error_opt = err.borrow_mut().take();  // Take and clear
+        if let Some(error_msg) = error_opt {
+            if let Ok(cstr) = CString::new(error_msg.as_str()) {
+                if let Ok(mut buf) = ERROR_BUFFER.lock() {
+                    *buf = Some(cstr);
+                    return buf.as_ref().unwrap().as_ptr() as *const u8;
+                }
+            }
+        }
+        std::ptr::null()
+    })
 }
 
 #[no_mangle]

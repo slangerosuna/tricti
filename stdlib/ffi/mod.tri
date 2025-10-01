@@ -2,6 +2,7 @@
 # Provides C/C++ interoperability for TriCTI
 
 use core
+use ffi::marshal
 
 # C-compatible types
 CInt :: type = i32
@@ -22,7 +23,10 @@ DynLib :: struct {
 impl DynLib {
     # Load shared library (.so on Linux, .dll on Windows, .dylib on macOS)
     open :: (path: String) -> ?DynLib => {
-        handle := ffi_dlopen(String::as_ptr(&path))
+        c_path := string_to_cstr(path)
+        handle := ffi_dlopen(c_path)
+        free_cstr(c_path)
+        
         if handle == (0 as *u8) {
             ret none
         }
@@ -38,7 +42,10 @@ impl DynLib {
         if !lib.is_open {
             ret none
         }
-        symbol := ffi_dlsym(lib.handle, String::as_ptr(&name))
+        c_name := string_to_cstr(name)
+        symbol := ffi_dlsym(lib.handle, c_name)
+        free_cstr(c_name)
+        
         if symbol == (0 as *u8) {
             ret none
         }
@@ -61,7 +68,7 @@ impl DynLib {
         if err_ptr == (0 as *u8) {
             ret String::from("No error")
         }
-        ret String::from_cstr(err_ptr)
+        ret cstr_to_string(err_ptr)
     }
 }
 
