@@ -20,7 +20,7 @@ The design was inspired by practical experience with **Gnu Octave** (array and S
 
 ## Architecture Overview
 
-TriCTI organizes computation around **per-trigger DAGs**. Multiple DAGs can execute concurrently, with the runtime enforcing **safe parallelism** via static interference detection. Users declare mutation behavior—element-wise, vector-wide, or MVCC-friendly—guiding automatic concurrency semantics.  
+TriCTI organizes computation around **per-trigger DAGs** (cylic graphs may eventually be allowed to enable certain behavior that may benefit). Multiple DAGs can execute concurrently, with the runtime enforcing **safe parallelism** via static interference detection. Users declare mutation behavior—element-wise, vector-wide, or MVCC-friendly—guiding automatic concurrency semantics.  
 
 **Signals** coordinate interactions, supporting static polymorphism over topologies (MPSC, SPMC, MPMC) and buffering (FIFO, overwrite, fail-on-unconsumed). Array-language semantics allow vectorized operations, and critical systems can be **compiled to OpenCL kernels via LLVM** for predictable GPGPU execution. **PostgreSQL bindings** provide an efficient relational backend, minimizing the need to reimplement indexing or query execution.
 
