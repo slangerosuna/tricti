@@ -99,22 +99,21 @@ TryInto<T> :: trait {
     try_into :: (self: Self) -> StdResult<T>
 }
 
-# BLANKET IMPLEMENTATIONS TEMPORARILY DISABLED DUE TO PARSER LIMITATIONS
 # Blanket implementation: Into<U> for any T where U: From<T>
 # This means if you implement From<T> for U, you automatically get Into<U> for T
-# impl<T, U: From<T>> Into<U> for T {
-#     into :: (self: T) -> U => {
-#         U::from(self)
-#     }
-# }
+impl<T, U: From<T>> Into<U> for T {
+    into :: (self: T) -> U => {
+        ret U::from(self)
+    }
+}
 
 # Blanket implementation: TryInto<U> for any T where U: TryFrom<T>
 # This means if you implement TryFrom<T> for U, you automatically get TryInto<U> for T
-# impl<T, U: TryFrom<T>> TryInto<U> for T {
-#     try_into :: (self: T) -> StdResult<U> => {
-#         U::try_from(self)
-#     }
-# }
+impl<T, U: TryFrom<T>> TryInto<U> for T {
+    try_into :: (self: T) -> StdResult<U> => {
+        ret U::try_from(self)
+    }
+}
 
 # =============================================================================
 # ITERATOR TRAITS (COMMENTED OUT - Vec, Map, Filter not yet implemented)

@@ -4,17 +4,17 @@
 use prelude
 
 StdError :: enum {
-    Message { message: string },
-    Panic { message: string, source: ?string },
-    InvalidArgument { parameter: string, message: string },
-    Unsupported { feature: string },
+    Message: String,
+    Panic: String,
+    InvalidArgument: String,
+    Unsupported: String,
 }
 
-std_error_message :: (err: StdError) -> string => {
+std_error_message :: (err: StdError) -> String => {
     match err {
-        Message { message } => message,
-        Panic { message, .. } => message,
-        InvalidArgument { message, .. } => message,
-        Unsupported { feature } => feature,
+        StdError::Message(msg) => { msg }
+        StdError::Panic(msg) => { msg }
+        StdError::InvalidArgument(msg) => { msg }
+        StdError::Unsupported(msg) => { msg }
     }
 }

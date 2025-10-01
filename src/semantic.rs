@@ -599,9 +599,10 @@ fn collect_definitions(
             match value {
                 ConstValue::Type(type_def) => {
                     context.types.insert(name.clone(), type_def.clone());
-                    context
-                        .type_generics
-                        .insert(name.clone(), type_params.clone());
+                    context.type_generics.insert(
+                        name.clone(),
+                        type_params.iter().map(|tp| tp.name.clone()).collect(),
+                    );
                     // If this is a trait type definition, register trait info too
                     if let Type::Trait {
                         associated_types,
@@ -641,10 +642,10 @@ fn collect_definitions(
                             is_async: false,
                         };
                         context.define_function(name.clone(), sig.clone());
-                        let generics = if !fn_generics.is_empty() {
-                            fn_generics.clone()
+                        let generics: Vec<String> = if !fn_generics.is_empty() {
+                            fn_generics.iter().map(|tp| tp.name.clone()).collect()
                         } else {
-                            type_params.clone()
+                            type_params.iter().map(|tp| tp.name.clone()).collect()
                         };
                         if !generics.is_empty() {
                             context.function_generics.insert(name.clone(), generics);
@@ -718,6 +719,7 @@ fn collect_definitions(
             }
         }
         Statement::ImplBlock {
+            type_params: _,
             trait_name,
             type_name,
             methods,
@@ -821,9 +823,10 @@ fn analyze_statement(
             extern_linkage: _extern_linkage,
         } => {
             if !type_params.is_empty() {
-                context
-                    .type_generics
-                    .insert(name.clone(), type_params.clone());
+                context.type_generics.insert(
+                    name.clone(),
+                    type_params.iter().map(|tp| tp.name.clone()).collect(),
+                );
             }
             if let ConstValue::Type(Type::Function {
                 parameters,
@@ -1041,6 +1044,7 @@ fn analyze_statement(
         }
 
         Statement::ImplBlock {
+            type_params: _,
             trait_name,
             type_name,
             methods,

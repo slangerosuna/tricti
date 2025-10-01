@@ -14,7 +14,7 @@ pub enum Statement {
     },
     ConstDecl {
         name: String,
-        type_params: Vec<String>,
+        type_params: Vec<TypeParam>,
         type_annotation: Option<Type>,
         value: ConstValue,
         extern_linkage: Option<String>,
@@ -31,13 +31,14 @@ pub enum Statement {
         path: Vec<String>,
     },
     ImplBlock {
+        type_params: Vec<TypeParam>,
         trait_name: Option<String>,
         type_name: String,
         methods: Vec<Statement>,
     },
     ImplMethod {
         name: String,
-        type_params: Vec<String>,
+        type_params: Vec<TypeParam>,
         parameters: Vec<Parameter>,
         return_type: Option<Type>,
         body: FunctionBody,
@@ -128,7 +129,7 @@ pub enum Expression {
     },
     Function {
         is_async: bool,
-        type_params: Vec<String>,
+        type_params: Vec<TypeParam>,
         parameters: Vec<Parameter>,
         return_type: Option<Type>,
         body: FunctionBody,
@@ -198,6 +199,12 @@ pub struct Parameter {
     pub name: String,
     pub param_type: Option<Type>,
     pub default_value: Option<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeParam {
+    pub name: String,
+    pub bounds: Vec<Type>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

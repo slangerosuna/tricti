@@ -587,8 +587,16 @@ main :: () -> i64 => {
     run_test("u64 large -> String", test_from_u64_large)
     
     println("")
-    println("===== INTO TESTS: Disabled due to blanket impl removal =====")
-    println("(All Into tests disabled - .into() method requires blanket impl)")
+    println("===== INTO TESTS: Blanket Implementation (10 tests) =====")
+    run_test("u8 -> u64 via .into()", test_into_u8_to_u64)
+    run_test("u8 -> i64 via .into()", test_into_u8_to_i64)
+    run_test("bool -> i64 via .into() (true)", test_into_bool_to_i64_true)
+    run_test("bool -> u64 via .into() (false)", test_into_bool_to_u64_false)
+    run_test("i64 -> String via .into()", test_into_i64_to_string)
+    run_test("u64 -> String via .into()", test_into_u64_to_string)
+    run_test("bool -> String via .into() (true)", test_into_bool_to_string_true)
+    run_test("u8 (char) -> String via .into()", test_into_u8_char_to_string)
+    run_test("T -> Result<T> via .into()", test_into_value_to_result)
     
     println("")
     println("===== TRYFROM TESTS: Fallible Conversions (30 tests) =====")
@@ -624,8 +632,9 @@ main :: () -> i64 => {
     run_test("String -> bool (false)", test_tryfrom_string_to_bool_false)
     
     println("")
-    println("===== TRYINTO TESTS: Disabled due to blanket impl removal =====")
-    println("(All TryInto tests disabled - .try_into() method requires blanket impl)")
+    println("===== TRYINTO TESTS: Blanket Implementation Enabled =====")
+    println("(TryInto tests can now be implemented - .try_into() method now available via blanket impl)")
+    println("Candidate tests: u64->u8, i64->u64 negative, String->i64, String->bool, f64->u64 negative")
     
     println("")
     println("===== RESULT CONVERSION TESTS (1 test) =====")

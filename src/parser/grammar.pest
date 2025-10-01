@@ -32,7 +32,7 @@ mod_decl = { "mod" ~ identifier ~ (";" | ("{" ~ statement* ~ "}")) }
 return_statement = { "ret" ~ expression? }
 break_statement = { "break" ~ expression? }
 ifdef_statement = { "@ifdef" ~ "(" ~ expression ~ ")" ~ block ~ ("@else" ~ block)? }
-impl_block    = { "impl" ~ type ~ ("for" ~ type)? ~ "{" ~ impl_methods ~ "}" }
+impl_block    = { "impl" ~ type_params? ~ type ~ ("for" ~ type)? ~ "{" ~ impl_methods ~ "}" }
 impl_method   = { attributes? ~ identifier ~ "::" ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
 impl_methods  = _{ ((impl_method | const_decl) ~ ","?)* }
 block = { "{" ~ statement* ~ "}" }
@@ -146,7 +146,9 @@ array_new     = { "new" ~ "[" ~ type ~ (";" ~ expression ~ ("," ~ expression)* ~
 matrix        = { "[" ~ (row ~ ";")* ~ row ~ ";"? ~ "]" }
 row           = { (expression ~ ","?)+ }
 
-type_params   = { "<" ~ identifier ~ ("," ~ identifier)* ~ ">" }
+type_params   = { "<" ~ type_param ~ ("," ~ type_param)* ~ ">" }
+type_param    = { identifier ~ trait_bounds? }
+trait_bounds  = { ":" ~ type ~ ("+" ~ type)* }
 type_args     = { !(" " | "\t" | "\n" | "\r") ~ "<" ~ type ~ ("," ~ type)* ~ ">" }
 function      = { attributes? ~ "async"? ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
 function_params = { (function_param | ("self" | "&self" | "&mut self" | "*self")) ~ ("," ~ function_param)* ~ ","? }

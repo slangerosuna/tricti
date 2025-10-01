@@ -6428,6 +6428,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 Statement::ImplBlock {
+                    type_params: _,
                     trait_name,
                     type_name,
                     methods,
@@ -6854,6 +6855,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 Statement::ImplBlock {
+                    type_params: _,
                     trait_name,
                     type_name,
                     methods,

@@ -14,6 +14,30 @@ fn type_name_str(ty: &Type) -> String {
     }
 }
 
+fn parse_type_params(pair: pest::iterators::Pair<Rule>) -> Vec<TypeParam> {
+    let mut type_params = Vec::new();
+    for tp in pair.into_inner() {
+        if tp.as_rule() == Rule::type_param {
+            let mut inner = tp.into_inner();
+            let name = inner.next().unwrap().as_str().to_string();
+            let mut bounds = Vec::new();
+            
+            if let Some(bounds_pair) = inner.next() {
+                if bounds_pair.as_rule() == Rule::trait_bounds {
+                    for bound_type in bounds_pair.into_inner() {
+                        if bound_type.as_rule() == Rule::r#type {
+                            bounds.push(parse_type(bound_type));
+                        }
+                    }
+                }
+            }
+            
+            type_params.push(TypeParam { name, bounds });
+        }
+    }
+    type_params
+}
+
 pub fn parse(file: String) -> Program {
     let successful_parse = match PnParser::parse(Rule::program, &file) {
         Ok(p) => p,
@@ -186,11 +210,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     for pair in inner {
         match pair.as_rule() {
             Rule::type_params => {
-                for tp in pair.into_inner() {
-                    if tp.as_rule() == Rule::identifier {
-                        type_params.push(tp.as_str().to_string());
-                    }
-                }
+                type_params = parse_type_params(pair);
             }
             Rule::r#type => {
                 if type_annotation.is_none() && value.is_none() {
@@ -1051,16 +1071,12 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut params: Vec<Parameter> = Vec::new();
     let mut return_ty: Option<Type> = None;
     let mut body_opt: Option<FunctionBody> = None;
-    let mut type_params: Vec<String> = Vec::new();
+    let mut type_params: Vec<TypeParam> = Vec::new();
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
             Rule::type_params => {
-                for tp in inner.into_inner() {
-                    if tp.as_rule() == Rule::identifier {
-                        type_params.push(tp.as_str().to_string());
-                    }
-                }
+                type_params = parse_type_params(inner);
             }
             Rule::function_params => {
                 for p in inner.into_inner() {
@@ -1220,11 +1236,18 @@ fn parse_mod_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
 
 fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut it = pair.into_inner();
-    // In grammar: impl type ("for" ~ type)? { impl_methods }
-    // Pest doesn't yield the raw "for" token, so we see either:
-    //  - type, impl_methods   (inherent impl)
-    //  - type, type, impl_methods  (trait impl)
-    let first_type = it.next().expect("impl missing type");
+    // In grammar: impl type_params? type ("for" ~ type)? { impl_methods }
+    // Parse optional type_params first
+    let mut type_params: Vec<TypeParam> = Vec::new();
+    let first = it.next().expect("impl missing content");
+    
+    let first_type = if first.as_rule() == Rule::type_params {
+        type_params = parse_type_params(first);
+        it.next().expect("impl missing type after type_params")
+    } else {
+        first
+    };
+    
     let mut trait_name: Option<String> = None;
     let type_name: String;
 
@@ -1242,11 +1265,11 @@ fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
         match inner.as_rule() {
             Rule::const_decl => methods.push(parse_const_decl(inner)),
             Rule::impl_method => methods.push(parse_impl_method(inner)),
-            // impl_methods is silent, so we don't see it here; const_decl arrives directly
             _ => {}
         }
     }
     Statement::ImplBlock {
+        type_params,
         trait_name,
         type_name,
         methods,
@@ -1257,7 +1280,7 @@ fn parse_impl_method(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut params: Vec<Parameter> = Vec::new();
     let mut return_ty: Option<Type> = None;
     let mut body_opt: Option<FunctionBody> = None;
-    let mut type_params: Vec<String> = Vec::new();
+    let mut type_params: Vec<TypeParam> = Vec::new();
     let mut name = String::new();
 
     for inner in pair.into_inner() {
@@ -1266,11 +1289,7 @@ fn parse_impl_method(pair: pest::iterators::Pair<Rule>) -> Statement {
                 name = inner.as_str().to_string();
             }
             Rule::type_params => {
-                for tp in inner.into_inner() {
-                    if tp.as_rule() == Rule::identifier {
-                        type_params.push(tp.as_str().to_string());
-                    }
-                }
+                type_params = parse_type_params(inner);
             }
             Rule::function_params => {
                 for p in inner.into_inner() {

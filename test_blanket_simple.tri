@@ -1,0 +1,13 @@
+From<T> :: trait {
+    from :: (value: T) -> Self
+}
+
+Into<T> :: trait {
+    into :: (self: Self) -> T
+}
+
+impl<T, U: From<T>> Into<U> for T {
+    into :: (self: T) -> U => {
+        ret U::from(self)
+    }
+}
