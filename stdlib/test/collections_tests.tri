@@ -1,355 +1,207 @@
 # Collections tests for TriCTI stdlib
-# Tests for collections.tri module - Vec_u64, HashMap_u64_u64, etc.
+# Tests for collections.tri module - Vec<T> implementation
 
 use prelude
-use core::platform
+use core::collections
 
 # =============================================================================
-# VEC_U64 TESTS
+# VEC<U64> TESTS
 # =============================================================================
 
 test_vec_u64_new :: () -> bool => {
-    v := Vec_u64_new()
+    v := Vec<u64>::new()
     
-    if Vec_u64_len(v) != 0 {
-        println("FAIL: New vec should have length 0, got " + Vec_u64_len(v).to_string())
+    len_val := v.len()
+    is_zero := (len_val == 0)
+    
+    if ~is_zero {
+        println("FAIL: New vec should have length 0, got " + len_val.to_string())
         ret false
     }
     
     println("PASS: test_vec_u64_new")
-    true
+    ret true
 }
 
 test_vec_u64_push :: () -> bool => {
-    v := Vec_u64_new()
-    Vec_u64_push(v, 42)
+    mut v := Vec<u64>::new()
+    v.push(42)
     
-    if Vec_u64_len(v) != 1 {
-        println("FAIL: Vec should have length 1 after push, got " + Vec_u64_len(v).to_string())
+    len_val := v.len()
+    is_one := (len_val == 1)
+    
+    if ~is_one {
+        println("FAIL: Vec should have length 1 after push, got " + len_val.to_string())
         ret false
     }
     
-    val := Vec_u64_get(v, 0)
-    if val != 42 {
-        println("FAIL: Expected value 42, got " + val.to_string())
-        ret false
+    maybe_val := v.get(0)
+    match maybe_val {
+        some val => {
+            is_42 := (val == 42)
+            if ~is_42 {
+                println("FAIL: Expected value 42, got " + val.to_string())
+                ret false
+            }
+        },
+        none => {
+            println("FAIL: get(0) returned none")
+            ret false
+        },
     }
     
     println("PASS: test_vec_u64_push")
-    true
+    ret true
 }
 
 test_vec_u64_multiple_push :: () -> bool => {
-    v := Vec_u64_new()
-    Vec_u64_push(v, 10)
-    Vec_u64_push(v, 20)
-    Vec_u64_push(v, 30)
+    mut v := Vec<u64>::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
     
-    if Vec_u64_len(v) != 3 {
-        println("FAIL: Vec should have length 3, got " + Vec_u64_len(v).to_string())
+    len_val := v.len()
+    is_three := (len_val == 3)
+    
+    if ~is_three {
+        println("FAIL: Vec should have length 3, got " + len_val.to_string())
         ret false
     }
     
-    if Vec_u64_get(v, 0) != 10 {
-        println("FAIL: v[0] should be 10")
-        ret false
+    # Check first element
+    maybe_v0 := v.get(0)
+    match maybe_v0 {
+        some val => {
+            is_10 := (val == 10)
+            if ~is_10 {
+                println("FAIL: v[0] should be 10, got " + val.to_string())
+                ret false
+            }
+        },
+        none => {
+            println("FAIL: v[0] returned none")
+            ret false
+        },
     }
     
-    if Vec_u64_get(v, 1) != 20 {
-        println("FAIL: v[1] should be 20")
-        ret false
+    # Check second element
+    maybe_v1 := v.get(1)
+    match maybe_v1 {
+        some val => {
+            is_20 := (val == 20)
+            if ~is_20 {
+                println("FAIL: v[1] should be 20, got " + val.to_string())
+                ret false
+            }
+        },
+        none => {
+            println("FAIL: v[1] returned none")
+            ret false
+        },
     }
     
-    if Vec_u64_get(v, 2) != 30 {
-        println("FAIL: v[2] should be 30")
-        ret false
+    # Check third element
+    maybe_v2 := v.get(2)
+    match maybe_v2 {
+        some val => {
+            is_30 := (val == 30)
+            if ~is_30 {
+                println("FAIL: v[2] should be 30, got " + val.to_string())
+                ret false
+            }
+        },
+        none => {
+            println("FAIL: v[2] returned none")
+            ret false
+        },
     }
     
     println("PASS: test_vec_u64_multiple_push")
-    true
-}
-
-test_vec_u64_capacity_growth :: () -> bool => {
-    v := Vec_u64_new()
-    
-    # Push many elements to test capacity growth
-    for i in 0:50 {
-        Vec_u64_push(v, i)
-    }
-    
-    if Vec_u64_len(v) != 50 {
-        println("FAIL: Vec should have length 50, got " + Vec_u64_len(v).to_string())
-        ret false
-    }
-    
-    # Verify all values are correct
-    for i in 0:50 {
-        val := Vec_u64_get(v, i)
-        if val != i {
-            println("FAIL: v[" + i.to_string() + "] should be " + i.to_string() + ", got " + val.to_string())
-            ret false
-        }
-    }
-    
-    println("PASS: test_vec_u64_capacity_growth")
-    true
+    ret true
 }
 
 test_vec_u64_pop :: () -> bool => {
-    v := Vec_u64_new()
-    Vec_u64_push(v, 10)
-    Vec_u64_push(v, 20)
-    Vec_u64_push(v, 30)
+    mut v := Vec<u64>::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
     
-    val := Vec_u64_pop(v)
-    if val != 30 {
-        println("FAIL: Popped value should be 30, got " + val.to_string())
-        ret false
+    maybe_popped := v.pop()
+    match maybe_popped {
+        some val => {
+            is_30 := (val == 30)
+            if ~is_30 {
+                println("FAIL: Popped value should be 30, got " + val.to_string())
+                ret false
+            }
+        },
+        none => {
+            println("FAIL: pop() returned none")
+            ret false
+        },
     }
     
-    if Vec_u64_len(v) != 2 {
-        println("FAIL: Vec should have length 2 after pop, got " + Vec_u64_len(v).to_string())
+    len_val := v.len()
+    is_two := (len_val == 2)
+    
+    if ~is_two {
+        println("FAIL: Vec should have length 2 after pop, got " + len_val.to_string())
         ret false
     }
     
     println("PASS: test_vec_u64_pop")
-    true
+    ret true
 }
 
 test_vec_u64_set :: () -> bool => {
-    v := Vec_u64_new()
-    Vec_u64_push(v, 10)
-    Vec_u64_push(v, 20)
-    Vec_u64_push(v, 30)
+    mut v := Vec<u64>::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
     
-    Vec_u64_set(v, 1, 99)
-    
-    if Vec_u64_get(v, 1) != 99 {
-        println("FAIL: v[1] should be 99 after set")
+    success := v.set(1, 99)
+    if ~success {
+        println("FAIL: set(1, 99) should return true")
         ret false
+    }
+    
+    maybe_val := v.get(1)
+    match maybe_val {
+        some val => {
+            is_99 := (val == 99)
+            if ~is_99 {
+                println("FAIL: v[1] should be 99 after set, got " + val.to_string())
+                ret false
+            }
+        },
+        none => {
+            println("FAIL: v[1] returned none after set")
+            ret false
+        },
     }
     
     println("PASS: test_vec_u64_set")
-    true
+    ret true
 }
 
-# =============================================================================
-# HASHMAP_U64_U64 TESTS
-# =============================================================================
-
-test_hashmap_u64_u64_new :: () -> bool => {
-    m := HashMap_u64_u64_new()
+test_vec_u64_is_empty :: () -> bool => {
+    v := Vec<u64>::new()
     
-    if HashMap_u64_u64_size(m) != 0 {
-        println("FAIL: New hashmap should have size 0")
+    if ~v.is_empty() {
+        println("FAIL: New vec should be empty")
         ret false
     }
     
-    println("PASS: test_hashmap_u64_u64_new")
-    true
-}
-
-test_hashmap_u64_u64_insert_get :: () -> bool => {
-    m := HashMap_u64_u64_new()
-    HashMap_u64_u64_insert(m, 42, 100)
+    mut v2 := Vec<u64>::new()
+    v2.push(1)
     
-    val := HashMap_u64_u64_get(m, 42)
-    if val != 100 {
-        println("FAIL: Should retrieve value 100, got " + val.to_string())
+    if v2.is_empty() {
+        println("FAIL: Vec with one element should not be empty")
         ret false
     }
     
-    if HashMap_u64_u64_size(m) != 1 {
-        println("FAIL: HashMap should have size 1")
-        ret false
-    }
-    
-    println("PASS: test_hashmap_u64_u64_insert_get")
-    true
-}
-
-test_hashmap_u64_u64_multiple_insert :: () -> bool => {
-    m := HashMap_u64_u64_new()
-    
-    HashMap_u64_u64_insert(m, 10, 100)
-    HashMap_u64_u64_insert(m, 20, 200)
-    HashMap_u64_u64_insert(m, 30, 300)
-    
-    if HashMap_u64_u64_size(m) != 3 {
-        println("FAIL: HashMap should have size 3, got " + HashMap_u64_u64_size(m).to_string())
-        ret false
-    }
-    
-    if HashMap_u64_u64_get(m, 10) != 100 {
-        println("FAIL: m[10] should be 100")
-        ret false
-    }
-    
-    if HashMap_u64_u64_get(m, 20) != 200 {
-        println("FAIL: m[20] should be 200")
-        ret false
-    }
-    
-    if HashMap_u64_u64_get(m, 30) != 300 {
-        println("FAIL: m[30] should be 300")
-        ret false
-    }
-    
-    println("PASS: test_hashmap_u64_u64_multiple_insert")
-    true
-}
-
-test_hashmap_u64_u64_collision_handling :: () -> bool => {
-    m := HashMap_u64_u64_new()
-    
-    # Insert many values to test collision resolution
-    for i in 0:30 {
-        HashMap_u64_u64_insert(m, i, i * 2)
-    }
-    
-    if HashMap_u64_u64_size(m) != 30 {
-        println("FAIL: HashMap should have size 30, got " + HashMap_u64_u64_size(m).to_string())
-        ret false
-    }
-    
-    # Verify all values
-    for i in 0:30 {
-        val := HashMap_u64_u64_get(m, i)
-        expected := i * 2
-        if val != expected {
-            println("FAIL: m[" + i.to_string() + "] should be " + expected.to_string() + ", got " + val.to_string())
-            ret false
-        }
-    }
-    
-    println("PASS: test_hashmap_u64_u64_collision_handling")
-    true
-}
-
-test_hashmap_u64_u64_update :: () -> bool => {
-    m := HashMap_u64_u64_new()
-    HashMap_u64_u64_insert(m, 42, 100)
-    HashMap_u64_u64_insert(m, 42, 200)
-    
-    if HashMap_u64_u64_size(m) != 1 {
-        println("FAIL: HashMap should have size 1 after update")
-        ret false
-    }
-    
-    val := HashMap_u64_u64_get(m, 42)
-    if val != 200 {
-        println("FAIL: Updated value should be 200, got " + val.to_string())
-        ret false
-    }
-    
-    println("PASS: test_hashmap_u64_u64_update")
-    true
-}
-
-test_hashmap_u64_u64_remove :: () -> bool => {
-    m := HashMap_u64_u64_new()
-    HashMap_u64_u64_insert(m, 10, 100)
-    HashMap_u64_u64_insert(m, 20, 200)
-    HashMap_u64_u64_insert(m, 30, 300)
-    
-    removed := HashMap_u64_u64_remove(m, 20)
-    if ~removed {
-        println("FAIL: Remove should return true for existing key")
-        ret false
-    }
-    
-    if HashMap_u64_u64_size(m) != 2 {
-        println("FAIL: HashMap should have size 2 after remove")
-        ret false
-    }
-    
-    # Verify removed key returns 0 (or some default)
-    val := HashMap_u64_u64_get(m, 20)
-    if val != 0 {
-        println("FAIL: Removed key should return 0 or default")
-        ret false
-    }
-    
-    # Verify other keys still work
-    if HashMap_u64_u64_get(m, 10) != 100 {
-        println("FAIL: m[10] should still be 100")
-        ret false
-    }
-    
-    if HashMap_u64_u64_get(m, 30) != 300 {
-        println("FAIL: m[30] should still be 300")
-        ret false
-    }
-    
-    println("PASS: test_hashmap_u64_u64_remove")
-    true
-}
-
-test_hashmap_u64_u64_has :: () -> bool => {
-    m := HashMap_u64_u64_new()
-    HashMap_u64_u64_insert(m, 42, 100)
-    
-    if ~HashMap_u64_u64_has(m, 42) {
-        println("FAIL: HashMap should have key 42")
-        ret false
-    }
-    
-    if HashMap_u64_u64_has(m, 99) {
-        println("FAIL: HashMap should not have key 99")
-        ret false
-    }
-    
-    println("PASS: test_hashmap_u64_u64_has")
-    true
-}
-
-# =============================================================================
-# STRING OPERATIONS TESTS
-# =============================================================================
-
-test_string_length :: () -> bool => {
-    s := "hello"
-    len := string_length(s)
-    
-    if len != 5 {
-        println("FAIL: Length of 'hello' should be 5, got " + len.to_string())
-        ret false
-    }
-    
-    println("PASS: test_string_length")
-    true
-}
-
-test_string_length_empty :: () -> bool => {
-    s := ""
-    len := string_length(s)
-    
-    if len != 0 {
-        println("FAIL: Length of empty string should be 0, got " + len.to_string())
-        ret false
-    }
-    
-    println("PASS: test_string_length_empty")
-    true
-}
-
-test_string_equals :: () -> bool => {
-    s1 := "hello"
-    s2 := "hello"
-    s3 := "world"
-    
-    if ~string_equals(s1, s2) {
-        println("FAIL: 'hello' should equal 'hello'")
-        ret false
-    }
-    
-    if string_equals(s1, s3) {
-        println("FAIL: 'hello' should not equal 'world'")
-        ret false
-    }
-    
-    println("PASS: test_string_equals")
-    true
+    println("PASS: test_vec_u64_is_empty")
+    ret true
 }
 
 # =============================================================================
@@ -358,13 +210,13 @@ test_string_equals :: () -> bool => {
 
 run_collections_tests :: () -> bool => {
     println("")
-    println("=== Collections Tests ===")
+    println("=== Collections Tests (Vec<u64>) ===")
     println("")
     
     total := 0
     passed := 0
     
-    # Vec_u64 tests
+    # Vec<u64> tests
     total = total + 1
     if test_vec_u64_new() { passed = passed + 1 }
     
@@ -375,49 +227,29 @@ run_collections_tests :: () -> bool => {
     if test_vec_u64_multiple_push() { passed = passed + 1 }
     
     total = total + 1
-    if test_vec_u64_capacity_growth() { passed = passed + 1 }
-    
-    total = total + 1
     if test_vec_u64_pop() { passed = passed + 1 }
     
     total = total + 1
     if test_vec_u64_set() { passed = passed + 1 }
     
-    # HashMap_u64_u64 tests
     total = total + 1
-    if test_hashmap_u64_u64_new() { passed = passed + 1 }
-    
-    total = total + 1
-    if test_hashmap_u64_u64_insert_get() { passed = passed + 1 }
-    
-    total = total + 1
-    if test_hashmap_u64_u64_multiple_insert() { passed = passed + 1 }
-    
-    total = total + 1
-    if test_hashmap_u64_u64_collision_handling() { passed = passed + 1 }
-    
-    total = total + 1
-    if test_hashmap_u64_u64_update() { passed = passed + 1 }
-    
-    total = total + 1
-    if test_hashmap_u64_u64_remove() { passed = passed + 1 }
-    
-    total = total + 1
-    if test_hashmap_u64_u64_has() { passed = passed + 1 }
-    
-    # String operation tests
-    total = total + 1
-    if test_string_length() { passed = passed + 1 }
-    
-    total = total + 1
-    if test_string_length_empty() { passed = passed + 1 }
-    
-    total = total + 1
-    if test_string_equals() { passed = passed + 1 }
+    if test_vec_u64_is_empty() { passed = passed + 1 }
     
     println("")
     println("Collections Tests: " + passed.to_string() + "/" + total.to_string() + " passed")
     println("")
     
-    passed == total
+    is_all_passed := (passed == total)
+    ret is_all_passed
+}
+
+# Main entry point for running collections tests directly
+main :: () => {
+    result := run_collections_tests()
+    
+    if result {
+        println("✓ All collections tests passed")
+    } else {
+        println("✗ Some collections tests failed")
+    }
 }

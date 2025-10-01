@@ -191,7 +191,8 @@ impl DependencyGraph {
             Expression::Literal(_)
             | Expression::Loop { .. }
             | Expression::Function { .. }
-            | Expression::Shader { .. } => {}
+            | Expression::Shader { .. }
+            | Expression::StaticPath { .. } => {}
         }
         Ok(())
     }

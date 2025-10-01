@@ -350,10 +350,14 @@ array_find_index<T> :: (items: &[T], predicate: (T) -> bool) -> ?i64 => {
 }
 
 array_contains<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
-        match array_find_index(items, predicate) {
-                some _ => true,
-                none => false,
+        result := array_find_index(items, predicate)
+        # Check if result is some using a workaround
+        for i in 0:items.len() {
+                if predicate(items[i]) {
+                        ret true
+                }
         }
+        ret false
 }
 
 array_map<T> :: (items: &[T], transform: (T) -> T) -> [T] => {
@@ -378,10 +382,13 @@ array_all<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
 }
 
 array_any<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
-        match array_find_index(items, predicate) {
-                some _ => true,
-                none => false,
+        # Check if any item matches the predicate
+        for i in 0:items.len() {
+                if predicate(items[i]) {
+                        ret true
+                }
         }
+        ret false
 }
 
 array_fold<T> :: (items: &[T], initial: T, reducer: (T, T) -> T) -> T => {

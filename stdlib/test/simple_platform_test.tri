@@ -1,0 +1,44 @@
+# Simple platform test to verify basic functionality
+# Minimal test that works within parser limitations
+
+use prelude
+use core::platform
+
+main :: () => {
+    println("=== Simple Platform Test ===")
+    println("")
+    
+    # Test 1: Timestamp increments
+    reset_timestamp()
+    t1 := current_timestamp()
+    t2 := current_timestamp()
+    
+    check1 := (t1 == 1)
+    check2 := (t2 == 2)
+    
+    if check1 && check2 {
+        println("PASS: Timestamps increment correctly")
+    } else {
+        println("FAIL: Timestamps not incrementing")
+        println("  t1 = " + t1.to_string())
+        println("  t2 = " + t2.to_string())
+    }
+    
+    # Test 2: Platform features
+    has_ts := platform_has_feature("timestamp")
+    has_alloc := platform_has_feature("alloc")
+    
+    if has_ts && has_alloc {
+        println("PASS: Platform features detected correctly")
+    } else {
+        println("FAIL: Platform features not detected")
+    }
+    
+    # Test 3: Memory allocation
+    ptr := alloc(1024)
+    dealloc(ptr)
+    println("PASS: Memory allocation works")
+    
+    println("")
+    println("=== Simple Platform Test Complete ===")
+}

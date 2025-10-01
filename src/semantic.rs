@@ -1567,6 +1567,74 @@ fn infer_expression_type(
                     // Fallback: unknown method; treat as none
                     Ok(Type::None)
                 }
+                Expression::StaticPath { segments, .. } => {
+                    // Static path call like Vec::new() or Option::Some(x)
+                    let mangled_name = segments.join("_");
+                    
+                    // Check if it's an enum variant constructor
+                    if segments.len() >= 2 {
+                        let type_name = &segments[0];
+                        let variant_name = &segments[1];
+                        if let Some(ty) = context.types.get(type_name).cloned() {
+                            if let Type::Enum { variants, order } = ty {
+                                if let Some(payload_opt) = variants.get(variant_name).cloned() {
+                                    match payload_opt {
+                                        Some(payload_ty) => {
+                                            if arguments.len() != 1 {
+                                                return Err(SemanticError::ArgumentCountMismatch {
+                                                    expected: 1,
+                                                    found: arguments.len(),
+                                                });
+                                            }
+                                            let arg_ty = infer_expression_type(
+                                                &arguments[0].value,
+                                                context,
+                                            )?;
+                                            if !types_compatible(&payload_ty, &arg_ty) {
+                                                return Err(SemanticError::TypeMismatch {
+                                                    expected: payload_ty.clone(),
+                                                    found: arg_ty,
+                                                });
+                                            }
+                                        }
+                                        None => {
+                                            if !arguments.is_empty() {
+                                                return Err(SemanticError::ArgumentCountMismatch {
+                                                    expected: 0,
+                                                    found: arguments.len(),
+                                                });
+                                            }
+                                        }
+                                    }
+                                    // Constructors evaluate to enum struct
+                                    return Ok(Type::Enum { variants, order });
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Otherwise treat as static function call
+                    if let Some(signature) = context.get_function_signature(&mangled_name).cloned() {
+                        if arguments.len() != signature.parameters.len() {
+                            return Err(SemanticError::ArgumentCountMismatch {
+                                expected: signature.parameters.len(),
+                                found: arguments.len(),
+                            });
+                        }
+                        for (arg, expected_type) in arguments.iter().zip(&signature.parameters) {
+                            let arg_type = infer_expression_type(&arg.value, context)?;
+                            if !types_compatible(expected_type, &arg_type) {
+                                return Err(SemanticError::TypeMismatch {
+                                    expected: expected_type.clone(),
+                                    found: arg_type,
+                                });
+                            }
+                        }
+                        return Ok(signature.return_type.clone());
+                    }
+                    
+                    Err(SemanticError::UndefinedFunction(mangled_name))
+                }
                 _ => {
                     // Function expressions not yet supported
                     Ok(Type::None)
@@ -1799,6 +1867,36 @@ fn infer_expression_type(
                 name: "Shader".to_string(),
                 type_args: vec![],
             })
+        }
+        Expression::StaticPath { segments, .. } => {
+            // Static path like Vec::new or Option::Some
+            // Mangle to identifier and look up as function or enum variant
+            let mangled_name = segments.join("_");
+            
+            // Check if it's an enum variant
+            if segments.len() >= 2 {
+                let type_name = &segments[0];
+                let variant_name = &segments[1];
+                if let Some(ty) = context.types.get(type_name).cloned() {
+                    if let Type::Enum { .. } = ty {
+                        // It's an enum variant - return i64 for tag
+                        return Ok(Type::Identifier {
+                            name: "i64".to_string(),
+                            type_args: vec![],
+                        });
+                    }
+                }
+            }
+            
+            // Otherwise treat as function reference
+            if let Some(sig) = context.get_function_signature(&mangled_name) {
+                Ok(Type::Function {
+                    parameters: sig.parameters.clone(),
+                    return_type: Box::new(sig.return_type.clone()),
+                })
+            } else {
+                Err(SemanticError::UndefinedFunction(mangled_name))
+            }
         }
         _ => {
             // For other expression types, return none for now

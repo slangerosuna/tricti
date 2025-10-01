@@ -1,0 +1,5 @@
+Vec_new :: <T>() -> Vec<T> => extern
+
+test :: () => {
+    v := Vec_new::<u64>()
+}

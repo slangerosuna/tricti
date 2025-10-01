@@ -3483,16 +3483,112 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     } else {
                                         self.context.i64_type().const_zero().into()
                                     };
-                                    let struct_val = self
-                                        .context
-                                        .const_struct(&[tag_val.into(), payload_val.into()], false);
-                                    return Ok(struct_val.into());
+                                    // Use builder.insert_value for non-const aggregates
+                                    let enum_ty = self.enum_struct.unwrap();
+                                    let undef_struct = enum_ty.get_undef();
+                                    let with_tag = self
+                                        .builder
+                                        .build_insert_value(undef_struct, tag_val, 0, "enum_tag")
+                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                    let with_payload = self
+                                        .builder
+                                        .build_insert_value(with_tag, payload_val, 1, "enum_payload")
+                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                    return Ok(with_payload.as_basic_value_enum());
                                 }
                             }
                         }
                     }
                 }
+                // Static path enum variant constructor: StaticPath([Type, Variant])(payload?)
+                if let Expression::StaticPath { segments, .. } = function.as_ref() {
+                    if segments.len() >= 2 {
+                        let type_name = &segments[0];
+                        let variant_name = &segments[1];
+                        if let Some(Type::Enum { variants, order }) = self.semantic.types.get(type_name) {
+                            if variants.contains_key(variant_name) {
+                                if let Some(idx) = order.iter().position(|s| s == variant_name) {
+                                    let tag_val = self.context.i64_type().const_int(idx as u64, false);
+                                    let payload_val = if variants.get(variant_name).unwrap().is_some() {
+                                        if arguments.is_empty() {
+                                            return Err(CodegenError::InvalidOperation(
+                                                "enum constructor missing payload".to_string(),
+                                            ));
+                                        }
+                                        self.generate_expression(&arguments[0].value)?
+                                    } else {
+                                        self.context.i64_type().const_zero().into()
+                                    };
+                                    // Use builder.insert_value for non-const aggregates
+                                    let enum_ty = self.enum_struct.unwrap();
+                                    let undef_struct = enum_ty.get_undef();
+                                    let with_tag = self
+                                        .builder
+                                        .build_insert_value(undef_struct, tag_val, 0, "enum_tag")
+                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                    let with_payload = self
+                                        .builder
+                                        .build_insert_value(with_tag, payload_val, 1, "enum_payload")
+                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                    return Ok(with_payload.as_basic_value_enum());
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Static method call (NOT enum constructor): mangle and call directly
+                    // This handles cases like Vec<u64>::new()
+                    let mangled_name = segments.join("_");
+                    if let Some(callee_fn) = self.functions.get(&mangled_name).cloned() {
+                        // Generate arguments
+                        let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::new();
+                        for arg in arguments {
+                            let val = self.generate_expression(&arg.value)?;
+                            arg_values.push(val.into());
+                        }
+                        
+                        // Call the function directly
+                        let call_result = self
+                            .builder
+                            .build_call(callee_fn, &arg_values, "static_method_call")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        
+                        return if let Some(ret_val) = call_result.try_as_basic_value().left() {
+                            Ok(ret_val)
+                        } else {
+                            // Void return
+                            Ok(self.context.i64_type().const_zero().into())
+                        };
+                    } else {
+                        return Err(CodegenError::UndefinedFunction(format!(
+                            "Static method not found: {}",
+                            mangled_name
+                        )));
+                    }
+                }
                 self.generate_call(function, type_args, arguments)
+            }
+
+            Expression::StaticPath { segments, .. } => {
+                // Static path like Vec::new or Option::Some
+                // Mangle to identifier and look up
+                let mangled_name = segments.join("_");
+                
+                // Check if it's an enum variant (no call, just the tag)
+                if segments.len() >= 2 {
+                    let type_name = &segments[0];
+                    let variant_name = &segments[1];
+                    if let Some(Type::Enum { order, .. }) = self.semantic.types.get(type_name) {
+                        if let Some(idx) = order.iter().position(|s| s == variant_name) {
+                            let tag_val = self.context.i64_type().const_int(idx as u64, false);
+                            return Ok(tag_val.into());
+                        }
+                    }
+                }
+                
+                // Otherwise treat as function reference (return function pointer)
+                // For now, just return zero as placeholder
+                Ok(self.context.i64_type().const_zero().into())
             }
 
             _ => {

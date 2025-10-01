@@ -162,6 +162,10 @@ pub enum Expression {
         fields: Vec<ShaderField>,
         constants: Vec<Statement>,
     },
+    StaticPath {
+        segments: Vec<String>,
+        type_args: Vec<Type>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

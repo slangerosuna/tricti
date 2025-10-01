@@ -530,6 +530,7 @@ fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::matrix => parse_matrix(inner_pair),
         Rule::tuple_expr => parse_tuple_expression(inner_pair),
         Rule::path_struct => parse_path_struct_expression(inner_pair),
+        Rule::static_path => parse_static_path_expression(inner_pair),
         Rule::primary_struct => {
             let mut it = inner_pair.into_inner();
             let id = it.next().unwrap().as_str().to_string();
@@ -578,6 +579,26 @@ fn parse_path_struct_expression(pair: pest::iterators::Pair<Rule>) -> Expression
         }
     }
     panic!("Path struct missing struct literal");
+}
+
+fn parse_static_path_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let mut segments = Vec::new();
+    let mut type_args = Vec::new();
+    
+    while let Some(part) = inner.next() {
+        match part.as_rule() {
+            Rule::identifier => segments.push(part.as_str().to_string()),
+            Rule::type_args => {
+                for type_pair in part.into_inner() {
+                    type_args.push(parse_type(type_pair));
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    Expression::StaticPath { segments, type_args }
 }
 
 fn parse_array_new(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -654,6 +675,7 @@ fn parse_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
     let inner = pair.into_inner().next().unwrap();
     match inner.as_rule() {
         Rule::path_struct => parse_path_struct_expression(inner),
+        Rule::static_path => parse_static_path_expression(inner),
         Rule::identifier => Expression::Identifier(inner.as_str().to_string()),
         _ => panic!("Unexpected pattern rule: {:?}", inner.as_rule()),
     }
