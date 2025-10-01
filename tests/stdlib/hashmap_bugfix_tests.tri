@@ -70,413 +70,413 @@ forced_hash :: (value: i64) -> u64 => {
 }
 
 test_collision_insert_distinct_keys :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Insert keys that will collide (using same hash mod)
-    HashMap_insert::<i64, i64>(&map, 1, 100)
-    HashMap_insert::<i64, i64>(&map, 2, 200)
-    HashMap_insert::<i64, i64>(&map, 3, 300)
+    HashMap::insert::<i64, i64>(&map, 1, 100)
+    HashMap::insert::<i64, i64>(&map, 2, 200)
+    HashMap::insert::<i64, i64>(&map, 3, 300)
     
     # All three should be stored
-    result := HashMap_len::<i64, i64>(&map) == 3
-    HashMap_destroy::<i64, i64>(&map)
+    result := HashMap::len::<i64, i64>(&map) == 3
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_collision_get_correct_values :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Insert multiple distinct keys
-    HashMap_insert::<i64, i64>(&map, 10, 100)
-    HashMap_insert::<i64, i64>(&map, 20, 200)
-    HashMap_insert::<i64, i64>(&map, 30, 300)
+    HashMap::insert::<i64, i64>(&map, 10, 100)
+    HashMap::insert::<i64, i64>(&map, 20, 200)
+    HashMap::insert::<i64, i64>(&map, 30, 300)
     
     # Retrieve each value - should get correct one for each key
-    v1 := HashMap_get::<i64, i64>(&map, 10)
-    v2 := HashMap_get::<i64, i64>(&map, 20)
-    v3 := HashMap_get::<i64, i64>(&map, 30)
+    v1 := HashMap::get::<i64, i64>(&map, 10)
+    v2 := HashMap::get::<i64, i64>(&map, 20)
+    v3 := HashMap::get::<i64, i64>(&map, 30)
     
     result := v1 ~= (0 as *i64) && v1[0] == 100 &&
               v2 ~= (0 as *i64) && v2[0] == 200 &&
               v3 ~= (0 as *i64) && v3[0] == 300
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_collision_remove_correct_key :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Insert multiple keys
-    HashMap_insert::<i64, i64>(&map, 1, 10)
-    HashMap_insert::<i64, i64>(&map, 2, 20)
-    HashMap_insert::<i64, i64>(&map, 3, 30)
+    HashMap::insert::<i64, i64>(&map, 1, 10)
+    HashMap::insert::<i64, i64>(&map, 2, 20)
+    HashMap::insert::<i64, i64>(&map, 3, 30)
     
     # Remove key 2
-    removed := HashMap_remove::<i64, i64>(&map, 2)
+    removed := HashMap::remove::<i64, i64>(&map, 2)
     
     # Key 2 should be removed, but 1 and 3 should remain
-    v1 := HashMap_get::<i64, i64>(&map, 1)
-    v2 := HashMap_get::<i64, i64>(&map, 2)
-    v3 := HashMap_get::<i64, i64>(&map, 3)
+    v1 := HashMap::get::<i64, i64>(&map, 1)
+    v2 := HashMap::get::<i64, i64>(&map, 2)
+    v3 := HashMap::get::<i64, i64>(&map, 3)
     
     result := removed &&
               v1 ~= (0 as *i64) && v1[0] == 10 &&
               v2 == (0 as *i64) &&
               v3 ~= (0 as *i64) && v3[0] == 30 &&
-              HashMap_len::<i64, i64>(&map) == 2
-    HashMap_destroy::<i64, i64>(&map)
+              HashMap::len::<i64, i64>(&map) == 2
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_collision_update_correct_key :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Insert keys
-    HashMap_insert::<i64, i64>(&map, 5, 50)
-    HashMap_insert::<i64, i64>(&map, 6, 60)
-    HashMap_insert::<i64, i64>(&map, 7, 70)
+    HashMap::insert::<i64, i64>(&map, 5, 50)
+    HashMap::insert::<i64, i64>(&map, 6, 60)
+    HashMap::insert::<i64, i64>(&map, 7, 70)
     
     # Update key 6
-    HashMap_insert::<i64, i64>(&map, 6, 600)
+    HashMap::insert::<i64, i64>(&map, 6, 600)
     
     # Only key 6 should be updated
-    v5 := HashMap_get::<i64, i64>(&map, 5)
-    v6 := HashMap_get::<i64, i64>(&map, 6)
-    v7 := HashMap_get::<i64, i64>(&map, 7)
+    v5 := HashMap::get::<i64, i64>(&map, 5)
+    v6 := HashMap::get::<i64, i64>(&map, 6)
+    v7 := HashMap::get::<i64, i64>(&map, 7)
     
     result := v5 ~= (0 as *i64) && v5[0] == 50 &&
               v6 ~= (0 as *i64) && v6[0] == 600 &&
               v7 ~= (0 as *i64) && v7[0] == 70 &&
-              HashMap_len::<i64, i64>(&map) == 3
-    HashMap_destroy::<i64, i64>(&map)
+              HashMap::len::<i64, i64>(&map) == 3
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_collision_many_keys :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Insert many keys to force collisions
     for i in 0:20 {
-        HashMap_insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
+        HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
     # Verify all keys are retrievable with correct values
     all_correct := true
     for i in 0:20 {
-        val := HashMap_get::<i64, i64>(&map, i as i64)
+        val := HashMap::get::<i64, i64>(&map, i as i64)
         if val == (0 as *i64) || val[0] ~= (i * 10) as i64 {
             all_correct = false
         }
     }
     
-    result := all_correct && HashMap_len::<i64, i64>(&map) == 20
-    HashMap_destroy::<i64, i64>(&map)
+    result := all_correct && HashMap::len::<i64, i64>(&map) == 20
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_collision_contains_key_accuracy :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
-    HashMap_insert::<i64, i64>(&map, 10, 100)
-    HashMap_insert::<i64, i64>(&map, 11, 110)
-    HashMap_insert::<i64, i64>(&map, 12, 120)
+    HashMap::insert::<i64, i64>(&map, 10, 100)
+    HashMap::insert::<i64, i64>(&map, 11, 110)
+    HashMap::insert::<i64, i64>(&map, 12, 120)
     
     # Check that contains_key is accurate for each key
-    result := HashMap_contains_key::<i64, i64>(&map, 10) &&
-              HashMap_contains_key::<i64, i64>(&map, 11) &&
-              HashMap_contains_key::<i64, i64>(&map, 12) &&
-              !HashMap_contains_key::<i64, i64>(&map, 13) &&
-              !HashMap_contains_key::<i64, i64>(&map, 9)
-    HashMap_destroy::<i64, i64>(&map)
+    result := HashMap::contains_key::<i64, i64>(&map, 10) &&
+              HashMap::contains_key::<i64, i64>(&map, 11) &&
+              HashMap::contains_key::<i64, i64>(&map, 12) &&
+              !HashMap::contains_key::<i64, i64>(&map, 13) &&
+              !HashMap::contains_key::<i64, i64>(&map, 9)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_collision_sequential_values :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Sequential values often have similar hashes, test them
     for i in 100:110 {
-        HashMap_insert::<i64, i64>(&map, i as i64, i as i64)
+        HashMap::insert::<i64, i64>(&map, i as i64, i as i64)
     }
     
     # Verify all are distinct
-    result := HashMap_len::<i64, i64>(&map) == 10
+    result := HashMap::len::<i64, i64>(&map) == 10
     
     # Verify retrieval
     for i in 100:110 {
-        val := HashMap_get::<i64, i64>(&map, i as i64)
+        val := HashMap::get::<i64, i64>(&map, i as i64)
         if val == (0 as *i64) || val[0] ~= i as i64 {
             result = false
         }
     }
     
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_collision_negative_positive_keys :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Mix of negative and positive keys
-    HashMap_insert::<i64, i64>(&map, -5, 50)
-    HashMap_insert::<i64, i64>(&map, 5, 55)
-    HashMap_insert::<i64, i64>(&map, -10, 100)
-    HashMap_insert::<i64, i64>(&map, 10, 110)
+    HashMap::insert::<i64, i64>(&map, -5, 50)
+    HashMap::insert::<i64, i64>(&map, 5, 55)
+    HashMap::insert::<i64, i64>(&map, -10, 100)
+    HashMap::insert::<i64, i64>(&map, 10, 110)
     
-    v1 := HashMap_get::<i64, i64>(&map, -5)
-    v2 := HashMap_get::<i64, i64>(&map, 5)
-    v3 := HashMap_get::<i64, i64>(&map, -10)
-    v4 := HashMap_get::<i64, i64>(&map, 10)
+    v1 := HashMap::get::<i64, i64>(&map, -5)
+    v2 := HashMap::get::<i64, i64>(&map, 5)
+    v3 := HashMap::get::<i64, i64>(&map, -10)
+    v4 := HashMap::get::<i64, i64>(&map, 10)
     
     result := v1 ~= (0 as *i64) && v1[0] == 50 &&
               v2 ~= (0 as *i64) && v2[0] == 55 &&
               v3 ~= (0 as *i64) && v3[0] == 100 &&
               v4 ~= (0 as *i64) && v4[0] == 110
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_collision_zero_and_nearby :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Test zero and nearby values
-    HashMap_insert::<i64, i64>(&map, -1, 10)
-    HashMap_insert::<i64, i64>(&map, 0, 20)
-    HashMap_insert::<i64, i64>(&map, 1, 30)
+    HashMap::insert::<i64, i64>(&map, -1, 10)
+    HashMap::insert::<i64, i64>(&map, 0, 20)
+    HashMap::insert::<i64, i64>(&map, 1, 30)
     
-    v1 := HashMap_get::<i64, i64>(&map, -1)
-    v2 := HashMap_get::<i64, i64>(&map, 0)
-    v3 := HashMap_get::<i64, i64>(&map, 1)
+    v1 := HashMap::get::<i64, i64>(&map, -1)
+    v2 := HashMap::get::<i64, i64>(&map, 0)
+    v3 := HashMap::get::<i64, i64>(&map, 1)
     
     result := v1 ~= (0 as *i64) && v1[0] == 10 &&
               v2 ~= (0 as *i64) && v2[0] == 20 &&
               v3 ~= (0 as *i64) && v3[0] == 30
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_collision_large_values :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Large values that might collide
-    HashMap_insert::<i64, i64>(&map, 1000000, 1)
-    HashMap_insert::<i64, i64>(&map, 1000001, 2)
-    HashMap_insert::<i64, i64>(&map, 1000002, 3)
-    HashMap_insert::<i64, i64>(&map, 2000000, 4)
+    HashMap::insert::<i64, i64>(&map, 1000000, 1)
+    HashMap::insert::<i64, i64>(&map, 1000001, 2)
+    HashMap::insert::<i64, i64>(&map, 1000002, 3)
+    HashMap::insert::<i64, i64>(&map, 2000000, 4)
     
-    v1 := HashMap_get::<i64, i64>(&map, 1000000)
-    v2 := HashMap_get::<i64, i64>(&map, 1000001)
-    v3 := HashMap_get::<i64, i64>(&map, 1000002)
-    v4 := HashMap_get::<i64, i64>(&map, 2000000)
+    v1 := HashMap::get::<i64, i64>(&map, 1000000)
+    v2 := HashMap::get::<i64, i64>(&map, 1000001)
+    v3 := HashMap::get::<i64, i64>(&map, 1000002)
+    v4 := HashMap::get::<i64, i64>(&map, 2000000)
     
     result := v1 ~= (0 as *i64) && v1[0] == 1 &&
               v2 ~= (0 as *i64) && v2[0] == 2 &&
               v3 ~= (0 as *i64) && v3[0] == 3 &&
               v4 ~= (0 as *i64) && v4[0] == 4
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 # ============ Tombstone Reuse Tests (5 tests) ============
 
 test_tombstone_reuse_basic :: () -> bool => {
-    map := HashMap_with_capacity::<i64, i64>(16)
-    initial_cap := HashMap_capacity::<i64, i64>(&map)
+    map := HashMap::with_capacity::<i64, i64>(16)
+    initial_cap := HashMap::capacity::<i64, i64>(&map)
     
     # Insert, remove, insert again
-    HashMap_insert::<i64, i64>(&map, 1, 10)
-    HashMap_remove::<i64, i64>(&map, 1)
-    HashMap_insert::<i64, i64>(&map, 2, 20)
+    HashMap::insert::<i64, i64>(&map, 1, 10)
+    HashMap::remove::<i64, i64>(&map, 1)
+    HashMap::insert::<i64, i64>(&map, 2, 20)
     
     # Capacity should not grow if tombstone is reused
-    final_cap := HashMap_capacity::<i64, i64>(&map)
+    final_cap := HashMap::capacity::<i64, i64>(&map)
     
     # Value should be retrievable
-    val := HashMap_get::<i64, i64>(&map, 2)
+    val := HashMap::get::<i64, i64>(&map, 2)
     
     result := final_cap == initial_cap &&
               val ~= (0 as *i64) && val[0] == 20
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_tombstone_multiple_removals :: () -> bool => {
-    map := HashMap_with_capacity::<i64, i64>(32)
+    map := HashMap::with_capacity::<i64, i64>(32)
     
     # Insert many keys
     for i in 0:10 {
-        HashMap_insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
+        HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
     # Remove half of them
     for i in 0:5 {
-        HashMap_remove::<i64, i64>(&map, i as i64)
+        HashMap::remove::<i64, i64>(&map, i as i64)
     }
     
     # Insert new keys - should reuse tombstones
     for i in 10:15 {
-        HashMap_insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
+        HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
     # Verify all expected keys are present
-    len := HashMap_len::<i64, i64>(&map)
+    len := HashMap::len::<i64, i64>(&map)
     
     # Should have keys 5-14 (10 keys total)
     result := len == 10
     
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_tombstone_no_corruption :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Insert keys
-    HashMap_insert::<i64, i64>(&map, 1, 10)
-    HashMap_insert::<i64, i64>(&map, 2, 20)
-    HashMap_insert::<i64, i64>(&map, 3, 30)
+    HashMap::insert::<i64, i64>(&map, 1, 10)
+    HashMap::insert::<i64, i64>(&map, 2, 20)
+    HashMap::insert::<i64, i64>(&map, 3, 30)
     
     # Remove middle key
-    HashMap_remove::<i64, i64>(&map, 2)
+    HashMap::remove::<i64, i64>(&map, 2)
     
     # Insert new key that might use tombstone
-    HashMap_insert::<i64, i64>(&map, 4, 40)
+    HashMap::insert::<i64, i64>(&map, 4, 40)
     
     # Verify remaining keys are uncorrupted
-    v1 := HashMap_get::<i64, i64>(&map, 1)
-    v2 := HashMap_get::<i64, i64>(&map, 2)
-    v3 := HashMap_get::<i64, i64>(&map, 3)
-    v4 := HashMap_get::<i64, i64>(&map, 4)
+    v1 := HashMap::get::<i64, i64>(&map, 1)
+    v2 := HashMap::get::<i64, i64>(&map, 2)
+    v3 := HashMap::get::<i64, i64>(&map, 3)
+    v4 := HashMap::get::<i64, i64>(&map, 4)
     
     result := v1 ~= (0 as *i64) && v1[0] == 10 &&
               v2 == (0 as *i64) &&
               v3 ~= (0 as *i64) && v3[0] == 30 &&
               v4 ~= (0 as *i64) && v4[0] == 40
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_tombstone_after_resize :: () -> bool => {
-    map := HashMap_with_capacity::<i64, i64>(16)
+    map := HashMap::with_capacity::<i64, i64>(16)
     
     # Insert many keys to force resize
     for i in 0:20 {
-        HashMap_insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
+        HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
     # Remove some keys
     for i in 0:5 {
-        HashMap_remove::<i64, i64>(&map, i as i64)
+        HashMap::remove::<i64, i64>(&map, i as i64)
     }
     
     # Verify remaining keys are intact
     all_correct := true
     for i in 5:20 {
-        val := HashMap_get::<i64, i64>(&map, i as i64)
+        val := HashMap::get::<i64, i64>(&map, i as i64)
         if val == (0 as *i64) || val[0] ~= (i * 10) as i64 {
             all_correct = false
         }
     }
     
-    result := all_correct && HashMap_len::<i64, i64>(&map) == 15
-    HashMap_destroy::<i64, i64>(&map)
+    result := all_correct && HashMap::len::<i64, i64>(&map) == 15
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_tombstone_reinsertion_same_key :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Insert, remove, reinsert same key
-    HashMap_insert::<i64, i64>(&map, 42, 100)
-    removed := HashMap_remove::<i64, i64>(&map, 42)
-    HashMap_insert::<i64, i64>(&map, 42, 200)
+    HashMap::insert::<i64, i64>(&map, 42, 100)
+    removed := HashMap::remove::<i64, i64>(&map, 42)
+    HashMap::insert::<i64, i64>(&map, 42, 200)
     
-    val := HashMap_get::<i64, i64>(&map, 42)
+    val := HashMap::get::<i64, i64>(&map, 42)
     
     result := removed &&
               val ~= (0 as *i64) && val[0] == 200 &&
-              HashMap_len::<i64, i64>(&map) == 1
-    HashMap_destroy::<i64, i64>(&map)
+              HashMap::len::<i64, i64>(&map) == 1
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 # ============ Bounds Checking Tests (5 tests) ============
 
 test_bounds_key_at_valid :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
-    HashMap_insert::<i64, i64>(&map, 1, 10)
-    HashMap_insert::<i64, i64>(&map, 2, 20)
-    HashMap_insert::<i64, i64>(&map, 3, 30)
+    HashMap::insert::<i64, i64>(&map, 1, 10)
+    HashMap::insert::<i64, i64>(&map, 2, 20)
+    HashMap::insert::<i64, i64>(&map, 3, 30)
     
     # Valid indices should work
-    k0 := HashMap_key_at::<i64, i64>(&map, 0)
-    k1 := HashMap_key_at::<i64, i64>(&map, 1)
-    k2 := HashMap_key_at::<i64, i64>(&map, 2)
+    k0 := HashMap::key_at::<i64, i64>(&map, 0)
+    k1 := HashMap::key_at::<i64, i64>(&map, 1)
+    k2 := HashMap::key_at::<i64, i64>(&map, 2)
     
     # Should get back one of our keys (order may vary)
     result := (k0 == 1 || k0 == 2 || k0 == 3) &&
               (k1 == 1 || k1 == 2 || k1 == 3) &&
               (k2 == 1 || k2 == 2 || k2 == 3)
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_bounds_value_at_valid :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
-    HashMap_insert::<i64, i64>(&map, 1, 10)
-    HashMap_insert::<i64, i64>(&map, 2, 20)
+    HashMap::insert::<i64, i64>(&map, 1, 10)
+    HashMap::insert::<i64, i64>(&map, 2, 20)
     
     # Valid indices should work
-    v0 := HashMap_value_at::<i64, i64>(&map, 0)
-    v1 := HashMap_value_at::<i64, i64>(&map, 1)
+    v0 := HashMap::value_at::<i64, i64>(&map, 0)
+    v1 := HashMap::value_at::<i64, i64>(&map, 1)
     
     # Should get back one of our values
     result := (v0 == 10 || v0 == 20) &&
               (v1 == 10 || v1 == 20)
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_bounds_key_at_out_of_range :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
-    HashMap_insert::<i64, i64>(&map, 1, 10)
+    HashMap::insert::<i64, i64>(&map, 1, 10)
     
     # Out of range index - should not crash
     # With bounds checking, should return default or first value
-    k := HashMap_key_at::<i64, i64>(&map, 999)
+    k := HashMap::key_at::<i64, i64>(&map, 999)
     
     # Should not crash - that's the main success criterion
     result := true
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_bounds_value_at_out_of_range :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
-    HashMap_insert::<i64, i64>(&map, 1, 10)
+    HashMap::insert::<i64, i64>(&map, 1, 10)
     
     # Out of range index
-    v := HashMap_value_at::<i64, i64>(&map, 999)
+    v := HashMap::value_at::<i64, i64>(&map, 999)
     
     # Should not crash
     result := true
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }
 
 test_bounds_empty_map :: () -> bool => {
-    map := HashMap_new::<i64, i64>()
+    map := HashMap::new::<i64, i64>()
     
     # Accessing empty map should not crash
-    k := HashMap_key_at::<i64, i64>(&map, 0)
-    v := HashMap_value_at::<i64, i64>(&map, 0)
+    k := HashMap::key_at::<i64, i64>(&map, 0)
+    v := HashMap::value_at::<i64, i64>(&map, 0)
     
     # Should not crash
     result := true
-    HashMap_destroy::<i64, i64>(&map)
+    HashMap::destroy::<i64, i64>(&map)
     result
 }

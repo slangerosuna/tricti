@@ -25,301 +25,301 @@ run_test :: (name: *u8, test: () -> bool) -> none => {
 # ===== Construction Tests (15 tests) =====
 
 test_string_new :: () -> bool => {
-    s := String_new()
+    s := String::new()
     s.len == 0 && s.capacity == 1
 }
 
 test_string_new_is_empty :: () -> bool => {
-    s := String_new()
-    String_is_empty(&s)
+    s := String::new()
+    String::is_empty(&s)
 }
 
 test_string_from_cstr_basic :: () -> bool => {
-    s := String_from_cstr("Hello")
+    s := String::from_cstr("Hello")
     s.len == 5
 }
 
 test_string_from_cstr_empty :: () -> bool => {
-    s := String_from_cstr("")
-    String_is_empty(&s)
+    s := String::from_cstr("")
+    String::is_empty(&s)
 }
 
 test_string_from_cstr_null :: () -> bool => {
-    s := String_from_cstr(0 as *u8)
-    String_is_empty(&s)
+    s := String::from_cstr(0 as *u8)
+    String::is_empty(&s)
 }
 
 test_string_with_capacity :: () -> bool => {
-    s := String_with_capacity(100)
+    s := String::with_capacity(100)
     s.capacity == 100 && s.len == 0
 }
 
 test_string_with_capacity_zero :: () -> bool => {
-    s := String_with_capacity(0)
+    s := String::with_capacity(0)
     s.capacity == 1 && s.len == 0
 }
 
 test_string_clone :: () -> bool => {
-    s1 := String_from_cstr("Hello")
-    s2 := String_clone(&s1)
-    s2.len == 5 && String_equals(&s1, &s2)
+    s1 := String::from_cstr("Hello")
+    s2 := String::clone(&s1)
+    s2.len == 5 && String::equals(&s1, &s2)
 }
 
 test_string_clone_empty :: () -> bool => {
-    s1 := String_new()
-    s2 := String_clone(&s1)
-    String_is_empty(&s2)
+    s1 := String::new()
+    s2 := String::clone(&s1)
+    String::is_empty(&s2)
 }
 
 test_string_from_cstr_long :: () -> bool => {
-    s := String_from_cstr("This is a longer test string with more characters")
+    s := String::from_cstr("This is a longer test string with more characters")
     s.len == 49
 }
 
 test_string_from_cstr_single_char :: () -> bool => {
-    s := String_from_cstr("X")
+    s := String::from_cstr("X")
     s.len == 1
 }
 
 test_string_with_capacity_large :: () -> bool => {
-    s := String_with_capacity(1000)
+    s := String::with_capacity(1000)
     s.capacity == 1000
 }
 
 test_string_construction_preserves_data :: () -> bool => {
-    s := String_from_cstr("Test")
-    String_len(&s) == 4 && String_char_at(&s, 0) == 'T' as u8
+    s := String::from_cstr("Test")
+    String::len(&s) == 4 && String::char_at(&s, 0) == 'T' as u8
 }
 
 test_string_from_cstr_special_chars :: () -> bool => {
-    s := String_from_cstr("!@#$%^&*()")
+    s := String::from_cstr("!@#$%^&*()")
     s.len == 10
 }
 
 test_string_from_cstr_numbers :: () -> bool => {
-    s := String_from_cstr("1234567890")
+    s := String::from_cstr("1234567890")
     s.len == 10
 }
 
 # ===== Capacity Tests (10 tests) =====
 
 test_string_len :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_len(&s) == 5
+    s := String::from_cstr("Hello")
+    String::len(&s) == 5
 }
 
 test_string_len_empty :: () -> bool => {
-    s := String_new()
-    String_len(&s) == 0
+    s := String::new()
+    String::len(&s) == 0
 }
 
 test_string_is_empty_true :: () -> bool => {
-    s := String_new()
-    String_is_empty(&s)
+    s := String::new()
+    String::is_empty(&s)
 }
 
 test_string_is_empty_false :: () -> bool => {
-    s := String_from_cstr("X")
-    ~String_is_empty(&s)
+    s := String::from_cstr("X")
+    ~String::is_empty(&s)
 }
 
 test_string_capacity_after_new :: () -> bool => {
-    s := String_new()
-    String_capacity(&s) == 1
+    s := String::new()
+    String::capacity(&s) == 1
 }
 
 test_string_capacity_after_with_capacity :: () -> bool => {
-    s := String_with_capacity(50)
-    String_capacity(&s) == 50
+    s := String::with_capacity(50)
+    String::capacity(&s) == 50
 }
 
 test_string_reserve :: () -> bool => {
-    s := String_from_cstr("Hi")
+    s := String::from_cstr("Hi")
     old_cap := s.capacity
-    String_reserve(&s, 100)
+    String::reserve(&s, 100)
     s.capacity >= old_cap + 100
 }
 
 test_string_shrink_to_fit :: () -> bool => {
-    s := String_with_capacity(100)
-    String_push_cstr(&s, "Short")
-    String_shrink_to_fit(&s)
+    s := String::with_capacity(100)
+    String::push_cstr(&s, "Short")
+    String::shrink_to_fit(&s)
     s.capacity == s.len + 1
 }
 
 test_string_capacity_growth :: () -> bool => {
-    s := String_new()
-    String_push_cstr(&s, "Test")
+    s := String::new()
+    String::push_cstr(&s, "Test")
     s.capacity >= 4
 }
 
 test_string_capacity_remains_after_clear :: () -> bool => {
-    s := String_with_capacity(50)
+    s := String::with_capacity(50)
     old_cap := s.capacity
-    String_clear(&s)
+    String::clear(&s)
     s.capacity == old_cap
 }
 
 # ===== Modification Tests (24 tests) =====
 
 test_string_push_str :: () -> bool => {
-    s1 := String_from_cstr("Hello")
-    s2 := String_from_cstr(" World")
-    String_push_str(&s1, &s2)
-    expected := String_from_cstr("Hello World")
-    s1.len == 11 && String_equals(&s1, &expected)
+    s1 := String::from_cstr("Hello")
+    s2 := String::from_cstr(" World")
+    String::push_str(&s1, &s2)
+    expected := String::from_cstr("Hello World")
+    s1.len == 11 && String::equals(&s1, &expected)
 }
 
 test_string_push_str_empty :: () -> bool => {
-    s1 := String_from_cstr("Test")
-    s2 := String_new()
-    String_push_str(&s1, &s2)
+    s1 := String::from_cstr("Test")
+    s2 := String::new()
+    String::push_str(&s1, &s2)
     s1.len == 4
 }
 
 test_string_push_cstr :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_push_cstr(&s, " World")
+    s := String::from_cstr("Hello")
+    String::push_cstr(&s, " World")
     s.len == 11
 }
 
 test_string_push_cstr_empty :: () -> bool => {
-    s := String_from_cstr("Test")
-    String_push_cstr(&s, "")
+    s := String::from_cstr("Test")
+    String::push_cstr(&s, "")
     s.len == 4
 }
 
 test_string_push_char :: () -> bool => {
-    s := String_from_cstr("Hell")
-    String_push_char(&s, 'o' as u8)
+    s := String::from_cstr("Hell")
+    String::push_char(&s, 'o' as u8)
     s.len == 5
 }
 
 test_string_push_char_to_empty :: () -> bool => {
-    s := String_new()
-    String_push_char(&s, 'A' as u8)
-    s.len == 1 && String_char_at(&s, 0) == 'A' as u8
+    s := String::new()
+    String::push_char(&s, 'A' as u8)
+    s.len == 1 && String::char_at(&s, 0) == 'A' as u8
 }
 
 test_string_push_multiple_chars :: () -> bool => {
-    s := String_new()
-    String_push_char(&s, 'H' as u8)
-    String_push_char(&s, 'i' as u8)
+    s := String::new()
+    String::push_char(&s, 'H' as u8)
+    String::push_char(&s, 'i' as u8)
     s.len == 2
 }
 
 test_string_pop :: () -> bool => {
-    s := String_from_cstr("Hello")
-    ch := String_pop(&s)
+    s := String::from_cstr("Hello")
+    ch := String::pop(&s)
     ch == 'o' as u8 && s.len == 4
 }
 
 test_string_pop_single_char :: () -> bool => {
-    s := String_from_cstr("X")
-    ch := String_pop(&s)
-    ch == 'X' as u8 && String_is_empty(&s)
+    s := String::from_cstr("X")
+    ch := String::pop(&s)
+    ch == 'X' as u8 && String::is_empty(&s)
 }
 
 test_string_clear :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    String_clear(&s)
-    String_is_empty(&s)
+    s := String::from_cstr("Hello World")
+    String::clear(&s)
+    String::is_empty(&s)
 }
 
 test_string_clear_empty :: () -> bool => {
-    s := String_new()
-    String_clear(&s)
-    String_is_empty(&s)
+    s := String::new()
+    String::clear(&s)
+    String::is_empty(&s)
 }
 
 test_string_truncate :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    String_truncate(&s, 5)
+    s := String::from_cstr("Hello World")
+    String::truncate(&s, 5)
     s.len == 5
 }
 
 test_string_truncate_to_zero :: () -> bool => {
-    s := String_from_cstr("Test")
-    String_truncate(&s, 0)
-    String_is_empty(&s)
+    s := String::from_cstr("Test")
+    String::truncate(&s, 0)
+    String::is_empty(&s)
 }
 
 test_string_truncate_beyond_len :: () -> bool => {
-    s := String_from_cstr("Hi")
-    String_truncate(&s, 100)
+    s := String::from_cstr("Hi")
+    String::truncate(&s, 100)
     s.len == 2
 }
 
 test_string_push_str_multiple :: () -> bool => {
-    s := String_from_cstr("A")
-    String_push_cstr(&s, "B")
-    String_push_cstr(&s, "C")
+    s := String::from_cstr("A")
+    String::push_cstr(&s, "B")
+    String::push_cstr(&s, "C")
     s.len == 3
 }
 
 test_string_modification_sequence :: () -> bool => {
-    s := String_new()
-    String_push_cstr(&s, "Hello")
-    String_push_char(&s, ' ' as u8)
-    String_push_cstr(&s, "World")
+    s := String::new()
+    String::push_cstr(&s, "Hello")
+    String::push_char(&s, ' ' as u8)
+    String::push_cstr(&s, "World")
     s.len == 11
 }
 
 test_string_push_then_pop :: () -> bool => {
-    s := String_from_cstr("Test")
-    String_push_char(&s, '!' as u8)
-    ch := String_pop(&s)
+    s := String::from_cstr("Test")
+    String::push_char(&s, '!' as u8)
+    ch := String::pop(&s)
     ch == '!' as u8 && s.len == 4
 }
 
 test_string_clear_then_push :: () -> bool => {
-    s := String_from_cstr("Old")
-    String_clear(&s)
-    String_push_cstr(&s, "New")
+    s := String::from_cstr("Old")
+    String::clear(&s)
+    String::push_cstr(&s, "New")
     s.len == 3
 }
 
 test_string_truncate_then_push :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_truncate(&s, 2)
-    String_push_cstr(&s, "y")
+    s := String::from_cstr("Hello")
+    String::truncate(&s, 2)
+    String::push_cstr(&s, "y")
     s.len == 3
 }
 
 test_string_multiple_pops :: () -> bool => {
-    s := String_from_cstr("ABC")
-    String_pop(&s)
-    String_pop(&s)
+    s := String::from_cstr("ABC")
+    String::pop(&s)
+    String::pop(&s)
     s.len == 1
 }
 
 test_string_push_cstr_self_append :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_push_cstr(&s, String_as_cstr(&s))
-    expected := String_from_cstr("HelloHello")
-    s.len == 10 && String_equals(&s, &expected)
+    s := String::from_cstr("Hello")
+    String::push_cstr(&s, String::as_cstr(&s))
+    expected := String::from_cstr("HelloHello")
+    s.len == 10 && String::equals(&s, &expected)
 }
 
 test_string_push_cstr_interior_alias :: () -> bool => {
-    s := String_from_cstr("HelloWorld")
+    s := String::from_cstr("HelloWorld")
     interior_ptr := ptr_offset(s.data, 5)
-    String_push_cstr(&s, interior_ptr)
-    expected := String_from_cstr("HelloWorldWorld")
-    s.len == 15 && String_equals(&s, &expected)
+    String::push_cstr(&s, interior_ptr)
+    expected := String::from_cstr("HelloWorldWorld")
+    s.len == 15 && String::equals(&s, &expected)
 }
 
 test_string_push_cstr_triggers_realloc_self :: () -> bool => {
-    s := String_with_capacity(10)
-    String_push_cstr(&s, "Short")
+    s := String::with_capacity(10)
+    String::push_cstr(&s, "Short")
     old_cap := s.capacity
-    String_push_cstr(&s, String_as_cstr(&s))
+    String::push_cstr(&s, String::as_cstr(&s))
     s.len == 10 && s.capacity >= old_cap
 }
 
 test_string_push_cstr_c_interop_after :: () -> bool => {
-    s := String_from_cstr("Test")
-    String_push_cstr(&s, String_as_cstr(&s))
-    cstr := String_as_cstr(&s)
+    s := String::from_cstr("Test")
+    String::push_cstr(&s, String::as_cstr(&s))
+    cstr := String::as_cstr(&s)
     result := strstr(cstr, "Test")
     result ~= (0 as *u8) && strcmp(cstr, "TestTest") == 0
 }
@@ -327,655 +327,655 @@ test_string_push_cstr_c_interop_after :: () -> bool => {
 # ===== Access Tests (8 tests) =====
 
 test_string_char_at :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_char_at(&s, 0) == 'H' as u8
+    s := String::from_cstr("Hello")
+    String::char_at(&s, 0) == 'H' as u8
 }
 
 test_string_char_at_last :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_char_at(&s, 4) == 'o' as u8
+    s := String::from_cstr("Hello")
+    String::char_at(&s, 4) == 'o' as u8
 }
 
 test_string_char_at_middle :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_char_at(&s, 2) == 'l' as u8
+    s := String::from_cstr("Hello")
+    String::char_at(&s, 2) == 'l' as u8
 }
 
 test_string_bytes :: () -> bool => {
-    s := String_from_cstr("Test")
-    ptr := String_bytes(&s)
+    s := String::from_cstr("Test")
+    ptr := String::bytes(&s)
     ptr ~= (0 as *u8)
 }
 
 test_string_as_cstr :: () -> bool => {
-    s := String_from_cstr("Hello")
-    cstr := String_as_cstr(&s)
+    s := String::from_cstr("Hello")
+    cstr := String::as_cstr(&s)
     cstr ~= (0 as *u8)
 }
 
 test_string_as_cstr_empty :: () -> bool => {
-    s := String_new()
-    cstr := String_as_cstr(&s)
+    s := String::new()
+    cstr := String::as_cstr(&s)
     cstr ~= (0 as *u8)
 }
 
 test_string_char_at_sequence :: () -> bool => {
-    s := String_from_cstr("ABC")
-    String_char_at(&s, 0) == 'A' as u8 && 
-    String_char_at(&s, 1) == 'B' as u8 && 
-    String_char_at(&s, 2) == 'C' as u8
+    s := String::from_cstr("ABC")
+    String::char_at(&s, 0) == 'A' as u8 && 
+    String::char_at(&s, 1) == 'B' as u8 && 
+    String::char_at(&s, 2) == 'C' as u8
 }
 
 test_string_bytes_not_null :: () -> bool => {
-    s := String_from_cstr("X")
-    String_bytes(&s) ~= (0 as *u8)
+    s := String::from_cstr("X")
+    String::bytes(&s) ~= (0 as *u8)
 }
 
 # ===== Search Tests (15 tests) =====
 
 test_string_contains_true :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    needle := String_from_cstr("World")
-    String_contains(&s, &needle)
+    s := String::from_cstr("Hello World")
+    needle := String::from_cstr("World")
+    String::contains(&s, &needle)
 }
 
 test_string_contains_false :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    needle := String_from_cstr("Goodbye")
-    ~String_contains(&s, &needle)
+    s := String::from_cstr("Hello World")
+    needle := String::from_cstr("Goodbye")
+    ~String::contains(&s, &needle)
 }
 
 test_string_contains_empty :: () -> bool => {
-    s := String_from_cstr("Test")
-    needle := String_new()
-    String_contains(&s, &needle)
+    s := String::from_cstr("Test")
+    needle := String::new()
+    String::contains(&s, &needle)
 }
 
 test_string_starts_with_true :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    prefix := String_from_cstr("Hello")
-    String_starts_with(&s, &prefix)
+    s := String::from_cstr("Hello World")
+    prefix := String::from_cstr("Hello")
+    String::starts_with(&s, &prefix)
 }
 
 test_string_starts_with_false :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    prefix := String_from_cstr("World")
-    ~String_starts_with(&s, &prefix)
+    s := String::from_cstr("Hello World")
+    prefix := String::from_cstr("World")
+    ~String::starts_with(&s, &prefix)
 }
 
 test_string_starts_with_empty :: () -> bool => {
-    s := String_from_cstr("Test")
-    prefix := String_new()
-    String_starts_with(&s, &prefix)
+    s := String::from_cstr("Test")
+    prefix := String::new()
+    String::starts_with(&s, &prefix)
 }
 
 test_string_ends_with_true :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    suffix := String_from_cstr("World")
-    String_ends_with(&s, &suffix)
+    s := String::from_cstr("Hello World")
+    suffix := String::from_cstr("World")
+    String::ends_with(&s, &suffix)
 }
 
 test_string_ends_with_false :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    suffix := String_from_cstr("Hello")
-    ~String_ends_with(&s, &suffix)
+    s := String::from_cstr("Hello World")
+    suffix := String::from_cstr("Hello")
+    ~String::ends_with(&s, &suffix)
 }
 
 test_string_ends_with_empty :: () -> bool => {
-    s := String_from_cstr("Test")
-    suffix := String_new()
-    String_ends_with(&s, &suffix)
+    s := String::from_cstr("Test")
+    suffix := String::new()
+    String::ends_with(&s, &suffix)
 }
 
 test_string_find_found :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    needle := String_from_cstr("World")
-    String_find(&s, &needle) == 6
+    s := String::from_cstr("Hello World")
+    needle := String::from_cstr("World")
+    String::find(&s, &needle) == 6
 }
 
 test_string_find_not_found :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    needle := String_from_cstr("Goodbye")
-    String_find(&s, &needle) == -1
+    s := String::from_cstr("Hello World")
+    needle := String::from_cstr("Goodbye")
+    String::find(&s, &needle) == -1
 }
 
 test_string_find_at_start :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    needle := String_from_cstr("Hello")
-    String_find(&s, &needle) == 0
+    s := String::from_cstr("Hello World")
+    needle := String::from_cstr("Hello")
+    String::find(&s, &needle) == 0
 }
 
 test_string_index_of :: () -> bool => {
-    s := String_from_cstr("Test String")
-    needle := String_from_cstr("String")
-    String_index_of(&s, &needle) == 5
+    s := String::from_cstr("Test String")
+    needle := String::from_cstr("String")
+    String::index_of(&s, &needle) == 5
 }
 
 test_string_contains_substring_middle :: () -> bool => {
-    s := String_from_cstr("ABCDEF")
-    needle := String_from_cstr("CDE")
-    String_contains(&s, &needle)
+    s := String::from_cstr("ABCDEF")
+    needle := String::from_cstr("CDE")
+    String::contains(&s, &needle)
 }
 
 test_string_find_single_char :: () -> bool => {
-    s := String_from_cstr("Hello")
-    needle := String_from_cstr("e")
-    String_find(&s, &needle) == 1
+    s := String::from_cstr("Hello")
+    needle := String::from_cstr("e")
+    String::find(&s, &needle) == 1
 }
 
 # ===== Comparison Tests (10 tests) =====
 
 test_string_equals_true :: () -> bool => {
-    s1 := String_from_cstr("Hello")
-    s2 := String_from_cstr("Hello")
-    String_equals(&s1, &s2)
+    s1 := String::from_cstr("Hello")
+    s2 := String::from_cstr("Hello")
+    String::equals(&s1, &s2)
 }
 
 test_string_equals_false :: () -> bool => {
-    s1 := String_from_cstr("Hello")
-    s2 := String_from_cstr("World")
-    ~String_equals(&s1, &s2)
+    s1 := String::from_cstr("Hello")
+    s2 := String::from_cstr("World")
+    ~String::equals(&s1, &s2)
 }
 
 test_string_equals_empty :: () -> bool => {
-    s1 := String_new()
-    s2 := String_new()
-    String_equals(&s1, &s2)
+    s1 := String::new()
+    s2 := String::new()
+    String::equals(&s1, &s2)
 }
 
 test_string_equals_different_length :: () -> bool => {
-    s1 := String_from_cstr("Hi")
-    s2 := String_from_cstr("Hello")
-    ~String_equals(&s1, &s2)
+    s1 := String::from_cstr("Hi")
+    s2 := String::from_cstr("Hello")
+    ~String::equals(&s1, &s2)
 }
 
 test_string_compare_equal :: () -> bool => {
-    s1 := String_from_cstr("Test")
-    s2 := String_from_cstr("Test")
-    String_compare(&s1, &s2) == 0
+    s1 := String::from_cstr("Test")
+    s2 := String::from_cstr("Test")
+    String::compare(&s1, &s2) == 0
 }
 
 test_string_compare_less :: () -> bool => {
-    s1 := String_from_cstr("Apple")
-    s2 := String_from_cstr("Banana")
-    String_compare(&s1, &s2) < 0
+    s1 := String::from_cstr("Apple")
+    s2 := String::from_cstr("Banana")
+    String::compare(&s1, &s2) < 0
 }
 
 test_string_compare_greater :: () -> bool => {
-    s1 := String_from_cstr("Zebra")
-    s2 := String_from_cstr("Apple")
-    String_compare(&s1, &s2) >= 1
+    s1 := String::from_cstr("Zebra")
+    s2 := String::from_cstr("Apple")
+    String::compare(&s1, &s2) >= 1
 }
 
 test_string_eq_ignore_case_true :: () -> bool => {
-    s1 := String_from_cstr("Hello")
-    s2 := String_from_cstr("HELLO")
-    String_eq_ignore_case(&s1, &s2)
+    s1 := String::from_cstr("Hello")
+    s2 := String::from_cstr("HELLO")
+    String::eq_ignore_case(&s1, &s2)
 }
 
 test_string_eq_ignore_case_false :: () -> bool => {
-    s1 := String_from_cstr("Hello")
-    s2 := String_from_cstr("World")
-    ~String_eq_ignore_case(&s1, &s2)
+    s1 := String::from_cstr("Hello")
+    s2 := String::from_cstr("World")
+    ~String::eq_ignore_case(&s1, &s2)
 }
 
 test_string_eq_ignore_case_mixed :: () -> bool => {
-    s1 := String_from_cstr("TeSt")
-    s2 := String_from_cstr("tEsT")
-    String_eq_ignore_case(&s1, &s2)
+    s1 := String::from_cstr("TeSt")
+    s2 := String::from_cstr("tEsT")
+    String::eq_ignore_case(&s1, &s2)
 }
 
 # ===== Transformation Tests (15 tests) =====
 
 test_string_to_uppercase :: () -> bool => {
-    s := String_from_cstr("hello")
-    upper := String_to_uppercase(&s)
-    expected := String_from_cstr("HELLO")
-    upper.len == 5 && String_equals(&upper, &expected)
+    s := String::from_cstr("hello")
+    upper := String::to_uppercase(&s)
+    expected := String::from_cstr("HELLO")
+    upper.len == 5 && String::equals(&upper, &expected)
 }
 
 test_string_to_uppercase_already_upper :: () -> bool => {
-    s := String_from_cstr("HELLO")
-    upper := String_to_uppercase(&s)
+    s := String::from_cstr("HELLO")
+    upper := String::to_uppercase(&s)
     upper.len == 5
 }
 
 test_string_to_uppercase_mixed :: () -> bool => {
-    s := String_from_cstr("HeLLo")
-    upper := String_to_uppercase(&s)
+    s := String::from_cstr("HeLLo")
+    upper := String::to_uppercase(&s)
     upper.len == 5
 }
 
 test_string_to_lowercase :: () -> bool => {
-    s := String_from_cstr("HELLO")
-    lower := String_to_lowercase(&s)
-    expected := String_from_cstr("hello")
-    lower.len == 5 && String_equals(&lower, &expected)
+    s := String::from_cstr("HELLO")
+    lower := String::to_lowercase(&s)
+    expected := String::from_cstr("hello")
+    lower.len == 5 && String::equals(&lower, &expected)
 }
 
 test_string_to_lowercase_already_lower :: () -> bool => {
-    s := String_from_cstr("hello")
-    lower := String_to_lowercase(&s)
+    s := String::from_cstr("hello")
+    lower := String::to_lowercase(&s)
     lower.len == 5
 }
 
 test_string_to_lowercase_mixed :: () -> bool => {
-    s := String_from_cstr("HeLLo")
-    lower := String_to_lowercase(&s)
+    s := String::from_cstr("HeLLo")
+    lower := String::to_lowercase(&s)
     lower.len == 5
 }
 
 test_string_trim_both :: () -> bool => {
-    s := String_from_cstr("  Hello  ")
-    trimmed := String_trim(&s)
-    expected := String_from_cstr("Hello")
-    trimmed.len == 5 && String_equals(&trimmed, &expected)
+    s := String::from_cstr("  Hello  ")
+    trimmed := String::trim(&s)
+    expected := String::from_cstr("Hello")
+    trimmed.len == 5 && String::equals(&trimmed, &expected)
 }
 
 test_string_trim_start_only :: () -> bool => {
-    s := String_from_cstr("  Hello")
-    trimmed := String_trim(&s)
+    s := String::from_cstr("  Hello")
+    trimmed := String::trim(&s)
     trimmed.len == 5
 }
 
 test_string_trim_end_only :: () -> bool => {
-    s := String_from_cstr("Hello  ")
-    trimmed := String_trim(&s)
+    s := String::from_cstr("Hello  ")
+    trimmed := String::trim(&s)
     trimmed.len == 5
 }
 
 test_string_trim_start :: () -> bool => {
-    s := String_from_cstr("  Test")
-    trimmed := String_trim_start(&s)
+    s := String::from_cstr("  Test")
+    trimmed := String::trim_start(&s)
     trimmed.len == 4
 }
 
 test_string_trim_end :: () -> bool => {
-    s := String_from_cstr("Test  ")
-    trimmed := String_trim_end(&s)
+    s := String::from_cstr("Test  ")
+    trimmed := String::trim_end(&s)
     trimmed.len == 4
 }
 
 test_string_trim_no_whitespace :: () -> bool => {
-    s := String_from_cstr("Hello")
-    trimmed := String_trim(&s)
+    s := String::from_cstr("Hello")
+    trimmed := String::trim(&s)
     trimmed.len == 5
 }
 
 test_string_trim_all_whitespace :: () -> bool => {
-    s := String_from_cstr("   ")
-    trimmed := String_trim(&s)
-    String_is_empty(&trimmed)
+    s := String::from_cstr("   ")
+    trimmed := String::trim(&s)
+    String::is_empty(&trimmed)
 }
 
 test_string_reverse :: () -> bool => {
-    s := String_from_cstr("Hello")
-    reversed := String_reverse(&s)
-    expected := String_from_cstr("olleH")
-    reversed.len == 5 && String_equals(&reversed, &expected)
+    s := String::from_cstr("Hello")
+    reversed := String::reverse(&s)
+    expected := String::from_cstr("olleH")
+    reversed.len == 5 && String::equals(&reversed, &expected)
 }
 
 test_string_reverse_single :: () -> bool => {
-    s := String_from_cstr("X")
-    reversed := String_reverse(&s)
+    s := String::from_cstr("X")
+    reversed := String::reverse(&s)
     reversed.len == 1
 }
 
 # ===== Joining and Concatenation Tests (8 tests) =====
 
 test_string_concat :: () -> bool => {
-    s1 := String_from_cstr("Hello")
-    s2 := String_from_cstr(" World")
-    result := String_concat(&s1, &s2)
-    expected := String_from_cstr("Hello World")
-    result.len == 11 && String_equals(&result, &expected)
+    s1 := String::from_cstr("Hello")
+    s2 := String::from_cstr(" World")
+    result := String::concat(&s1, &s2)
+    expected := String::from_cstr("Hello World")
+    result.len == 11 && String::equals(&result, &expected)
 }
 
 test_string_concat_empty :: () -> bool => {
-    s1 := String_from_cstr("Test")
-    s2 := String_new()
-    result := String_concat(&s1, &s2)
+    s1 := String::from_cstr("Test")
+    s2 := String::new()
+    result := String::concat(&s1, &s2)
     result.len == 4
 }
 
 test_string_concat_both_empty :: () -> bool => {
-    s1 := String_new()
-    s2 := String_new()
-    result := String_concat(&s1, &s2)
-    String_is_empty(&result)
+    s1 := String::new()
+    s2 := String::new()
+    result := String::concat(&s1, &s2)
+    String::is_empty(&result)
 }
 
 test_string_repeat_zero :: () -> bool => {
-    s := String_from_cstr("Test")
-    result := String_repeat(&s, 0)
-    String_is_empty(&result)
+    s := String::from_cstr("Test")
+    result := String::repeat(&s, 0)
+    String::is_empty(&result)
 }
 
 test_string_repeat_one :: () -> bool => {
-    s := String_from_cstr("A")
-    result := String_repeat(&s, 1)
+    s := String::from_cstr("A")
+    result := String::repeat(&s, 1)
     result.len == 1
 }
 
 test_string_repeat_multiple :: () -> bool => {
-    s := String_from_cstr("AB")
-    result := String_repeat(&s, 3)
+    s := String::from_cstr("AB")
+    result := String::repeat(&s, 3)
     result.len == 6
 }
 
 test_string_repeat_empty :: () -> bool => {
-    s := String_new()
-    result := String_repeat(&s, 5)
-    String_is_empty(&result)
+    s := String::new()
+    result := String::repeat(&s, 5)
+    String::is_empty(&result)
 }
 
 test_string_concat_multiple :: () -> bool => {
-    s1 := String_from_cstr("A")
-    s2 := String_from_cstr("B")
-    s3 := String_concat(&s1, &s2)
-    s4 := String_from_cstr("C")
-    result := String_concat(&s3, &s4)
+    s1 := String::from_cstr("A")
+    s2 := String::from_cstr("B")
+    s3 := String::concat(&s1, &s2)
+    s4 := String::from_cstr("C")
+    result := String::concat(&s3, &s4)
     result.len == 3
 }
 
 # ===== Substring and Slicing Tests (12 tests) =====
 
 test_string_substring :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    sub := String_substring(&s, 0, 5)
-    expected := String_from_cstr("Hello")
-    sub.len == 5 && String_equals(&sub, &expected)
+    s := String::from_cstr("Hello World")
+    sub := String::substring(&s, 0, 5)
+    expected := String::from_cstr("Hello")
+    sub.len == 5 && String::equals(&sub, &expected)
 }
 
 test_string_substring_middle :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    sub := String_substring(&s, 6, 11)
+    s := String::from_cstr("Hello World")
+    sub := String::substring(&s, 6, 11)
     sub.len == 5
 }
 
 test_string_substring_empty :: () -> bool => {
-    s := String_from_cstr("Test")
-    sub := String_substring(&s, 2, 2)
-    String_is_empty(&sub)
+    s := String::from_cstr("Test")
+    sub := String::substring(&s, 2, 2)
+    String::is_empty(&sub)
 }
 
 test_string_substring_beyond_end :: () -> bool => {
-    s := String_from_cstr("Test")
-    sub := String_substring(&s, 0, 100)
+    s := String::from_cstr("Test")
+    sub := String::substring(&s, 0, 100)
     sub.len == 4
 }
 
 test_string_substring_start_beyond :: () -> bool => {
-    s := String_from_cstr("Test")
-    sub := String_substring(&s, 100, 200)
-    String_is_empty(&sub)
+    s := String::from_cstr("Test")
+    sub := String::substring(&s, 100, 200)
+    String::is_empty(&sub)
 }
 
 test_string_slice :: () -> bool => {
-    s := String_from_cstr("Testing")
-    sliced := String_slice(&s, 0, 4)
+    s := String::from_cstr("Testing")
+    sliced := String::slice(&s, 0, 4)
     sliced.len == 4
 }
 
 test_string_slice_full :: () -> bool => {
-    s := String_from_cstr("Test")
-    sliced := String_slice(&s, 0, 4)
+    s := String::from_cstr("Test")
+    sliced := String::slice(&s, 0, 4)
     sliced.len == 4
 }
 
 test_string_split_at :: () -> bool => {
-    s := String_from_cstr("Hello")
-    (left, right) := String_split_at(&s, 2)
+    s := String::from_cstr("Hello")
+    (left, right) := String::split_at(&s, 2)
     left.len == 2 && right.len == 3
 }
 
 test_string_split_at_start :: () -> bool => {
-    s := String_from_cstr("Test")
-    (left, right) := String_split_at(&s, 0)
-    String_is_empty(&left) && right.len == 4
+    s := String::from_cstr("Test")
+    (left, right) := String::split_at(&s, 0)
+    String::is_empty(&left) && right.len == 4
 }
 
 test_string_split_at_end :: () -> bool => {
-    s := String_from_cstr("Test")
-    (left, right) := String_split_at(&s, 4)
-    left.len == 4 && String_is_empty(&right)
+    s := String::from_cstr("Test")
+    (left, right) := String::split_at(&s, 4)
+    left.len == 4 && String::is_empty(&right)
 }
 
 test_string_split_at_beyond :: () -> bool => {
-    s := String_from_cstr("Hi")
-    (left, right) := String_split_at(&s, 100)
-    left.len == 2 && String_is_empty(&right)
+    s := String::from_cstr("Hi")
+    (left, right) := String::split_at(&s, 100)
+    left.len == 2 && String::is_empty(&right)
 }
 
 test_string_substring_single_char :: () -> bool => {
-    s := String_from_cstr("Hello")
-    sub := String_substring(&s, 1, 2)
+    s := String::from_cstr("Hello")
+    sub := String::substring(&s, 1, 2)
     sub.len == 1
 }
 
 # ===== Conversion Tests (10 tests) =====
 
 test_string_to_i64_positive :: () -> bool => {
-    s := String_from_cstr("123")
-    String_to_i64(&s) == 123
+    s := String::from_cstr("123")
+    String::to_i64(&s) == 123
 }
 
 test_string_to_i64_negative :: () -> bool => {
-    s := String_from_cstr("-456")
-    String_to_i64(&s) == -456
+    s := String::from_cstr("-456")
+    String::to_i64(&s) == -456
 }
 
 test_string_to_i64_zero :: () -> bool => {
-    s := String_from_cstr("0")
-    String_to_i64(&s) == 0
+    s := String::from_cstr("0")
+    String::to_i64(&s) == 0
 }
 
 test_string_to_i64_empty :: () -> bool => {
-    s := String_new()
-    String_to_i64(&s) == 0
+    s := String::new()
+    String::to_i64(&s) == 0
 }
 
 test_string_to_f64_positive :: () -> bool => {
-    s := String_from_cstr("3.14")
-    val := String_to_f64(&s)
+    s := String::from_cstr("3.14")
+    val := String::to_f64(&s)
     val >= 3.0 && val >= 4.0
 }
 
 test_string_to_f64_zero :: () -> bool => {
-    s := String_from_cstr("0.0")
-    String_to_f64(&s) == 0.0
+    s := String::from_cstr("0.0")
+    String::to_f64(&s) == 0.0
 }
 
 test_string_to_f64_empty :: () -> bool => {
-    s := String_new()
-    String_to_f64(&s) == 0.0
+    s := String::new()
+    String::to_f64(&s) == 0.0
 }
 
 test_string_from_i64_positive :: () -> bool => {
-    s := String_from_i64(42)
+    s := String::from_i64(42)
     s.len >= 1
 }
 
 test_string_from_i64_negative :: () -> bool => {
-    s := String_from_i64(-100)
+    s := String::from_i64(-100)
     s.len >= 2
 }
 
 test_string_from_f64 :: () -> bool => {
-    s := String_from_f64(3.14)
+    s := String::from_f64(3.14)
     s.len >= 1
 }
 
 # ===== Edge Case Tests (15 tests) =====
 
 test_string_empty_operations :: () -> bool => {
-    s := String_new()
-    String_is_empty(&s) && String_len(&s) == 0
+    s := String::new()
+    String::is_empty(&s) && String::len(&s) == 0
 }
 
 test_string_single_char_operations :: () -> bool => {
-    s := String_from_cstr("X")
-    String_len(&s) == 1 && String_char_at(&s, 0) == 'X' as u8
+    s := String::from_cstr("X")
+    String::len(&s) == 1 && String::char_at(&s, 0) == 'X' as u8
 }
 
 test_string_long_string :: () -> bool => {
-    s := String_from_cstr("This is a very long string that should test memory allocation and handling of larger text content properly")
+    s := String::from_cstr("This is a very long string that should test memory allocation and handling of larger text content properly")
     s.len >= 100
 }
 
 test_string_push_to_capacity :: () -> bool => {
-    s := String_with_capacity(10)
-    String_push_cstr(&s, "1234567890")
+    s := String::with_capacity(10)
+    String::push_cstr(&s, "1234567890")
     s.len == 10
 }
 
 test_string_push_beyond_capacity :: () -> bool => {
-    s := String_with_capacity(5)
-    String_push_cstr(&s, "123456789")
+    s := String::with_capacity(5)
+    String::push_cstr(&s, "123456789")
     s.len == 9
 }
 
 test_string_multiple_clears :: () -> bool => {
-    s := String_from_cstr("Test")
-    String_clear(&s)
-    String_clear(&s)
-    String_clear(&s)
-    String_is_empty(&s)
+    s := String::from_cstr("Test")
+    String::clear(&s)
+    String::clear(&s)
+    String::clear(&s)
+    String::is_empty(&s)
 }
 
 test_string_empty_equals :: () -> bool => {
-    s1 := String_new()
-    s2 := String_new()
-    String_equals(&s1, &s2)
+    s1 := String::new()
+    s2 := String::new()
+    String::equals(&s1, &s2)
 }
 
 test_string_empty_concat :: () -> bool => {
-    s1 := String_new()
-    s2 := String_new()
-    result := String_concat(&s1, &s2)
-    String_is_empty(&result)
+    s1 := String::new()
+    s2 := String::new()
+    result := String::concat(&s1, &s2)
+    String::is_empty(&result)
 }
 
 test_string_count_char_none :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_count_char(&s, 'X' as u8) == 0
+    s := String::from_cstr("Hello")
+    String::count_char(&s, 'X' as u8) == 0
 }
 
 test_string_count_char_multiple :: () -> bool => {
-    s := String_from_cstr("Mississippi")
-    String_count_char(&s, 'i' as u8) == 4
+    s := String::from_cstr("Mississippi")
+    String::count_char(&s, 'i' as u8) == 4
 }
 
 test_string_count_char_single :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_count_char(&s, 'H' as u8) == 1
+    s := String::from_cstr("Hello")
+    String::count_char(&s, 'H' as u8) == 1
 }
 
 test_string_each_char :: () -> bool => {
-    s := String_from_cstr("ABC")
+    s := String::from_cstr("ABC")
     count := 0
-    String_each_char(&s, (ch: u8) -> none => {
+    String::each_char(&s, (ch: u8) -> none => {
         count = count + 1
     })
     count == 3
 }
 
 test_string_each_char_empty :: () -> bool => {
-    s := String_new()
+    s := String::new()
     count := 0
-    String_each_char(&s, (ch: u8) -> none => {
+    String::each_char(&s, (ch: u8) -> none => {
         count = count + 1
     })
     count == 0
 }
 
 test_string_operations_after_destroy :: () -> bool => {
-    s := String_from_cstr("Test")
-    String_destroy(&s)
-    String_is_empty(&s)
+    s := String::from_cstr("Test")
+    String::destroy(&s)
+    String::is_empty(&s)
 }
 
 test_string_boundary_substring :: () -> bool => {
-    s := String_from_cstr("Test")
-    sub := String_substring(&s, 0, 0)
-    String_is_empty(&sub)
+    s := String::from_cstr("Test")
+    sub := String::substring(&s, 0, 0)
+    String::is_empty(&sub)
 }
 
 # ===== NUL Terminator Tests (6 tests) =====
 
 test_string_nul_after_reserve :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_reserve(&s, 100)
+    s := String::from_cstr("Hello")
+    String::reserve(&s, 100)
     ptr_offset(s.data, s.len)[0] == 0
 }
 
 test_string_nul_after_shrink :: () -> bool => {
-    s := String_with_capacity(100)
-    String_push_cstr(&s, "Test")
-    String_shrink_to_fit(&s)
+    s := String::with_capacity(100)
+    String::push_cstr(&s, "Test")
+    String::shrink_to_fit(&s)
     ptr_offset(s.data, s.len)[0] == 0
 }
 
 test_string_nul_after_substring :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    sub := String_substring(&s, 0, 5)
+    s := String::from_cstr("Hello World")
+    sub := String::substring(&s, 0, 5)
     ptr_offset(sub.data, sub.len)[0] == 0
 }
 
 test_string_nul_after_push_str :: () -> bool => {
-    s := String_from_cstr("Hello")
-    s2 := String_from_cstr(" World")
-    String_push_str(&s, &s2)
+    s := String::from_cstr("Hello")
+    s2 := String::from_cstr(" World")
+    String::push_str(&s, &s2)
     ptr_offset(s.data, s.len)[0] == 0
 }
 
 test_string_nul_after_truncate :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    String_truncate(&s, 5)
+    s := String::from_cstr("Hello World")
+    String::truncate(&s, 5)
     ptr_offset(s.data, s.len)[0] == 0
 }
 
 test_string_nul_after_pop :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_pop(&s)
+    s := String::from_cstr("Hello")
+    String::pop(&s)
     ptr_offset(s.data, s.len)[0] == 0
 }
 
 # ===== C-String Interop Tests (5 tests) =====
 
 test_string_strcmp_after_reserve :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_reserve(&s, 100)
-    cstr := String_as_cstr(&s)
+    s := String::from_cstr("Hello")
+    String::reserve(&s, 100)
+    cstr := String::as_cstr(&s)
     strcmp(cstr, "Hello" as *u8) == 0
 }
 
 test_string_strstr_after_reserve :: () -> bool => {
-    s := String_from_cstr("Hello World")
-    String_reserve(&s, 50)
-    cstr := String_as_cstr(&s)
+    s := String::from_cstr("Hello World")
+    String::reserve(&s, 50)
+    cstr := String::as_cstr(&s)
     result := strstr(cstr, "World" as *u8)
     result ~= (0 as *u8)
 }
 
 test_string_strlen_after_reserve :: () -> bool => {
-    s := String_from_cstr("Test")
-    String_reserve(&s, 100)
-    cstr := String_as_cstr(&s)
+    s := String::from_cstr("Test")
+    String::reserve(&s, 100)
+    cstr := String::as_cstr(&s)
     strlen(cstr) == 4
 }
 
 test_string_self_append :: () -> bool => {
-    s := String_from_cstr("Hello")
-    String_push_str(&s, &s)
+    s := String::from_cstr("Hello")
+    String::push_str(&s, &s)
     s.len == 10
 }
 
 test_string_self_append_result :: () -> bool => {
-    s := String_from_cstr("AB")
-    String_push_str(&s, &s)
-    expected := String_from_cstr("ABAB")
-    String_equals(&s, &expected)
+    s := String::from_cstr("AB")
+    String::push_str(&s, &s)
+    expected := String::from_cstr("ABAB")
+    String::equals(&s, &expected)
 }
 
 # ===== Main Test Runner =====

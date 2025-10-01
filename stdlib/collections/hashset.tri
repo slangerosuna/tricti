@@ -12,295 +12,316 @@ HashSet<T> :: struct {
 # Constants
 HASHSET_INITIAL_CAPACITY :: 16
 
-# Constructor: Create new empty HashSet
-HashSet_new :: <T>() -> HashSet<T> => {
-    {
-        map: HashMap_new::<T, bool>()
-    }
-}
-
-# Constructor: Create HashSet with specific capacity
-HashSet_with_capacity :: <T>(cap: u64) -> HashSet<T> => {
-    {
-        map: HashMap_with_capacity::<T, bool>(cap)
-    }
-}
-
-# Get length (number of elements)
-HashSet_len :: <T>(set: *HashSet<T>) -> u64 => {
-    HashMap_len::<T, bool>(&set.map)
-}
-
-# Check if empty
-HashSet_is_empty :: <T>(set: *HashSet<T>) -> bool => {
-    HashMap_is_empty::<T, bool>(&set.map)
-}
-
-# Get capacity
-HashSet_capacity :: <T>(set: *HashSet<T>) -> u64 => {
-    HashMap_capacity::<T, bool>(&set.map)
-}
-
-# Get current load factor
-HashSet_load :: <T>(set: *HashSet<T>) -> f64 => {
-    HashMap_load::<T, bool>(&set.map)
-}
-
-# Reserve capacity for additional elements
-HashSet_reserve :: <T>(set: *HashSet<T>, additional: u64) -> none => {
-    HashMap_reserve::<T, bool>(&set.map, additional)
-}
-
-# Shrink capacity to fit current size
-HashSet_shrink_to_fit :: <T>(set: *HashSet<T>) -> none => {
-    HashMap_shrink_to_fit::<T, bool>(&set.map)
-}
-
-# Insert element (returns true if newly inserted)
-HashSet_insert :: <T>(set: *HashSet<T>, value: T) -> bool => {
-    contained := HashMap_contains_key::<T, bool>(&set.map, value)
-    HashMap_insert::<T, bool>(&set.map, value, true)
-    !contained
-}
-
-# Check if contains element
-HashSet_contains :: <T>(set: *HashSet<T>, value: T) -> bool => {
-    HashMap_contains_key::<T, bool>(&set.map, value)
-}
-
-# Remove element (returns true if was present)
-HashSet_remove :: <T>(set: *HashSet<T>, value: T) -> bool => {
-    HashMap_remove::<T, bool>(&set.map, value)
-}
-
-# Clear all elements
-HashSet_clear :: <T>(set: *HashSet<T>) -> none => {
-    HashMap_clear::<T, bool>(&set.map)
-}
-
-# Iterate with callback
-HashSet_each :: <T>(set: *HashSet<T>, callback: (T) -> none) -> none => {
-    HashMap_each_key::<T, bool>(&set.map, callback)
-}
-
-# Get element at index (for iteration)
-HashSet_element_at :: <T>(set: *HashSet<T>, idx: u64) -> T => {
-    HashMap_key_at::<T, bool>(&set.map, idx)
-}
-
-# Clone/copy the set
-HashSet_clone :: <T>(set: *HashSet<T>) -> HashSet<T> => {
-    {
-        map: HashMap_clone::<T, bool>(&set.map)
-    }
-}
-
-# Destroy and free memory
-HashSet_destroy :: <T>(set: *HashSet<T>) -> none => {
-    HashMap_destroy::<T, bool>(&set.map)
-}
-
-# Set union: elements in either set
-HashSet_union :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> HashSet<T> => {
-    result := HashSet_clone::<T>(set1)
-    
-    for i in 0:set2.map.capacity {
-        if set2.map.buckets[i].occupied {
-            HashSet_insert::<T>(&result, set2.map.buckets[i].key)
+# HashSet implementation with associated functions
+impl HashSet {
+    # Constructor: Create new empty HashSet
+    new :: <T>() -> HashSet<T> => {
+        {
+            map: HashMap::new::<T, bool>()
         }
     }
-    
-    result
-}
 
-# Set intersection: elements in both sets
-HashSet_intersection :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> HashSet<T> => {
-    result := HashSet_new::<T>()
-    
-    for i in 0:set1.map.capacity {
-        if set1.map.buckets[i].occupied {
-            elem := set1.map.buckets[i].key
-            if HashSet_contains::<T>(set2, elem) {
-                HashSet_insert::<T>(&result, elem)
+    # Constructor: Create HashSet with specific capacity
+    with_capacity :: <T>(cap: u64) -> HashSet<T> => {
+        {
+            map: HashMap::with_capacity::<T, bool>(cap)
+        }
+    }
+
+    # Get length (number of elements)
+    len :: <T>(self: *HashSet<T>) -> u64 => {
+        HashMap::len::<T, bool>(&self.map)
+    }
+
+    # Check if empty
+    is_empty :: <T>(self: *HashSet<T>) -> bool => {
+        HashMap::is_empty::<T, bool>(&self.map)
+    }
+
+    # Get capacity
+    capacity :: <T>(self: *HashSet<T>) -> u64 => {
+        HashMap::capacity::<T, bool>(&self.map)
+    }
+
+    # Get current load factor
+    load :: <T>(self: *HashSet<T>) -> f64 => {
+        HashMap::load::<T, bool>(&self.map)
+    }
+
+    # Reserve capacity for additional elements
+    reserve :: <T>(self: *HashSet<T>, additional: u64) -> none 
+        where T: Hash + Eq => {
+        HashMap::reserve::<T, bool>(&self.map, additional)
+    }
+
+    # Shrink capacity to fit current size
+    shrink_to_fit :: <T>(self: *HashSet<T>) -> none 
+        where T: Hash + Eq => {
+        HashMap::shrink_to_fit::<T, bool>(&self.map)
+    }
+
+    # Insert element (returns true if newly inserted)
+    insert :: <T>(self: *HashSet<T>, value: T) -> bool 
+        where T: Hash + Eq => {
+        contained := HashMap::contains_key::<T, bool>(&self.map, value)
+        HashMap::insert::<T, bool>(&self.map, value, true)
+        !contained
+    }
+
+    # Check if contains element
+    contains :: <T>(self: *HashSet<T>, value: T) -> bool 
+        where T: Hash + Eq => {
+        HashMap::contains_key::<T, bool>(&self.map, value)
+    }
+
+    # Remove element (returns true if was present)
+    remove :: <T>(self: *HashSet<T>, value: T) -> bool 
+        where T: Hash + Eq => {
+        HashMap::remove::<T, bool>(&self.map, value)
+    }
+
+    # Clear all elements
+    clear :: <T>(self: *HashSet<T>) -> none => {
+        HashMap::clear::<T, bool>(&self.map)
+    }
+
+    # Iterate with callback
+    each :: <T>(self: *HashSet<T>, callback: (T) -> none) -> none => {
+        HashMap::each_key::<T, bool>(&self.map, callback)
+    }
+
+    # Get element at index (for iteration)
+    element_at :: <T>(self: *HashSet<T>, idx: u64) -> T => {
+        HashMap::key_at::<T, bool>(&self.map, idx)
+    }
+
+    # Clone/copy the set
+    clone :: <T>(self: *HashSet<T>) -> HashSet<T> 
+        where T: Hash + Eq => {
+        {
+            map: HashMap::clone::<T, bool>(&self.map)
+        }
+    }
+
+    # Destroy and free memory
+    destroy :: <T>(self: *HashSet<T>) -> none => {
+        HashMap::destroy::<T, bool>(&self.map)
+    }
+
+    # Set union: elements in either set
+    union :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> HashSet<T> 
+        where T: Hash + Eq => {
+        result := HashSet::clone::<T>(set1)
+        
+        for i in 0:set2.map.capacity {
+            if set2.map.buckets[i].occupied {
+                HashSet::insert::<T>(&result, set2.map.buckets[i].key)
+            }
+        }
+        
+        result
+    }
+
+    # Set intersection: elements in both sets
+    intersection :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> HashSet<T> 
+        where T: Hash + Eq => {
+        result := HashSet::new::<T>()
+        
+        for i in 0:set1.map.capacity {
+            if set1.map.buckets[i].occupied {
+                elem := set1.map.buckets[i].key
+                if HashSet::contains::<T>(set2, elem) {
+                    HashSet::insert::<T>(&result, elem)
+                }
+            }
+        }
+        
+        result
+    }
+
+    # Set difference: elements in first set but not second
+    difference :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> HashSet<T> 
+        where T: Hash + Eq => {
+        result := HashSet::new::<T>()
+        
+        for i in 0:set1.map.capacity {
+            if set1.map.buckets[i].occupied {
+                elem := set1.map.buckets[i].key
+                if !HashSet::contains::<T>(set2, elem) {
+                    HashSet::insert::<T>(&result, elem)
+                }
+            }
+        }
+        
+        result
+    }
+
+    # Set symmetric difference: elements in either set but not both
+    symmetric_difference :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> HashSet<T> 
+        where T: Hash + Eq => {
+        result := HashSet::new::<T>()
+        
+        for i in 0:set1.map.capacity {
+            if set1.map.buckets[i].occupied {
+                elem := set1.map.buckets[i].key
+                if !HashSet::contains::<T>(set2, elem) {
+                    HashSet::insert::<T>(&result, elem)
+                }
+            }
+        }
+        
+        for i in 0:set2.map.capacity {
+            if set2.map.buckets[i].occupied {
+                elem := set2.map.buckets[i].key
+                if !HashSet::contains::<T>(set1, elem) {
+                    HashSet::insert::<T>(&result, elem)
+                }
+            }
+        }
+        
+        result
+    }
+
+    # Check if subset (all elements of set1 are in set2)
+    is_subset :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool 
+        where T: Hash + Eq => {
+        if HashSet::len::<T>(set1) > HashSet::len::<T>(set2) {
+            ret false
+        }
+        
+        for i in 0:set1.map.capacity {
+            if set1.map.buckets[i].occupied {
+                elem := set1.map.buckets[i].key
+                if !HashSet::contains::<T>(set2, elem) {
+                    ret false
+                }
+            }
+        }
+        
+        true
+    }
+
+    # Check if superset (all elements of set2 are in set1)
+    is_superset :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool 
+        where T: Hash + Eq => {
+        HashSet::is_subset::<T>(set2, set1)
+    }
+
+    # Check if disjoint (no common elements)
+    is_disjoint :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool 
+        where T: Hash + Eq => {
+        for i in 0:set1.map.capacity {
+            if set1.map.buckets[i].occupied {
+                elem := set1.map.buckets[i].key
+                if HashSet::contains::<T>(set2, elem) {
+                    ret false
+                }
+            }
+        }
+        
+        true
+    }
+
+    # Retain only elements matching predicate
+    retain :: <T>(self: *HashSet<T>, predicate: (T) -> bool) -> none 
+        where T: Hash + Eq => {
+        for i in 0:self.map.capacity {
+            if self.map.buckets[i].occupied {
+                elem := self.map.buckets[i].key
+                if !predicate(elem) {
+                    HashSet::remove::<T>(self, elem)
+                }
             }
         }
     }
-    
-    result
-}
 
-# Set difference: elements in first set but not second
-HashSet_difference :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> HashSet<T> => {
-    result := HashSet_new::<T>()
-    
-    for i in 0:set1.map.capacity {
-        if set1.map.buckets[i].occupied {
-            elem := set1.map.buckets[i].key
-            if !HashSet_contains::<T>(set2, elem) {
-                HashSet_insert::<T>(&result, elem)
+    # Check if any element matches predicate
+    any :: <T>(self: *HashSet<T>, predicate: (T) -> bool) -> bool => {
+        for i in 0:self.map.capacity {
+            if self.map.buckets[i].occupied {
+                if predicate(self.map.buckets[i].key) {
+                    ret true
+                }
+            }
+        }
+        false
+    }
+
+    # Check if all elements match predicate
+    all :: <T>(self: *HashSet<T>, predicate: (T) -> bool) -> bool => {
+        for i in 0:self.map.capacity {
+            if self.map.buckets[i].occupied {
+                if !predicate(self.map.buckets[i].key) {
+                    ret false
+                }
+            }
+        }
+        true
+    }
+
+    # Count elements matching predicate
+    count_if :: <T>(self: *HashSet<T>, predicate: (T) -> bool) -> u64 => {
+        count := 0
+        for i in 0:self.map.capacity {
+            if self.map.buckets[i].occupied {
+                if predicate(self.map.buckets[i].key) {
+                    count = count + 1
+                }
+            }
+        }
+        count
+    }
+
+    # Find first element matching predicate
+    find :: <T>(self: *HashSet<T>, predicate: (T) -> bool) -> *T => {
+        for i in 0:self.map.capacity {
+            if self.map.buckets[i].occupied {
+                if predicate(self.map.buckets[i].key) {
+                    ret &self.map.buckets[i].key
+                }
+            }
+        }
+        0 as *T
+    }
+
+    # Extend with elements from another set
+    extend :: <T>(self: *HashSet<T>, other: *HashSet<T>) -> none 
+        where T: Hash + Eq => {
+        for i in 0:other.map.capacity {
+            if other.map.buckets[i].occupied {
+                HashSet::insert::<T>(self, other.map.buckets[i].key)
             }
         }
     }
-    
-    result
-}
 
-# Set symmetric difference: elements in either set but not both
-HashSet_symmetric_difference :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> HashSet<T> => {
-    result := HashSet_new::<T>()
-    
-    for i in 0:set1.map.capacity {
-        if set1.map.buckets[i].occupied {
-            elem := set1.map.buckets[i].key
-            if !HashSet_contains::<T>(set2, elem) {
-                HashSet_insert::<T>(&result, elem)
-            }
+    # Check equality (same elements)
+    equals :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool 
+        where T: Hash + Eq => {
+        if HashSet::len::<T>(set1) ~= HashSet::len::<T>(set2) {
+            ret false
         }
+        
+        HashSet::is_subset::<T>(set1, set2)
     }
-    
-    for i in 0:set2.map.capacity {
-        if set2.map.buckets[i].occupied {
-            elem := set2.map.buckets[i].key
-            if !HashSet_contains::<T>(set1, elem) {
-                HashSet_insert::<T>(&result, elem)
-            }
+
+    # Get number of elements (alias for len)
+    size :: <T>(self: *HashSet<T>) -> u64 => {
+        HashSet::len::<T>(self)
+    }
+
+    # Check if set is proper subset
+    is_proper_subset :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool 
+        where T: Hash + Eq => {
+        if HashSet::len::<T>(set1) >= HashSet::len::<T>(set2) {
+            ret false
         }
+        
+        HashSet::is_subset::<T>(set1, set2)
     }
-    
-    result
-}
 
-# Check if subset (all elements of set1 are in set2)
-HashSet_is_subset :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool => {
-    if HashSet_len::<T>(set1) > HashSet_len::<T>(set2) {
-        ret false
+    # Check if set is proper superset
+    is_proper_superset :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool 
+        where T: Hash + Eq => {
+        HashSet::is_proper_subset::<T>(set2, set1)
     }
-    
-    for i in 0:set1.map.capacity {
-        if set1.map.buckets[i].occupied {
-            elem := set1.map.buckets[i].key
-            if !HashSet_contains::<T>(set2, elem) {
-                ret false
-            }
-        }
-    }
-    
-    true
-}
-
-# Check if superset (all elements of set2 are in set1)
-HashSet_is_superset :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool => {
-    HashSet_is_subset::<T>(set2, set1)
-}
-
-# Check if disjoint (no common elements)
-HashSet_is_disjoint :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool => {
-    for i in 0:set1.map.capacity {
-        if set1.map.buckets[i].occupied {
-            elem := set1.map.buckets[i].key
-            if HashSet_contains::<T>(set2, elem) {
-                ret false
-            }
-        }
-    }
-    
-    true
-}
-
-# Retain only elements matching predicate
-HashSet_retain :: <T>(set: *HashSet<T>, predicate: (T) -> bool) -> none => {
-    for i in 0:set.map.capacity {
-        if set.map.buckets[i].occupied {
-            elem := set.map.buckets[i].key
-            if !predicate(elem) {
-                HashSet_remove::<T>(set, elem)
-            }
-        }
-    }
-}
-
-# Check if any element matches predicate
-HashSet_any :: <T>(set: *HashSet<T>, predicate: (T) -> bool) -> bool => {
-    for i in 0:set.map.capacity {
-        if set.map.buckets[i].occupied {
-            if predicate(set.map.buckets[i].key) {
-                ret true
-            }
-        }
-    }
-    false
-}
-
-# Check if all elements match predicate
-HashSet_all :: <T>(set: *HashSet<T>, predicate: (T) -> bool) -> bool => {
-    for i in 0:set.map.capacity {
-        if set.map.buckets[i].occupied {
-            if !predicate(set.map.buckets[i].key) {
-                ret false
-            }
-        }
-    }
-    true
-}
-
-# Count elements matching predicate
-HashSet_count_if :: <T>(set: *HashSet<T>, predicate: (T) -> bool) -> u64 => {
-    count := 0
-    for i in 0:set.map.capacity {
-        if set.map.buckets[i].occupied {
-            if predicate(set.map.buckets[i].key) {
-                count = count + 1
-            }
-        }
-    }
-    count
-}
-
-# Find first element matching predicate
-HashSet_find :: <T>(set: *HashSet<T>, predicate: (T) -> bool) -> *T => {
-    for i in 0:set.map.capacity {
-        if set.map.buckets[i].occupied {
-            if predicate(set.map.buckets[i].key) {
-                ret &set.map.buckets[i].key
-            }
-        }
-    }
-    0 as *T
-}
-
-# Extend with elements from another set
-HashSet_extend :: <T>(set: *HashSet<T>, other: *HashSet<T>) -> none => {
-    for i in 0:other.map.capacity {
-        if other.map.buckets[i].occupied {
-            HashSet_insert::<T>(set, other.map.buckets[i].key)
-        }
-    }
-}
-
-# Check equality (same elements)
-HashSet_equals :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool => {
-    if HashSet_len::<T>(set1) ~= HashSet_len::<T>(set2) {
-        ret false
-    }
-    
-    HashSet_is_subset::<T>(set1, set2)
-}
-
-# Get number of elements (alias for len)
-HashSet_size :: <T>(set: *HashSet<T>) -> u64 => {
-    HashSet_len::<T>(set)
-}
-
-# Check if set is proper subset
-HashSet_is_proper_subset :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool => {
-    if HashSet_len::<T>(set1) >= HashSet_len::<T>(set2) {
-        ret false
-    }
-    
-    HashSet_is_subset::<T>(set1, set2)
-}
-
-# Check if set is proper superset
-HashSet_is_proper_superset :: <T>(set1: *HashSet<T>, set2: *HashSet<T>) -> bool => {
-    HashSet_is_proper_subset::<T>(set2, set1)
 }

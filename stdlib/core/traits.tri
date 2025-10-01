@@ -58,148 +58,148 @@ trait Default {
 }
 
 # =============================================================================
-# ITERATOR TRAITS
+# ITERATOR TRAITS (COMMENTED OUT - Vec, Map, Filter not yet implemented)
 # =============================================================================
 
-trait Iterator {
-    type Item
-    
-    next :: (&mut self) -> ?Item
-    
-    # Provided methods
-    collect :: (&mut self) -> Vec<Item> => {
-        result := Vec::new()
-        loop {
-            match self.next() {
-                some item => result.push(item),
-                none => break,
-            }
-        }
-        result
-    }
-    
-    map<U> :: (&mut self, f: (Item) -> U) -> Map<Self, U> => {
-        Map { iter: self, func: f }
-    }
-    
-    filter :: (&mut self, predicate: (Item) -> bool) -> Filter<Self> => {
-        Filter { iter: self, predicate: predicate }
-    }
-    
-    fold<B> :: (&mut self, init: B, f: (B, Item) -> B) -> B => {
-        acc := init
-        loop {
-            match self.next() {
-                some item => { acc = f(acc, item) },
-                none => break,
-            }
-        }
-        acc
-    }
-    
-    count :: (&mut self) -> u64 => {
-        self.fold(0, (acc, _) => acc + 1)
-    }
-    
-    any :: (&mut self, predicate: (Item) -> bool) -> bool => {
-        loop {
-            match self.next() {
-                some item => {
-                    if predicate(item) { ret true }
-                },
-                none => break,
-            }
-        }
-        false
-    }
-    
-    all :: (&mut self, predicate: (Item) -> bool) -> bool => {
-        loop {
-            match self.next() {
-                some item => {
-                    if ~predicate(item) { ret false }
-                },
-                none => break,
-            }
-        }
-        true
-    }
-}
+# trait Iterator {
+#     type Item
+#     
+#     next :: (&mut self) -> ?Item
+#     
+#     # Provided methods
+#     collect :: (&mut self) -> Vec<Item> => {
+#         result := Vec::new()
+#         loop {
+#             match self.next() {
+#                 some item => result.push(item),
+#                 none => break,
+#             }
+#         }
+#         result
+#     }
+#     
+#     map<U> :: (&mut self, f: (Item) -> U) -> Map<Self, U> => {
+#         Map { iter: self, func: f }
+#     }
+#     
+#     filter :: (&mut self, predicate: (Item) -> bool) -> Filter<Self> => {
+#         Filter { iter: self, predicate: predicate }
+#     }
+#     
+#     fold<B> :: (&mut self, init: B, f: (B, Item) -> B) -> B => {
+#         acc := init
+#         loop {
+#             match self.next() {
+#                 some item => { acc = f(acc, item) },
+#                 none => break,
+#             }
+#         }
+#         acc
+#     }
+#     
+#     count :: (&mut self) -> u64 => {
+#         self.fold(0, (acc, _) => acc + 1)
+#     }
+#     
+#     any :: (&mut self, predicate: (Item) -> bool) -> bool => {
+#         loop {
+#             match self.next() {
+#                 some item => {
+#                     if predicate(item) { ret true }
+#                 },
+#                 none => break,
+#             }
+#         }
+#         false
+#     }
+#     
+#     all :: (&mut self, predicate: (Item) -> bool) -> bool => {
+#         loop {
+#             match self.next() {
+#                 some item => {
+#                     if ~predicate(item) { ret false }
+#                 },
+#                 none => break,
+#             }
+#         }
+#         true
+#     }
+# }
 
 # Map iterator adapter
-Map<I, U> :: {
-    iter: I,
-    func: (I::Item) -> U,
-}
+# Map<I, U> :: {
+#     iter: I,
+#     func: (I::Item) -> U,
+# }
 
-impl<I, U> Iterator for Map<I, U> where I: Iterator {
-    type Item = U
-    
-    next :: (&mut self) -> ?U => {
-        match self.iter.next() {
-            some item => some self.func(item),
-            none => none,
-        }
-    }
-}
+# impl<I, U> Iterator for Map<I, U> where I: Iterator {
+#     type Item = U
+#     
+#     next :: (&mut self) -> ?U => {
+#         match self.iter.next() {
+#             some item => some self.func(item),
+#             none => none,
+#         }
+#     }
+# }
 
 # Filter iterator adapter
-Filter<I> :: {
-    iter: I,
-    predicate: (I::Item) -> bool,
-}
+# Filter<I> :: {
+#     iter: I,
+#     predicate: (I::Item) -> bool,
+# }
 
-impl<I> Iterator for Filter<I> where I: Iterator {
-    type Item = I::Item
-    
-    next :: (&mut self) -> ?Item => {
-        loop {
-            match self.iter.next() {
-                some item => {
-                    if self.predicate(item) {
-                        ret some item
-                    }
-                },
-                none => ret none,
-            }
-        }
-    }
-}
-
-# =============================================================================
-# SERIALIZATION TRAITS
-# =============================================================================
-
-trait Serialize {
-    serialize :: (&self) -> StdResult<Vec<u8>>
-}
-
-trait Deserialize {
-    deserialize :: (data: Vec<u8>) -> StdResult<Self>
-}
+# impl<I> Iterator for Filter<I> where I: Iterator {
+#     type Item = I::Item
+#     
+#     next :: (&mut self) -> ?Item => {
+#         loop {
+#             match self.iter.next() {
+#                 some item => {
+#                     if self.predicate(item) {
+#                         ret some item
+#                     }
+#                 },
+#                 none => ret none,
+#             }
+#         }
+#     }
+# }
 
 # =============================================================================
-# ASYNC TRAITS
+# SERIALIZATION TRAITS (COMMENTED OUT - Vec and StdResult not yet implemented)
 # =============================================================================
 
-trait Future {
-    type Output
-    
-    poll :: (&mut self) -> Poll<Output>
-}
+# trait Serialize {
+#     serialize :: (&self) -> StdResult<Vec<u8>>
+# }
 
-Poll<T> :: enum {
-    Ready { value: T },
-    Pending,
-}
+# trait Deserialize {
+#     deserialize :: (data: Vec<u8>) -> StdResult<Self>
+# }
 
-trait AsyncRead {
-    read_async :: (&mut self, buf: &mut Vec<u8>) -> impl Future<Output = StdResult<u64>>
-}
+# =============================================================================
+# ASYNC TRAITS (COMMENTED OUT - impl Future and Vec not yet implemented)
+# =============================================================================
 
-trait AsyncWrite {
-    write_async :: (&mut self, buf: &Vec<u8>) -> impl Future<Output = StdResult<u64>>
-}
+# trait Future {
+#     type Output
+#     
+#     poll :: (&mut self) -> Poll<Output>
+# }
+
+# Poll<T> :: enum {
+#     Ready { value: T },
+#     Pending,
+# }
+
+# trait AsyncRead {
+#     read_async :: (&mut self, buf: &mut Vec<u8>) -> impl Future<Output = StdResult<u64>>
+# }
+
+# trait AsyncWrite {
+#     write_async :: (&mut self, buf: &Vec<u8>) -> impl Future<Output = StdResult<u64>>
+# }
 
 # =============================================================================
 # TRAIT IMPLEMENTATIONS FOR PRIMITIVES
@@ -268,44 +268,82 @@ impl Default for bool {
     default :: () -> bool => { false }
 }
 
+impl Hash for bool {
+    hash :: (&self) -> u64 => {
+        if *self { 1 } else { 0 }
+    }
+}
+
+# String implementations (requires String type from core::string)
+# Note: String struct is { data: *u8, len: u64, capacity: u64 }
+impl Eq for String {
+    eq :: (&self, other: &String) -> bool => {
+        if self.len ~= other.len {
+            ret false
+        }
+        for i in 0:self.len {
+            if self.data[i] ~= other.data[i] {
+                ret false
+            }
+        }
+        true
+    }
+}
+
+impl Hash for String {
+    hash :: (&self) -> u64 => {
+        # FNV-1a hash algorithm
+        FNV_OFFSET_BASIS :: 14695981039346656037
+        FNV_PRIME :: 1099511628211
+        
+        hash := FNV_OFFSET_BASIS
+        for i in 0:self.len {
+            byte := self.data[i] as u64
+            hash = hash ^ byte
+            hash = hash * FNV_PRIME
+        }
+        hash
+    }
+}
+
 # =============================================================================
-# TRAIT OBJECTS (DYNAMIC DISPATCH)
+# TRAIT OBJECTS (COMMENTED OUT - Vec and box not yet implemented)
 # =============================================================================
 
 # Trait object wrapper for dynamic dispatch
-TraitObject<T> :: {
-    data: *none,
-    vtable: *VTable<T>,
-}
+# TraitObject<T> :: {
+#     data: *none,
+#     vtable: *VTable<T>,
+# }
 
-VTable<T> :: {
-    # Function pointers for trait methods
-    # Layout depends on trait definition
-    methods: Vec<*none>,
-}
+# VTable<T> :: {
+#     # Function pointers for trait methods
+#     # Layout depends on trait definition
+#     methods: Vec<*none>,
+# }
 
-impl<T> TraitObject<T> {
-    # Create trait object from concrete type
-    new<C> :: (value: C) -> TraitObject<T> where C: T => {
-        data := box value
-        vtable := get_vtable::<C, T>()
-        
-        TraitObject<T> {
-            data: data as *none,
-            vtable: vtable,
-        }
-    }
-    
-    # Call trait method
-    call :: (&self, method_index: u64, args: Vec<*none>) -> *none => {
-        method_ptr := self.vtable.methods[method_index]
-        # TODO: Call method with args
-        unsafe { none }
-    }
-}
+# impl<T> TraitObject<T> {
+#     # Create trait object from concrete type
+#     new<C> :: (value: C) -> TraitObject<T> where C: T => {
+#         data := box value
+#         vtable := get_vtable::<C, T>()
+#         
+#         TraitObject<T> {
+#             data: data as *none,
+#             vtable: vtable,
+#         }
+#     }
+#     
+#     # Call trait method
+#     call :: (&self, method_index: u64, args: Vec<*none>) -> *none => {
+#         method_ptr := self.vtable.methods[method_index]
+#         # TODO: Call method with args
+#         unsafe { none }
+#     }
+# }
 
 # Get vtable for concrete type implementing trait
-get_vtable<C, T> :: () -> *VTable<T> where C: T => {
-    # TODO: Compiler generates vtables
-    unsafe { none as *VTable<T> }
-}
+# get_vtable<C, T> :: () -> *VTable<T> where C: T => {
+#     # TODO: Compiler generates vtables
+#     unsafe { none as *VTable<T> }
+# }
