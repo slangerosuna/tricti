@@ -1,0 +1,646 @@
+# String type for TriCTI stdlib
+# A production-ready string implementation with comprehensive API
+
+use prelude
+
+# Core String struct
+String :: struct {
+    data: *u8,
+    len: u64,
+    capacity: u64
+}
+
+# Extern C standard library functions
+extern malloc :: (size: u64) -> *u8
+extern free :: (ptr: *u8) -> none
+extern memcpy :: (dest: *u8, src: *u8, n: u64) -> *u8
+extern memmove :: (dest: *u8, src: *u8, n: u64) -> *u8
+extern memset :: (s: *u8, c: i32, n: u64) -> *u8
+extern strlen :: (s: *u8) -> u64
+extern strcmp :: (s1: *u8, s2: *u8) -> i32
+extern strncmp :: (s1: *u8, s2: *u8, n: u64) -> i32
+extern strcpy :: (dest: *u8, src: *u8) -> *u8
+extern strncpy :: (dest: *u8, src: *u8, n: u64) -> *u8
+extern strstr :: (haystack: *u8, needle: *u8) -> *u8
+extern strchr :: (s: *u8, c: i32) -> *u8
+extern strcat :: (dest: *u8, src: *u8) -> *u8
+extern atoi :: (s: *u8) -> i32
+extern atof :: (s: *u8) -> f64
+extern sprintf :: (str: *u8, format: *u8, ...) -> i32
+extern snprintf :: (str: *u8, size: u64, format: *u8, ...) -> i32
+extern toupper :: (c: i32) -> i32
+extern tolower :: (c: i32) -> i32
+extern isspace :: (c: i32) -> i32
+
+# Helper to convert pointer offset
+ptr_offset :: (base: *u8, offset: u64) -> *u8 => {
+    (base as u64 + offset) as *u8
+}
+
+# Constructor: Create empty string
+String_new :: () -> String => {
+    data := malloc(1)
+    data[0] = 0
+    {
+        data: data,
+        len: 0,
+        capacity: 1
+    }
+}
+
+# Constructor: Create string from C string
+String_from_cstr :: (cstr: *u8) -> String => {
+    if cstr == (0 as *u8) {
+        ret String_new()
+    }
+    
+    len := strlen(cstr)
+    if len == 0 {
+        ret String_new()
+    }
+    
+    capacity := len + 1
+    data := malloc(capacity)
+    strcpy(data, cstr)
+    
+    {
+        data: data,
+        len: len,
+        capacity: capacity
+    }
+}
+
+# Constructor: Create string with pre-allocated capacity
+String_with_capacity :: (cap: u64) -> String => {
+    if cap == 0 {
+        ret String_new()
+    }
+    
+    data := malloc(cap)
+    memset(data, 0, cap)
+    
+    {
+        data: data,
+        len: 0,
+        capacity: cap
+    }
+}
+
+# Get length
+String_len :: (s: *String) -> u64 => {
+    s.len
+}
+
+# Check if empty
+String_is_empty :: (s: *String) -> bool => {
+    s.len == 0
+}
+
+# Get capacity
+String_capacity :: (s: *String) -> u64 => {
+    s.capacity
+}
+
+# Reserve additional capacity
+String_reserve :: (s: *String, additional: u64) -> none => {
+    needed := s.len + additional + 1
+    if needed <= s.capacity {
+        ret none
+    }
+    
+    new_cap := needed * 2
+    new_data := malloc(new_cap)
+    
+    if s.data ~= (0 as *u8) {
+        memcpy(new_data, s.data, s.len)
+        free(s.data)
+    }
+    
+    new_data[s.len] = 0
+    s.data = new_data
+    s.capacity = new_cap
+}
+
+# Shrink capacity to fit current length
+String_shrink_to_fit :: (s: *String) -> none => {
+    if s.len == 0 {
+        if s.data ~= (0 as *u8) {
+            free(s.data)
+        }
+        s.data = malloc(1)
+        s.data[0] = 0
+        s.capacity = 1
+        ret none
+    }
+    
+    if s.capacity <= s.len + 1 {
+        ret none
+    }
+    
+    new_cap := s.len + 1
+    new_data := malloc(new_cap)
+    memcpy(new_data, s.data, s.len)
+    new_data[s.len] = 0
+    free(s.data)
+    
+    s.data = new_data
+    s.capacity = new_cap
+}
+
+# Access character at index
+String_char_at :: (s: *String, index: u64) -> u8 => {
+    if index >= s.len {
+        panic("String index out of bounds")
+    }
+    ptr_offset(s.data, index)[0]
+}
+
+# Get bytes as C string
+String_as_cstr :: (s: *String) -> *u8 => {
+    if s.data == (0 as *u8) {
+        ret "" as *u8
+    }
+    s.data
+}
+
+# Get raw bytes pointer
+String_bytes :: (s: *String) -> *u8 => {
+    s.data
+}
+
+# Push string
+String_push_str :: (s: *String, other: *String) -> none => {
+    if other.len == 0 {
+        ret none
+    }
+    
+    new_len := s.len + other.len
+    if new_len + 1 >= s.capacity {
+        String_reserve(s, other.len)
+    }
+    
+    memmove(ptr_offset(s.data, s.len), other.data, other.len)
+    s.len = new_len
+    ptr_offset(s.data, s.len)[0] = 0
+}
+
+# Push C string
+String_push_cstr :: (s: *String, cstr: *u8) -> none => {
+    if cstr == (0 as *u8) {
+        ret none
+    }
+    
+    cstr_in_self := (cstr >= s.data && cstr < ptr_offset(s.data, s.len))
+    offset := 0
+    if cstr_in_self {
+        offset = (cstr as u64) - (s.data as u64)
+    }
+    
+    len := strlen(cstr)
+    if len == 0 {
+        ret none
+    }
+    
+    String_reserve(s, s.len + len)
+    
+    src := cstr
+    if cstr_in_self {
+        src = ptr_offset(s.data, offset)
+    }
+    
+    memmove(ptr_offset(s.data, s.len), src, len)
+    s.len = s.len + len
+    ptr_offset(s.data, s.len)[0] = 0
+}
+
+# Push single character
+String_push_char :: (s: *String, ch: u8) -> none => {
+    if s.len + 1 >= s.capacity {
+        String_reserve(s, 1)
+    }
+    
+    ptr_offset(s.data, s.len)[0] = ch
+    s.len = s.len + 1
+    ptr_offset(s.data, s.len)[0] = 0
+}
+
+# Pop last character
+String_pop :: (s: *String) -> u8 => {
+    if s.len == 0 {
+        panic("Cannot pop from empty string")
+    }
+    
+    s.len = s.len - 1
+    ch := ptr_offset(s.data, s.len)[0]
+    ptr_offset(s.data, s.len)[0] = 0
+    ch
+}
+
+# Clear string
+String_clear :: (s: *String) -> none => {
+    if s.data ~= (0 as *u8) {
+        memset(s.data, 0, s.capacity)
+    }
+    s.len = 0
+}
+
+# Truncate to length
+String_truncate :: (s: *String, new_len: u64) -> none => {
+    if new_len >= s.len {
+        ret none
+    }
+    
+    s.len = new_len
+    if s.data ~= (0 as *u8) {
+        ptr_offset(s.data, s.len)[0] = 0
+    }
+}
+
+# Check if contains substring
+String_contains :: (s: *String, needle: *String) -> bool => {
+    if needle.len == 0 {
+        ret true
+    }
+    if s.len == 0 || needle.len > s.len {
+        ret false
+    }
+    
+    result := strstr(s.data, needle.data)
+    result ~= (0 as *u8)
+}
+
+# Check if starts with
+String_starts_with :: (s: *String, prefix: *String) -> bool => {
+    if prefix.len > s.len {
+        ret false
+    }
+    if prefix.len == 0 {
+        ret true
+    }
+    
+    strncmp(s.data, prefix.data, prefix.len) == 0
+}
+
+# Check if ends with
+String_ends_with :: (s: *String, suffix: *String) -> bool => {
+    if suffix.len > s.len {
+        ret false
+    }
+    if suffix.len == 0 {
+        ret true
+    }
+    
+    offset := s.len - suffix.len
+    strncmp(ptr_offset(s.data, offset), suffix.data, suffix.len) == 0
+}
+
+# Find first occurrence of substring
+String_find :: (s: *String, needle: *String) -> i64 => {
+    if needle.len == 0 {
+        ret 0
+    }
+    if s.len == 0 || needle.len > s.len {
+        ret -1
+    }
+    
+    result := strstr(s.data, needle.data)
+    if result == (0 as *u8) {
+        ret -1
+    }
+    
+    (result as u64 - s.data as u64) as i64
+}
+
+# Index of (alias for find)
+String_index_of :: (s: *String, needle: *String) -> i64 => {
+    String_find(s, needle)
+}
+
+# Equals comparison
+String_equals :: (s: *String, other: *String) -> bool => {
+    if s.len ~= other.len {
+        ret false
+    }
+    if s.len == 0 {
+        ret true
+    }
+    
+    strcmp(s.data, other.data) == 0
+}
+
+# Compare (returns -1, 0, or 1)
+String_compare :: (s: *String, other: *String) -> i32 => {
+    result := strcmp(s.data, other.data)
+    if result >= 0 {
+        if result >= 1 {
+            ret 1
+        }
+        ret 0
+    }
+    -1
+}
+
+# Case-insensitive equality
+String_eq_ignore_case :: (s: *String, other: *String) -> bool => {
+    if s.len ~= other.len {
+        ret false
+    }
+    if s.len == 0 {
+        ret true
+    }
+    
+    for i in 0:s.len {
+        c1 := tolower(ptr_offset(s.data, i)[0] as i32)
+        c2 := tolower(ptr_offset(other.data, i)[0] as i32)
+        if c1 ~= c2 {
+            ret false
+        }
+    }
+    true
+}
+
+# Convert to uppercase
+String_to_uppercase :: (s: *String) -> String => {
+    result := String_with_capacity(s.len + 1)
+    
+    for i in 0:s.len {
+        ch := ptr_offset(s.data, i)[0] as i32
+        upper := toupper(ch) as u8
+        String_push_char(&result, upper)
+    }
+    
+    result
+}
+
+# Convert to lowercase
+String_to_lowercase :: (s: *String) -> String => {
+    result := String_with_capacity(s.len + 1)
+    
+    for i in 0:s.len {
+        ch := ptr_offset(s.data, i)[0] as i32
+        lower := tolower(ch) as u8
+        String_push_char(&result, lower)
+    }
+    
+    result
+}
+
+# Trim whitespace from both ends
+String_trim :: (s: *String) -> String => {
+    if s.len == 0 {
+        ret String_new()
+    }
+    
+    start := s.len
+    for i in 0:s.len {
+        ch := ptr_offset(s.data, i)[0] as i32
+        if isspace(ch) == 0 {
+            start = i
+            break
+        }
+    }
+    
+    if start == s.len {
+        ret String_new()
+    }
+    
+    end := s.len
+    i := 0
+    loop {
+        if i < s.len {
+            idx := s.len - 1 - i
+            if idx < start {
+                break
+            }
+            ch := ptr_offset(s.data, idx)[0] as i32
+            if isspace(ch) == 0 {
+                end = idx + 1
+                break
+            }
+            i = i + 1
+        } else {
+            break
+        }
+    }
+    
+    if start >= end {
+        ret String_new()
+    }
+    
+    String_substring(s, start, end)
+}
+
+# Trim whitespace from start
+String_trim_start :: (s: *String) -> String => {
+    if s.len == 0 {
+        ret String_new()
+    }
+    
+    start := s.len
+    for i in 0:s.len {
+        ch := ptr_offset(s.data, i)[0] as i32
+        if isspace(ch) == 0 {
+            start = i
+            break
+        }
+    }
+    
+    if start == s.len {
+        ret String_new()
+    }
+    
+    String_substring(s, start, s.len)
+}
+
+# Trim whitespace from end
+String_trim_end :: (s: *String) -> String => {
+    if s.len == 0 {
+        ret String_new()
+    }
+    
+    end := s.len
+    i := 0
+    loop {
+        if i < s.len {
+            idx := s.len - 1 - i
+            ch := ptr_offset(s.data, idx)[0] as i32
+            if isspace(ch) == 0 {
+                end = idx + 1
+                break
+            }
+            i = i + 1
+        } else {
+            end = 0
+            break
+        }
+    }
+    
+    String_substring(s, 0, end)
+}
+
+# Concatenate strings
+String_concat :: (s: *String, other: *String) -> String => {
+    result := String_with_capacity(s.len + other.len + 1)
+    String_push_str(&result, s)
+    String_push_str(&result, other)
+    result
+}
+
+# Repeat string n times
+String_repeat :: (s: *String, n: u64) -> String => {
+    if n == 0 || s.len == 0 {
+        ret String_new()
+    }
+    
+    result := String_with_capacity(s.len * n + 1)
+    for i in 0:n {
+        String_push_str(&result, s)
+    }
+    result
+}
+
+# Get substring
+String_substring :: (s: *String, start: u64, end: u64) -> String => {
+    if start >= s.len {
+        ret String_new()
+    }
+    if end >= s.len {
+        end = s.len
+    }
+    if start >= end {
+        ret String_new()
+    }
+    
+    len := end - start
+    result := String_with_capacity(len + 1)
+    
+    memcpy(result.data, ptr_offset(s.data, start), len)
+    result.len = len
+    ptr_offset(result.data, len)[0] = 0
+    
+    result
+}
+
+# Slice (alias for substring)
+String_slice :: (s: *String, start: u64, end: u64) -> String => {
+    String_substring(s, start, end)
+}
+
+# Split at index
+String_split_at :: (s: *String, index: u64) -> (String, String) => {
+    if index >= s.len {
+        ret (String_substring(s, 0, s.len), String_new())
+    }
+    
+    left := String_substring(s, 0, index)
+    right := String_substring(s, index, s.len)
+    (left, right)
+}
+
+# Convert to i64
+String_to_i64 :: (s: *String) -> i64 => {
+    if s.len == 0 {
+        ret 0
+    }
+    atoi(s.data) as i64
+}
+
+# Convert to f64
+String_to_f64 :: (s: *String) -> f64 => {
+    if s.len == 0 {
+        ret 0.0
+    }
+    atof(s.data)
+}
+
+# Create string from i64
+String_from_i64 :: (value: i64) -> String => {
+    buffer := malloc(32) as *u8
+    snprintf(buffer, 32, "%ld" as *u8, value)
+    
+    result := String_from_cstr(buffer)
+    free(buffer)
+    result
+}
+
+# Create string from f64
+String_from_f64 :: (value: f64) -> String => {
+    buffer := malloc(64) as *u8
+    snprintf(buffer, 64, "%f" as *u8, value)
+    
+    result := String_from_cstr(buffer)
+    free(buffer)
+    result
+}
+
+# Iterate over characters with callback
+String_each_char :: (s: *String, callback: (u8) -> none) -> none => {
+    for i in 0:s.len {
+        ch := ptr_offset(s.data, i)[0]
+        callback(ch)
+    }
+}
+
+# Clone/copy string
+String_clone :: (s: *String) -> String => {
+    String_substring(s, 0, s.len)
+}
+
+# Destroy string and free memory
+String_destroy :: (s: *String) -> none => {
+    if s.data ~= (0 as *u8) {
+        free(s.data)
+        s.data = 0 as *u8
+    }
+    s.len = 0
+    s.capacity = 0
+}
+
+# Replace first occurrence
+String_replace_first :: (s: *String, old: *String, new: *String) -> String => {
+    index := String_find(s, old)
+    if index < 0 {
+        ret String_clone(s)
+    }
+    
+    result := String_with_capacity(s.len - old.len + new.len + 1)
+    
+    left := String_substring(s, 0, index as u64)
+    right := String_substring(s, (index as u64) + old.len, s.len)
+    String_push_str(&result, &left)
+    String_push_str(&result, new)
+    String_push_str(&result, &right)
+    
+    result
+}
+
+# Count occurrences of character
+String_count_char :: (s: *String, ch: u8) -> u64 => {
+    count := 0
+    for i in 0:s.len {
+        if ptr_offset(s.data, i)[0] == ch {
+            count = count + 1
+        }
+    }
+    count
+}
+
+# Reverse string
+String_reverse :: (s: *String) -> String => {
+    if s.len <= 1 {
+        ret String_clone(s)
+    }
+    
+    result := String_with_capacity(s.len + 1)
+    i := 0
+    loop {
+        if i < s.len {
+            idx := s.len - 1 - i
+            String_push_char(&result, ptr_offset(s.data, idx)[0])
+            i = i + 1
+        } else {
+            break
+        }
+    }
+    result
+}

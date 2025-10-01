@@ -1,0 +1,133 @@
+# Array and Slice Typing Tests - 18 tests for array/slice type checking
+# Tests array literals, indexing, slice types, and array method type resolution
+
+# ============ ARRAY LITERAL TESTS (6 tests) ============
+
+# Test: simple i64 array literal
+test_array_i64_literal :: () -> bool => {
+    arr := [1, 2, 3]
+    true
+}
+
+# Test: array with multiple elements
+test_array_multiple :: () -> bool => {
+    arr := [10, 20, 30, 40, 50]
+    true
+}
+
+# Test: array with single element
+test_array_single :: () -> bool => {
+    arr := [42]
+    true
+}
+
+# Test: array with computed elements
+test_array_computed :: () -> bool => {
+    arr := [1 + 1, 2 + 2, 3 + 3]
+    true
+}
+
+# Test: bool array
+test_array_bool :: () -> bool => {
+    arr := [true, false, true]
+    true
+}
+
+# Test: array type consistency
+test_array_type_consistent :: () -> bool => {
+    arr := [1, 2, 3, 4]
+    true
+}
+
+# ============ SLICE TYPE TESTS (6 tests) ============
+
+# Test: slice creation from array
+test_slice_from_array :: () -> bool => {
+    arr := [1, 2, 3, 4, 5]
+    s := arr
+    (slice_len(s) == 5)
+}
+
+# Test: slice length check
+test_slice_length :: () -> bool => {
+    arr := [10, 20, 30]
+    s := arr
+    (slice_len(s) == 3)
+}
+
+# Test: slice is_empty check
+test_slice_is_empty :: () -> bool => {
+    arr := [1]
+    s := arr
+    !slice_is_empty(s)
+}
+
+# Test: slice element access
+test_slice_get :: () -> bool => {
+    arr := [100, 200, 300]
+    s := arr
+    val := slice_get(s, 1)
+    (val == 200)
+}
+
+# Test: bool slice
+test_slice_bool :: () -> bool => {
+    arr := [true, false, true, false]
+    s := arr
+    (slice_len_bool(s) == 4)
+}
+
+# Test: bool slice element access
+test_slice_bool_get :: () -> bool => {
+    arr := [false, true, false]
+    s := arr
+    val := slice_get_bool(s, 1)
+    val
+}
+
+# ============ ARRAY INDEXING (6 tests) ============
+
+# Test: array index access
+test_array_index :: () -> bool => {
+    arr := [5, 10, 15, 20]
+    val := arr[2]
+    (val == 15)
+}
+
+# Test: array first element
+test_array_first :: () -> bool => {
+    arr := [42, 99, 123]
+    val := arr[0]
+    (val == 42)
+}
+
+# Test: array last element via slice
+test_array_last :: () -> bool => {
+    arr := [1, 2, 3, 4, 5]
+    s := arr
+    last_idx := slice_len(s) - 1
+    val := slice_get(s, last_idx)
+    (val == 5)
+}
+
+# Test: array index in expression
+test_array_index_expr :: () -> bool => {
+    arr := [10, 20, 30]
+    result := arr[0] + arr[1] + arr[2]
+    (result == 60)
+}
+
+# Test: bool array indexing
+test_bool_array_index :: () -> bool => {
+    arr := [true, false, true]
+    val := arr[0]
+    val
+}
+
+# Test: nested array access concept
+test_array_nested_concept :: () -> bool => {
+    arr := [1, 2, 3]
+    val1 := arr[0]
+    val2 := arr[1]
+    (val1 + val2 == 3)
+}

@@ -1,0 +1,397 @@
+# Enum Variant Typing Tests - 35 tests for enum type checking
+# Tests Option, Result, custom enums, match expressions, and nested enum types
+
+# ============ OPTION ENUM TESTS (12 tests) ============
+
+# Custom Option enum for testing
+Option<T> :: enum {
+    Some(T)
+    None
+}
+
+# Test: Option::Some with i64
+test_option_some_i64 :: () -> bool => {
+    opt := Option::Some(42)
+    match opt {
+        Option::Some(value) => (value == 42)
+        Option::None => false
+    }
+}
+
+# Test: Option::None usage
+test_option_none :: () -> bool => {
+    opt := Option::None
+    match opt {
+        Option::Some(value) => false
+        Option::None => true
+    }
+}
+
+# Test: Option::Some with bool
+test_option_some_bool :: () -> bool => {
+    opt := Option::Some(true)
+    match opt {
+        Option::Some(value) => value
+        Option::None => false
+    }
+}
+
+# Test: Option::Some with string
+test_option_some_string :: () -> bool => {
+    opt := Option::Some("test")
+    match opt {
+        Option::Some(value) => streq(value, "test")
+        Option::None => false
+    }
+}
+
+# Test: Option type inference from variant
+test_option_type_infer :: () -> bool => {
+    opt := Option::Some(100)
+    result := match opt {
+        Option::Some(x) => x
+        Option::None => 0
+    }
+    (result == 100)
+}
+
+# Test: Option with explicit type
+test_option_explicit_type :: () -> bool => {
+    opt := Option::Some(42)
+    match opt {
+        Option::Some(x) => (x == 42)
+        Option::None => false
+    }
+}
+
+# Test: Option::None with explicit type
+test_option_none_explicit :: () -> bool => {
+    opt := Option::None
+    match opt {
+        Option::Some(x) => false
+        Option::None => true
+    }
+}
+
+# Test: Option with different payload types
+test_option_different_types :: () -> bool => {
+    opt1 := Option::Some(42)
+    opt2 := Option::Some(true)
+    a := match opt1 { Option::Some(x) => (x == 42) Option::None => false }
+    b := match opt2 { Option::Some(x) => x Option::None => false }
+    a && b
+}
+
+# Test: Option extraction in variable
+test_option_extract :: () -> bool => {
+    opt := Option::Some(99)
+    result := match opt {
+        Option::Some(value) => value + 1
+        Option::None => 0
+    }
+    (result == 100)
+}
+
+# Test: Option with computation
+test_option_compute :: () -> bool => {
+    opt := Option::Some(10)
+    result := match opt {
+        Option::Some(x) => x * 2
+        Option::None => 0
+    }
+    (result == 20)
+}
+
+# Test: Option chaining
+test_option_chain :: () -> bool => {
+    opt1 := Option::Some(5)
+    opt2 := match opt1 {
+        Option::Some(x) => Option::Some(x + 10)
+        Option::None => Option::None
+    }
+    match opt2 {
+        Option::Some(x) => (x == 15)
+        Option::None => false
+    }
+}
+
+# Test: Option with conditional creation
+test_option_conditional :: () -> bool => {
+    cond := true
+    opt := if (cond) { Option::Some(42) } else { Option::None }
+    match opt {
+        Option::Some(x) => (x == 42)
+        Option::None => false
+    }
+}
+
+# ============ RESULT ENUM TESTS (10 tests) ============
+
+# Custom Result enum for testing
+Result<T, E> :: enum {
+    Ok(T)
+    Err(E)
+}
+
+# Test: Result::Ok with i64
+test_result_ok_i64 :: () -> bool => {
+    res := Result::Ok(42)
+    match res {
+        Result::Ok(value) => (value == 42)
+        Result::Err(e) => false
+    }
+}
+
+# Test: Result::Err with string error
+test_result_err_string :: () -> bool => {
+    res := Result::Err("error")
+    match res {
+        Result::Ok(value) => false
+        Result::Err(e) => streq(e, "error")
+    }
+}
+
+# Test: Result::Ok with bool
+test_result_ok_bool :: () -> bool => {
+    res := Result::Ok(true)
+    match res {
+        Result::Ok(value) => value
+        Result::Err(e) => false
+    }
+}
+
+# Test: Result with different Ok and Err types
+test_result_different_types :: () -> bool => {
+    res := Result::Ok(100)
+    match res {
+        Result::Ok(x) => (x == 100)
+        Result::Err(e) => false
+    }
+}
+
+# Test: Result error extraction
+test_result_err_extract :: () -> bool => {
+    res := Result::Err(404)
+    match res {
+        Result::Ok(x) => false
+        Result::Err(code) => (code == 404)
+    }
+}
+
+# Test: Result with computation on Ok
+test_result_ok_compute :: () -> bool => {
+    res := Result::Ok(10)
+    result := match res {
+        Result::Ok(x) => x * 3
+        Result::Err(e) => 0
+    }
+    (result == 30)
+}
+
+# Test: Result conditional creation
+test_result_conditional :: () -> bool => {
+    success := true
+    res := if (success) { Result::Ok(42) } else { Result::Err(0) }
+    match res {
+        Result::Ok(x) => (x == 42)
+        Result::Err(e) => false
+    }
+}
+
+# Test: Result with explicit types
+test_result_explicit :: () -> bool => {
+    res := Result::Ok(99)
+    match res {
+        Result::Ok(value) => (value == 99)
+        Result::Err(msg) => false
+    }
+}
+
+# Test: Result chaining
+test_result_chain :: () -> bool => {
+    res1 := Result::Ok(5)
+    res2 := match res1 {
+        Result::Ok(x) => Result::Ok(x + 10)
+        Result::Err(e) => Result::Err(e)
+    }
+    match res2 {
+        Result::Ok(x) => (x == 15)
+        Result::Err(e) => false
+    }
+}
+
+# Test: Result error propagation pattern
+test_result_propagate :: () -> bool => {
+    res := Result::Err("fail")
+    match res {
+        Result::Ok(x) => false
+        Result::Err(msg) => streq(msg, "fail")
+    }
+}
+
+# ============ NESTED ENUM TYPES (8 tests) ============
+
+# Test: Option of i64 inside Result
+test_nested_option_in_result :: () -> bool => {
+    res := Result::Ok(Option::Some(42))
+    match res {
+        Result::Ok(opt) => match opt {
+            Option::Some(x) => (x == 42)
+            Option::None => false
+        }
+        Result::Err(e) => false
+    }
+}
+
+# Test: Result inside Option
+test_nested_result_in_option :: () -> bool => {
+    opt := Option::Some(Result::Ok(42))
+    match opt {
+        Option::Some(res) => match res {
+            Result::Ok(x) => (x == 42)
+            Result::Err(e) => false
+        }
+        Option::None => false
+    }
+}
+
+# Test: Option of Option
+test_double_option :: () -> bool => {
+    opt := Option::Some(Option::Some(42))
+    match opt {
+        Option::Some(inner) => match inner {
+            Option::Some(x) => (x == 42)
+            Option::None => false
+        }
+        Option::None => false
+    }
+}
+
+# Test: Result of Result
+test_double_result :: () -> bool => {
+    res := Result::Ok(Result::Ok(42))
+    match res {
+        Result::Ok(inner) => match inner {
+            Result::Ok(x) => (x == 42)
+            Result::Err(e) => false
+        }
+        Result::Err(e) => false
+    }
+}
+
+# Test: Option::None inside Result::Ok
+test_option_none_in_result :: () -> bool => {
+    res := Result::Ok(Option::None)
+    match res {
+        Result::Ok(opt) => match opt {
+            Option::Some(x) => false
+            Option::None => true
+        }
+        Result::Err(e) => false
+    }
+}
+
+# Test: Result::Err inside Option::Some
+test_result_err_in_option :: () -> bool => {
+    opt := Option::Some(Result::Err(99))
+    match opt {
+        Option::Some(res) => match res {
+            Result::Ok(x) => false
+            Result::Err(code) => (code == 99)
+        }
+        Option::None => false
+    }
+}
+
+# Test: deeply nested enums
+test_deep_nesting :: () -> bool => {
+    data := Result::Ok(Option::Some(Result::Ok(42)))
+    match data {
+        Result::Ok(opt) => match opt {
+            Option::Some(res) => match res {
+                Result::Ok(x) => (x == 42)
+                Result::Err(e) => false
+            }
+            Option::None => false
+        }
+        Result::Err(e) => false
+    }
+}
+
+# Test: nested with different types
+test_nested_different_types :: () -> bool => {
+    data := Option::Some(Result::Ok(true))
+    match data {
+        Option::Some(res) => match res {
+            Result::Ok(b) => b
+            Result::Err(e) => false
+        }
+        Option::None => false
+    }
+}
+
+# ============ CUSTOM ENUM TESTS (5 tests) ============
+
+# Custom enum for testing
+Status :: enum {
+    Active
+    Inactive
+    Pending
+}
+
+# Test: simple enum variant
+test_custom_enum_active :: () -> bool => {
+    status := Status::Active
+    match status {
+        Status::Active => true
+        Status::Inactive => false
+        Status::Pending => false
+    }
+}
+
+# Test: custom enum with different variant
+test_custom_enum_pending :: () -> bool => {
+    status := Status::Pending
+    match status {
+        Status::Active => false
+        Status::Inactive => false
+        Status::Pending => true
+    }
+}
+
+# Custom enum with payload
+Color :: enum {
+    Red(i64)
+    Green(i64)
+    Blue(i64)
+}
+
+# Test: enum with payload extraction
+test_enum_payload :: () -> bool => {
+    color := Color::Red(255)
+    match color {
+        Color::Red(value) => (value == 255)
+        Color::Green(value) => false
+        Color::Blue(value) => false
+    }
+}
+
+# Test: enum with different payloads
+test_enum_different_payloads :: () -> bool => {
+    c1 := Color::Green(128)
+    c2 := Color::Blue(64)
+    a := match c1 { Color::Green(v) => (v == 128) _ => false }
+    b := match c2 { Color::Blue(v) => (v == 64) _ => false }
+    a && b
+}
+
+# Test: enum with computation on payload
+test_enum_compute_payload :: () -> bool => {
+    color := Color::Red(100)
+    result := match color {
+        Color::Red(v) => v * 2
+        Color::Green(v) => v
+        Color::Blue(v) => v
+    }
+    (result == 200)
+}

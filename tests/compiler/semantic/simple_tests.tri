@@ -1,0 +1,296 @@
+# Simplified Semantic Tests - Tests that compile with current TriCTI limitations
+# These tests verify type inference and semantic correctness without typed variable declarations
+
+# ============ BASIC TYPE INFERENCE (10 tests) ============
+
+test_infer_i64 :: () -> bool => {
+    x := 42
+    (x == 42)
+}
+
+test_infer_arithmetic :: () -> bool => {
+    x := 10 + 20
+    (x == 30)
+}
+
+test_infer_comparison :: () -> bool => {
+    x := (5 > 3)
+    x
+}
+
+test_infer_bool :: () -> bool => {
+    x := true
+    x
+}
+
+test_infer_string :: () -> bool => {
+    s := "hello"
+    streq(s, "hello")
+}
+
+test_infer_chain :: () -> bool => {
+    a := 42
+    b := a
+    (b == 42)
+}
+
+test_infer_negation :: () -> bool => {
+    x := -10
+    (x == -10)
+}
+
+test_infer_mul :: () -> bool => {
+    x := 6 * 7
+    (x == 42)
+}
+
+test_infer_div :: () -> bool => {
+    x := 84 / 2
+    (x == 42)
+}
+
+test_infer_complex :: () -> bool => {
+    x := (10 + 20) * 2
+    (x == 60)
+}
+
+# ============ GENERIC FUNCTIONS (10 tests) ============
+
+identity :: <T>(x: T) -> T => { x }
+
+test_generic_i64 :: () -> bool => {
+    x := identity(42)
+    (x == 42)
+}
+
+test_generic_bool :: () -> bool => {
+    x := identity(true)
+    x
+}
+
+test_generic_string :: () -> bool => {
+    x := identity("test")
+    streq(x, "test")
+}
+
+first :: <T>(a: T, b: T) -> T => { a }
+
+test_generic_first :: () -> bool => {
+    x := first(10, 20)
+    (x == 10)
+}
+
+second :: <T>(a: T, b: T) -> T => { b }
+
+test_generic_second :: () -> bool => {
+    x := second(10, 20)
+    (x == 20)
+}
+
+test_generic_nested :: () -> bool => {
+    x := identity(identity(42))
+    (x == 42)
+}
+
+pair_first :: <A, B>(a: A, b: B) -> A => { a }
+
+test_two_type_params :: () -> bool => {
+    x := pair_first(42, true)
+    (x == 42)
+}
+
+test_generic_multi_inst :: () -> bool => {
+    a := identity(10)
+    b := identity(true)
+    ((a == 10) && b)
+}
+
+test_generic_expr :: () -> bool => {
+    x := identity(10 + 20)
+    (x == 30)
+}
+
+test_generic_if :: () -> bool => {
+    x := if (true) { identity(42) } else { identity(0) }
+    (x == 42)
+}
+
+# ============ CONTROL FLOW (10 tests) ============
+
+test_if_expr :: () -> bool => {
+    x := if (true) { 42 } else { 0 }
+    (x == 42)
+}
+
+test_if_else_bool :: () -> bool => {
+    x := if ((5 > 3)) { true } else { false }
+    x
+}
+
+test_nested_if :: () -> bool => {
+    x := if (true) { if (true) { 42 } else { 0 } } else { 0 }
+    (x == 42)
+}
+
+test_if_computation :: () -> bool => {
+    x := if (true) { 10 + 20 } else { 0 }
+    (x == 30)
+}
+
+test_if_string :: () -> bool => {
+    s := if (true) { "yes" } else { "no" }
+    streq(s, "yes")
+}
+
+test_block_return :: () -> bool => {
+    x := {
+        a := 10
+        b := 20
+        a + b
+    }
+    (x == 30)
+}
+
+test_early_return :: () -> bool => {
+    f :: (x: i64) -> i64 => {
+        if ((x < 0)) {
+            ret 0
+        }
+        x
+    }
+    result := f(42)
+    (result == 42)
+}
+
+test_if_chain :: () -> bool => {
+    val := 2
+    x := if ((val == 1)) { 10 } else { if ((val == 2)) { 20 } else { 30 } }
+    (x == 20)
+}
+
+test_nested_blocks :: () -> bool => {
+    x := {
+        {
+            y := 42
+            y
+        }
+    }
+    (x == 42)
+}
+
+test_conditional_chain :: () -> bool => {
+    a := (5 > 3)
+    b := (10 < 20)
+    (a && b)
+}
+
+# ============ OPERATORS (10 tests) ============
+
+test_add_op :: () -> bool => {
+    x := 15 + 27
+    (x == 42)
+}
+
+test_sub_op :: () -> bool => {
+    x := 50 - 8
+    (x == 42)
+}
+
+test_mul_op :: () -> bool => {
+    x := 6 * 7
+    (x == 42)
+}
+
+test_div_op :: () -> bool => {
+    x := 84 / 2
+    (x == 42)
+}
+
+test_eq_op :: () -> bool => {
+    (42 == 42)
+}
+
+test_neq_op :: () -> bool => {
+    (10 ~= 20)
+}
+
+test_gt_op :: () -> bool => {
+    (42 > 10)
+}
+
+test_lt_op :: () -> bool => {
+    (10 < 42)
+}
+
+test_and_op :: () -> bool => {
+    (true && true)
+}
+
+test_or_op :: () -> bool => {
+    (false || true)
+}
+
+# ============ FUNCTIONS (10 tests) ============
+
+add :: (a: i64, b: i64) -> i64 => { a + b }
+
+test_func_call :: () -> bool => {
+    x := add(10, 32)
+    (x == 42)
+}
+
+test_func_nested :: () -> bool => {
+    x := add(add(1, 2), add(3, 4))
+    (x == 10)
+}
+
+get_true :: () -> bool => { true }
+
+test_func_no_param :: () -> bool => {
+    x := get_true()
+    x
+}
+
+test_func_param_infer :: () -> bool => {
+    x := 42
+    y := add(x, 0)
+    (y == 42)
+}
+
+multiply :: (a: i64, b: i64) -> i64 => { a * b }
+
+test_func_composition :: () -> bool => {
+    x := add(10, 20)
+    y := multiply(x, 2)
+    (y == 60)
+}
+
+factorial :: (n: i64) -> i64 => {
+    if ((n <= 1)) { 1 } else { n * factorial(n - 1) }
+}
+
+test_recursion :: () -> bool => {
+    x := factorial(5)
+    (x == 120)
+}
+
+test_func_if :: () -> bool => {
+    f :: (x: bool) -> i64 => { if (x) { 1 } else { 0 } }
+    a := f(true)
+    b := f(false)
+    ((a == 1) && (b == 0))
+}
+
+test_func_return_type :: () -> bool => {
+    f :: () -> i64 => { 42 }
+    x := f()
+    (x == 42)
+}
+
+test_func_multi_param :: () -> bool => {
+    f :: (a: i64, b: i64, c: i64) -> i64 => { a + b + c }
+    x := f(10, 20, 12)
+    (x == 42)
+}
+
+test_func_expr_body :: () -> i64 => { 42 }

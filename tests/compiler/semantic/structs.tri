@@ -1,0 +1,241 @@
+# Struct and Field Access Tests - 25 tests for struct type checking
+# Tests struct literals, field access, nested structs, generic structs, and type resolution
+
+# ============ BASIC STRUCT TESTS (8 tests) ============
+
+# Simple struct definition
+Point :: struct {
+    x: i64
+    y: i64
+}
+
+# Test: struct literal creation
+test_struct_literal :: () -> bool => {
+    p := Point { x: 10, y: 20 }
+    ((p.x == 10) && (p.y == 20))
+}
+
+# Test: struct field access
+test_struct_field_access :: () -> bool => {
+    p := Point { x: 42, y: 99 }
+    x_val := p.x
+    (x_val == 42)
+}
+
+# Test: struct field modification concept
+test_struct_field_read :: () -> bool => {
+    p := Point { x: 100, y: 200 }
+    sum := p.x + p.y
+    (sum == 300)
+}
+
+# Test: struct with different field values
+test_struct_different_values :: () -> bool => {
+    p1 := Point { x: 1, y: 2 }
+    p2 := Point { x: 3, y: 4 }
+    ((p1.x == 1) && (p2.x == 3))
+}
+
+# Struct with mixed types
+Person :: struct {
+    age: i64
+    active: bool
+    name: string
+}
+
+# Test: struct with mixed field types
+test_struct_mixed_types :: () -> bool => {
+    person := Person { age: 30, active: true, name: "Alice" }
+    ((person.age == 30) && person.active)
+}
+
+# Test: string field access
+test_struct_string_field :: () -> bool => {
+    person := Person { age: 25, active: false, name: "Bob" }
+    streq(person.name, "Bob")
+}
+
+# Test: bool field access
+test_struct_bool_field :: () -> bool => {
+    person := Person { age: 40, active: true, name: "Charlie" }
+    person.active
+}
+
+# Test: struct field in expression
+test_struct_field_expr :: () -> bool => {
+    p := Point { x: 5, y: 10 }
+    result := p.x * 2 + p.y
+    (result == 20)
+}
+
+# ============ NESTED STRUCT ACCESS (6 tests) ============
+
+# Nested struct definition
+Rectangle :: struct {
+    top_left: Point
+    bottom_right: Point
+}
+
+# Test: nested struct creation
+test_nested_struct_create :: () -> bool => {
+    rect := Rectangle {
+        top_left: Point { x: 0, y: 0 }
+        bottom_right: Point { x: 100, y: 100 }
+    }
+    ((rect.top_left.x == 0) && (rect.bottom_right.x == 100))
+}
+
+# Test: nested field access
+test_nested_field_access :: () -> bool => {
+    rect := Rectangle {
+        top_left: Point { x: 10, y: 20 }
+        bottom_right: Point { x: 50, y: 60 }
+    }
+    x := rect.top_left.x
+    (x == 10)
+}
+
+# Test: deep nested access
+test_deep_nested_access :: () -> bool => {
+    rect := Rectangle {
+        top_left: Point { x: 1, y: 2 }
+        bottom_right: Point { x: 3, y: 4 }
+    }
+    sum := rect.top_left.x + rect.top_left.y + rect.bottom_right.x + rect.bottom_right.y
+    (sum == 10)
+}
+
+# Container with nested struct
+Container :: struct {
+    data: Rectangle
+}
+
+# Test: triple-nested access
+test_triple_nested :: () -> bool => {
+    c := Container {
+        data: Rectangle {
+            top_left: Point { x: 5, y: 10 }
+            bottom_right: Point { x: 15, y: 20 }
+        }
+    }
+    (c.data.top_left.x == 5)
+}
+
+# Test: nested with computation
+test_nested_compute :: () -> bool => {
+    rect := Rectangle {
+        top_left: Point { x: 0, y: 0 }
+        bottom_right: Point { x: 10, y: 10 }
+    }
+    width := rect.bottom_right.x - rect.top_left.x
+    (width == 10)
+}
+
+# Test: multiple nested accesses
+test_multiple_nested :: () -> bool => {
+    rect := Rectangle {
+        top_left: Point { x: 2, y: 3 }
+        bottom_right: Point { x: 8, y: 9 }
+    }
+    a := rect.top_left.x
+    b := rect.bottom_right.y
+    (a + b == 11)
+}
+
+# ============ GENERIC STRUCT TESTS (6 tests) ============
+
+# Generic struct definition
+Pair<T> :: struct {
+    first: T
+    second: T
+}
+
+# Test: generic struct with i64
+test_generic_struct_i64 :: () -> bool => {
+    p := Pair { first: 10, second: 20 }
+    ((p.first == 10) && (p.second == 20))
+}
+
+# Test: generic struct with bool
+test_generic_struct_bool :: () -> bool => {
+    p := Pair { first: true, second: false }
+    (p.first && !p.second)
+}
+
+# Test: generic struct with string
+test_generic_struct_string :: () -> bool => {
+    p := Pair { first: "hello", second: "world" }
+    streq(p.first, "hello")
+}
+
+# Two type parameter generic struct
+BiPair<A, B> :: struct {
+    left: A
+    right: B
+}
+
+# Test: generic struct with two types
+test_generic_two_types :: () -> bool => {
+    bp := BiPair { left: 42, right: true }
+    ((bp.left == 42) && bp.right)
+}
+
+# Test: generic struct field access
+test_generic_field_access :: () -> bool => {
+    bp := BiPair { left: 100, right: "test" }
+    x := bp.left
+    (x == 100)
+}
+
+# Test: nested generic structs
+test_nested_generic :: () -> bool => {
+    outer := Pair {
+        first: Pair { first: 1, second: 2 }
+        second: Pair { first: 3, second: 4 }
+    }
+    ((outer.first.first == 1) && (outer.second.second == 4))
+}
+
+# ============ STRUCT TYPE RESOLUTION (5 tests) ============
+
+# Test: struct type inference
+test_struct_type_infer :: () -> bool => {
+    p := Point { x: 7, y: 8 }
+    q := p
+    ((q.x == 7) && (q.y == 8))
+}
+
+# Test: struct as function return
+test_struct_return :: () -> bool => {
+    make_point :: (a: i64, b: i64) -> Point => {
+        Point { x: a, y: b }
+    }
+    p := make_point(3, 4)
+    ((p.x == 3) && (p.y == 4))
+}
+
+# Test: struct as function parameter
+test_struct_param :: () -> bool => {
+    get_x :: (p: Point) -> i64 => { p.x }
+    p := Point { x: 42, y: 0 }
+    result := get_x(p)
+    (result == 42)
+}
+
+# Test: struct in if expression
+test_struct_in_if :: () -> bool => {
+    cond := true
+    p := if (cond) {
+        Point { x: 10, y: 20 }
+    } else {
+        Point { x: 0, y: 0 }
+    }
+    (p.x == 10)
+}
+
+# Test: struct in if-else expression
+test_struct_in_if_chain :: () -> bool => {
+    choice := 1
+    p := if ((choice == 1)) { Point { x: 100, y: 200 } } else { Point { x: 0, y: 0 } }
+    (p.x == 100)
+}
