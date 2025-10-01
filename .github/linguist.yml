@@ -1,0 +1,48 @@
+# GitHub Linguist Language Definition for TriCTI
+#
+# This file helps GitHub's linguist properly recognize and classify TriCTI files
+# See: https://github.com/github/linguist
+
+name: TriCTI
+type: programming
+color: "#7c3aed"
+extensions:
+  - ".tri"
+tm_scope: source.tricti
+ace_mode: text
+language_id: 756891
+aliases:
+  - tricti
+  - tri
+
+# File patterns that should be recognized as TriCTI
+filenames:
+  - "*.tri"
+
+# Interpreters (if any)
+# interpreters:
+#   - tricti
+
+# Sample code for GitHub's language detection
+sample: |
+  # TriCTI Sample Code
+  @trigger Init
+  main :: () => {
+      println("Hello, TriCTI!")
+  }
+  
+  @memoize
+  factorial :: (n: i64) -> i64 => match n {
+      0 => 1,
+      1 => 1,
+      n => n * factorial(n - 1),
+  }
+  
+  Person :: struct {
+      @primary id: u64,
+      name: string,
+      age: i64,
+  }
+
+# TextMate grammar reference
+grammar: editors/vscode/syntaxes/tricti.tmLanguage.json

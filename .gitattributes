@@ -1,0 +1,24 @@
+# GitHub Linguist configuration for TriCTI language
+*.tri linguist-language=TriCTI
+*.tri linguist-detectable=true
+
+# Ensure proper syntax highlighting
+*.tri text
+
+# Mark directories that shouldn't be counted in language statistics
+editors/ linguist-documentation
+target/ linguist-generated
+tests/ linguist-detectable=false
+.github/ linguist-documentation
+
+# Standard attributes
+*.md linguist-documentation
+*.yml linguist-data
+*.json linguist-data
+*.toml linguist-data
+*.lock linguist-generated
+LICENSE linguist-documentation
+README.md linguist-documentation
+
+# TextMate grammar files
+*.tmLanguage.json linguist-data

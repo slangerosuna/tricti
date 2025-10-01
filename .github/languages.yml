@@ -1,0 +1,34 @@
+# Language definition for TriCTI programming language
+# This file provides metadata for GitHub's linguist to properly recognize TriCTI files
+
+TriCTI:
+  type: programming
+  color: "#7c3aed" 
+  extensions:
+    - ".tri"
+  tm_scope: source.tricti
+  ace_mode: text
+  language_id: 756891
+  aliases:
+    - tricti
+    - tri
+  
+  # Override detection for specific patterns
+  override: true
+  
+  # Sample patterns for language detection
+  heuristics:
+    - pattern: '^\s*@(trigger|memoize|primary|sys_input)\b'
+      named_pattern: 'tricti_attributes'
+    - pattern: '\b(enum|impl|sys|compose|table|db|plugin)\s+\w+\s*::'
+      named_pattern: 'tricti_declarations'
+    - pattern: '\w+\s*::\s*\([^)]*\)\s*(->|=>)'
+      named_pattern: 'tricti_functions'
+    - pattern: '\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|string|none)\b'
+      named_pattern: 'tricti_types'
+  
+  # Interpreter hints (if applicable)
+  interpreters: []
+  
+  # File naming patterns
+  filenames: []
