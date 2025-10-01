@@ -20,13 +20,13 @@ fn compiles_minimal_program_to_object() {
         program
     );
     match &program.statements[2] {
-        peano::ast::Statement::Expression(peano::ast::Expression::Call {
+        tricti::ast::Statement::Expression(tricti::ast::Expression::Call {
             function,
             type_args,
             arguments,
         }) => {
             match function.as_ref() {
-                peano::ast::Expression::Identifier(name) => assert_eq!(name, "println"),
+                tricti::ast::Expression::Identifier(name) => assert_eq!(name, "println"),
                 other => panic!("expected identifier function, got {:?}", other),
             }
             assert_eq!(arguments.len(), 2);

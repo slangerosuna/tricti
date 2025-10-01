@@ -48,13 +48,13 @@ macro_rules! tri_test {
     ($name:ident, $tri_code:expr, $expected:expr) => {
         #[test]
         fn $name() {
-            if !peano::tri_test_helpers::clang_available() {
+            if !tricti::tri_test_helpers::clang_available() {
                 eprintln!("clang not found; skipping test {}", stringify!($name));
                 return;
             }
             let obj_path = format!("tests/tmp_{}.o", stringify!($name));
             let exe_path = format!("tests/tmp_{}.out", stringify!($name));
-            let stdout = peano::tri_test_helpers::compile_and_run_tri($tri_code, &obj_path, &exe_path);
+            let stdout = tricti::tri_test_helpers::compile_and_run_tri($tri_code, &obj_path, &exe_path);
             assert_eq!(stdout, $expected);
         }
     };
@@ -72,16 +72,16 @@ macro_rules! tri_test_panic {
     ($name:ident, $tri_code:expr) => {
         #[test]
         fn $name() {
-            if !peano::tri_test_helpers::clang_available() {
+            if !tricti::tri_test_helpers::clang_available() {
                 eprintln!("clang not found; skipping test {}", stringify!($name));
                 return;
             }
             let obj_path = format!("tests/tmp_{}.o", stringify!($name));
             let exe_path = format!("tests/tmp_{}.out", stringify!($name));
-            let program = peano::parser::parse($tri_code.to_string());
-            let sem = peano::semantic::analyze_program(&program).expect("semantic analysis");
+            let program = tricti::parser::parse($tri_code.to_string());
+            let sem = tricti::semantic::analyze_program(&program).expect("semantic analysis");
             let context = inkwell::context::Context::create();
-            let mut gen = peano::codegen::CodeGenerator::new(&context, sem).expect("codegen");
+            let mut gen = tricti::codegen::CodeGenerator::new(&context, sem).expect("codegen");
             gen.generate_program(&program).expect("codegen");
 
             if std::path::Path::new(&obj_path).exists() {
@@ -112,7 +112,7 @@ macro_rules! tri_test_with_prelude {
     ($name:ident, $user_code:expr, $expected:expr) => {
         #[test]
         fn $name() {
-            if !peano::tri_test_helpers::clang_available() {
+            if !tricti::tri_test_helpers::clang_available() {
                 eprintln!("clang not found; skipping test {}", stringify!($name));
                 return;
             }
@@ -120,7 +120,7 @@ macro_rules! tri_test_with_prelude {
             let full_code = format!("{}\n{}", prelude, $user_code);
             let obj_path = format!("tests/tmp_{}.o", stringify!($name));
             let exe_path = format!("tests/tmp_{}.out", stringify!($name));
-            let stdout = peano::tri_test_helpers::compile_and_run_tri(&full_code, &obj_path, &exe_path);
+            let stdout = tricti::tri_test_helpers::compile_and_run_tri(&full_code, &obj_path, &exe_path);
             assert_eq!(stdout, $expected);
         }
     };

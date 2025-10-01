@@ -1,5 +1,5 @@
-# Peano runtime scaffolding
-# Eventually this file will implement _start and allocator hooks in peano itself.
+# TriCTI runtime scaffolding
+# Eventually this file will implement _start and allocator hooks in tricti itself.
 
 # Signal to the compiler that runtime entry may be requested
 Runtime :: { }

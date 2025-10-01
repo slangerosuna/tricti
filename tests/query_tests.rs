@@ -1,12 +1,21 @@
-use tricti::ast::*;
-use tricti::query::*;
+use std::collections::HashMap;
+
+use tricti::ast::{
+    BinaryOperator, Expression, Literal, ResourceAccess, TableAnnotation, TableColumn, TableDef,
+    Type,
+};
+use tricti::query::{
+    FieldProjection as QueryFieldProjection, JoinCondition, JoinType as QueryJoinType,
+    QueryOptimization, QueryPlan, WhereClause,
+};
 use tricti::query_executor::*;
 use tricti::table_runtime::*;
-use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::QueryFieldProjection as FieldProjection;
+    use super::QueryJoinType as JoinType;
 
     fn create_test_table_schema() -> TableDef {
         TableDef {

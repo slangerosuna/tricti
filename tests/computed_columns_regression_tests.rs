@@ -260,7 +260,7 @@ fn test_computed_column_with_nested_function_calls() {
 /// Test that function identifiers are NOT treated as column dependencies
 #[test]
 fn test_function_identifiers_not_treated_as_dependencies() {
-    use peano::computed_columns::DependencyGraph;
+    use tricti::computed_columns::DependencyGraph;
     use std::collections::HashSet;
 
     let src = r#"

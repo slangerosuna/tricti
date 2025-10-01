@@ -3,7 +3,7 @@ use tricti::{
     error_propagation::*, event_loop_manager::*, resource_lifecycle::*, system_executor::*,
     table_runtime::*,
 };
-use peano::semantic::{FunctionSignature, SemanticContext};
+use tricti::semantic::{FunctionSignature, SemanticContext};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

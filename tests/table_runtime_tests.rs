@@ -21,6 +21,8 @@ mod tests {
                         args: vec![],
                     }],
                     default_value: None,
+                    is_computed: false,
+                    computed_expression: None,
                 },
                 TableColumn {
                     name: "title".to_string(),
@@ -30,6 +32,8 @@ mod tests {
                     },
                     annotations: vec![],
                     default_value: None,
+                    is_computed: false,
+                    computed_expression: None,
                 },
                 TableColumn {
                     name: "display".to_string(),
@@ -39,6 +43,8 @@ mod tests {
                     },
                     annotations: vec![],
                     default_value: Some(Expression::Literal(Literal::Boolean(false))),
+                    is_computed: false,
+                    computed_expression: None,
                 },
             ],
         }
@@ -292,7 +298,7 @@ mod tests {
         let id_column = table.get_column_data("id").expect("id column should exist");
         match id_column {
             ColumnData::U64(values) => {
-                assert_eq!(values, &vec![1, 2, 3]);
+                assert_eq!(values, &vec![Some(1), Some(2), Some(3)]);
             }
             _ => panic!("Expected U64 column data"),
         }
@@ -305,9 +311,9 @@ mod tests {
                 assert_eq!(
                     values,
                     &vec![
-                        "App 1".to_string(),
-                        "App 2".to_string(),
-                        "App 3".to_string()
+                        Some("App 1".to_string()),
+                        Some("App 2".to_string()),
+                        Some("App 3".to_string())
                     ]
                 );
             }
@@ -319,7 +325,7 @@ mod tests {
             .expect("display column should exist");
         match display_column {
             ColumnData::Bool(values) => {
-                assert_eq!(values, &vec![true, false, true]);
+                assert_eq!(values, &vec![Some(true), Some(false), Some(true)]);
             }
             _ => panic!("Expected Bool column data"),
         }

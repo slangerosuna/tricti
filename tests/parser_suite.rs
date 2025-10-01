@@ -18,7 +18,7 @@ fn parse_struct_field_and_static_path() {
 
 #[test]
 fn parses_char_literal() {
-    use peano::ast::{Expression, Literal, Program, Statement};
+    use tricti::ast::{Expression, Literal, Program, Statement};
     let source = "'a'";
     let program = parser::parse(source.to_string());
     assert_eq!(

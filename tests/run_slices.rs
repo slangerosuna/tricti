@@ -169,7 +169,7 @@ fn vec_i64_push_pop_len() {
     }
     let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
     let user = r#"
-        peano_main :: () => {
+    tricti_main :: () => {
             println("start")
             v := new_vec_i64()
             vec_push_i64(&v, 10)
@@ -182,7 +182,7 @@ fn vec_i64_push_pop_len() {
             println(vec_pop_i64(&v))
             println(vec_len_i64(&v))
         }
-        peano_main()
+    tricti_main()
     "#;
     let src = format!("{}\n{}", prelude, user);
     let stdout = compile_and_run(&src, "tests/tmp_vec_i64.o", "tests/tmp_vec_i64.out");

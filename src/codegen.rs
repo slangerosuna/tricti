@@ -176,8 +176,8 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Enable or disable freestanding runtime mode. When enabled, the codegen will:
-    /// - Declare user `main` function as `peano_main` (not emit a C `main`)
-    /// - Emit a `_start` symbol that calls `peano_main` and then `exit(code)`
+    /// - Declare user `main` function as `tricti_main` (not emit a C `main`)
+    /// - Emit a `_start` symbol that calls `tricti_main` and then `exit(code)`
     pub fn enable_runtime_mode(&mut self, enabled: bool) {
         self.runtime_mode = enabled;
     }
@@ -441,7 +441,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Basic allocator hooks via libc malloc/free
         let malloc_ty = i8_ptr_type.fn_type(&[self.context.i64_type().into()], false);
         let malloc_fn = self.module.add_function("malloc", malloc_ty, None);
-        // Expose as `alloc` to peano source
+    // Expose as `alloc` to tricti source
         self.functions.insert("alloc".to_string(), malloc_fn);
 
         let free_ty = self
@@ -747,23 +747,23 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.declare_and_define_functions(program)?;
 
         if self.runtime_mode {
-            // Freestanding: emit _start that calls peano_main (if present) then exit
+            // Freestanding: emit _start that calls tricti_main (if present) then exit
             let start_ty = self.context.void_type().fn_type(&[], false);
             let start_fn = self.module.add_function("_start", start_ty, None);
             let entry = self.context.append_basic_block(start_fn, "entry");
             self.builder.position_at_end(entry);
             self.current_function = Some(start_fn);
 
-            // Call peano_main if it exists
+            // Call tricti_main if it exists
             let exit_fn = *self
                 .functions
                 .get("exit")
                 .ok_or_else(|| CodegenError::CompilationError("exit not declared".to_string()))?;
 
-            let code_i32 = if let Some(main_fn) = self.functions.get("peano_main").cloned() {
+            let code_i32 = if let Some(main_fn) = self.functions.get("tricti_main").cloned() {
                 let call = self
                     .builder
-                    .build_call(main_fn, &[], "call_peano_main")
+                    .build_call(main_fn, &[], "call_tricti_main")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 // If main returns a value, cast to i32; else 0
                 if let Some(bv) = call.try_as_basic_value().left() {
@@ -792,7 +792,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.context.i32_type().const_zero()
                 }
             } else {
-                // No peano_main: run top-level in a minimal block like legacy main()
+                // No tricti_main: run top-level in a minimal block like legacy main()
                 let code_alloca =
                     self.create_entry_block_alloca("retcode", self.context.i32_type().into())?;
                 self.builder
@@ -6180,8 +6180,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                             BasicTypeEnum::StructType(st) => st.fn_type(&param_meta, false),
                             _ => self.context.i64_type().fn_type(&param_meta, false),
                         };
-                        // In runtime mode, emit user main as `peano_main` symbol
-                        let fname = if name == "main" { "peano_main" } else { name };
+                        // In runtime mode, emit user main as `tricti_main` symbol
+                        let fname = if name == "main" { "tricti_main" } else { name };
                         let f = self.module.add_function(fname, fn_type, None);
                         self.functions.insert(fname.to_string(), f);
                     } else if let ConstValue::SystemDef(system_def) = value {
@@ -6397,7 +6397,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         ..
                     }) = value
                     {
-                        let fname = if name == "main" { "peano_main" } else { name };
+                        let fname = if name == "main" { "tricti_main" } else { name };
                         let f = match self.functions.get(fname) {
                             Some(f) => *f,
                             None => continue,

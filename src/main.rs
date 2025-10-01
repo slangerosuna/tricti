@@ -32,7 +32,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
         if args[1] == "--help" || args[1] == "-h" {
-            println!("Usage: peano [source_file]");
+            println!("Usage: tricti [source_file]");
             println!("If no source_file is provided, defaults to 'src.pn'.");
             return;
         }
