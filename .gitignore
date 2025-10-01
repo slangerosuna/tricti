@@ -2,4 +2,5 @@
 Cargo.lock
 *.o
 *.out
+/tmp
 .env
