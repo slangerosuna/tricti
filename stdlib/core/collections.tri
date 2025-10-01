@@ -4,7 +4,7 @@
 use prelude
 
 # =============================================================================
-# VEC - Dynamic length array
+# VEC - Dynamic length array (should have syntax sugar to allow writing Vec<T> as [T])
 # =============================================================================
 
 Vec<T> :: {

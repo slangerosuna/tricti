@@ -700,7 +700,7 @@ impl SystemScheduler {
 
     /// Validate that a system's resource accesses are well-formed
     fn validate_system_resources(&self, system: &SystemDef) -> Result<(), SchedulerError> {
-        let mut resource_accesses: HashMap<String, ResourceAccess> = HashMap::new();
+        let mut resource_accesses: HashMap<String, (ResourceAccess, String)> = HashMap::new();
 
         for param in &system.parameters {
             if let SystemParameter::Resource {
@@ -710,19 +710,43 @@ impl SystemScheduler {
                 ..
             } = param
             {
-                let resource_id = Self::type_to_resource_id(resource_type);
+                let type_signature = Self::type_to_resource_id(resource_type);
 
                 // Check for duplicate resource access patterns within the same system
-                if let Some(existing_access) = resource_accesses.get(&resource_id) {
-                    if existing_access != access {
-                        return Err(SchedulerError::InvalidResourceAccess {
-                            system: system.name.clone(),
-                            resource: resource_id.clone(),
-                            reason: format!("System has conflicting access patterns to the same resource '{}' through parameters '{}' and others", resource_id, name),
-                        });
+                match resource_accesses.get(name) {
+                    Some((existing_access, existing_type)) => {
+                        if existing_type != &type_signature {
+                            return Err(SchedulerError::InvalidResourceAccess {
+                                system: system.name.clone(),
+                                resource: name.clone(),
+                                reason: format!(
+                                    "Resource '{}' declared with conflicting types: '{}' vs '{}'",
+                                    name, existing_type, type_signature
+                                ),
+                            });
+                        }
+
+                        if existing_access != access {
+                            return Err(SchedulerError::InvalidResourceAccess {
+                                system: system.name.clone(),
+                                resource: name.clone(),
+                                reason: format!(
+                                    "System has conflicting access patterns to resource '{}': previously declared as {:?}, now {:?}",
+                                    name, existing_access, access
+                                ),
+                            });
+                        }
+
+                        // Duplicate declaration with the same access and type; nothing more to record
+                        continue;
+                    }
+                    None => {
+                        resource_accesses.insert(
+                            name.clone(),
+                            (access.clone(), type_signature),
+                        );
                     }
                 }
-                resource_accesses.insert(resource_id, access.clone());
             }
         }
 
@@ -918,19 +942,18 @@ impl SystemScheduler {
     }
 
     /// Extract resource accesses from a system definition
-    /// Now uses actual resource type identity instead of parameter names
+    /// Uses resource parameter names to align with runtime acquisition
     fn extract_resource_accesses(&self, system: &SystemDef) -> HashMap<String, ResourceAccess> {
         let mut accesses = HashMap::new();
 
         for param in &system.parameters {
             if let SystemParameter::Resource {
-                resource_type,
+                name,
                 access,
                 ..
             } = param
             {
-                let resource_id = Self::type_to_resource_id(resource_type);
-                accesses.insert(resource_id, access.clone());
+                accesses.insert(name.clone(), access.clone());
             }
         }
 
@@ -1479,6 +1502,46 @@ mod tests {
                 assert_eq!(system, "test_system");
                 assert_eq!(resource, "resource1");
                 assert!(reason.contains("conflicting access patterns"));
+            }
+            _ => panic!("Expected InvalidResourceAccess error"),
+        }
+    }
+
+    #[test]
+    fn test_scheduler_conflicting_resource_types() {
+        let mut scheduler = SystemScheduler::new();
+
+        let mut system = create_test_system("type_conflict", vec![]);
+        system.parameters.push(SystemParameter::Resource {
+            param_type: "resource".to_string(),
+            name: "resource1".to_string(),
+            resource_type: Type::Identifier {
+                name: "TestResource".to_string(),
+                type_args: vec![],
+            },
+            access: ResourceAccess::Immutable,
+        });
+        system.parameters.push(SystemParameter::Resource {
+            param_type: "resource".to_string(),
+            name: "resource1".to_string(),
+            resource_type: Type::Identifier {
+                name: "OtherResource".to_string(),
+                type_args: vec![],
+            },
+            access: ResourceAccess::Immutable,
+        });
+
+        let result = scheduler.add_system(system);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            SchedulerError::InvalidResourceAccess {
+                system,
+                resource,
+                reason,
+            } => {
+                assert_eq!(system, "type_conflict");
+                assert_eq!(resource, "resource1");
+                assert!(reason.contains("conflicting types"));
             }
             _ => panic!("Expected InvalidResourceAccess error"),
         }

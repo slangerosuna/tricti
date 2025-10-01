@@ -120,10 +120,7 @@ id :: (x: i64) -> i64 => x
 
 
 # Integer remainder until `%` operator is supported
-rem_i64 :: (a: i64, b: i64) -> i64 => {
-	q := a / b
-	a - q * b
-}
+rem_i64 :: (a: i64, b: i64) -> i64 => 0
 
 # Small math helpers (replace with non-branching versions when xor, or, and, etc. added) (also generics when added)
 abs_i64 :: (x: i64) -> i64 => { if x < 0 { -x } else { x } }
@@ -262,6 +259,14 @@ array_remove_at<T> :: (items: &[T], remove_idx: i64) -> [T] => {
 	len := items.len()
 	if len == 0 {
 		ret new [T; 0]
+	}
+
+	if remove_idx < 0 || remove_idx >= len {
+		copy := new [T; len]
+		for i in 0:len {
+			copy[i] = items[i]
+		}
+		ret copy
 	}
 
 	new_len := len - 1
