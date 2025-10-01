@@ -1,1 +1,0 @@
-x := unsafe { none as ?*T as *T };

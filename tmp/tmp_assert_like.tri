@@ -1,6 +1,0 @@
-panic :: (msg: string) -> none => {
-    print(msg)
-}
-foo :: (cond: bool, msg: string) -> none => {
-    if ~cond { panic(msg) }
-}

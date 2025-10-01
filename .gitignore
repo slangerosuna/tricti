@@ -1,6 +1,7 @@
 /target
+/tests/tmp
+
 Cargo.lock
 *.o
 *.out
-/tmp
 .env

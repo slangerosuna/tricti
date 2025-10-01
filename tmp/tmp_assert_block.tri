@@ -1,8 +1,0 @@
-panic :: (msg: string) -> none => {
-    println("Assertion failed:", msg)
-    exit(1)
-}
-
-assert :: (cond: bool, msg: string) -> none => {
-    if ~cond { panic(msg) }
-}

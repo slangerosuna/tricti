@@ -1,1 +1,0 @@
-assert :: (cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }

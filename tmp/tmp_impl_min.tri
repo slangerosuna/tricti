@@ -1,5 +1,0 @@
-impl<T> Vec<T> {
-    new :: () -> Vec<T> => {
-        Vec<T> { data: unsafe { none as ?*T as *T } }
-    }
-}
