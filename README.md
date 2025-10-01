@@ -1,6 +1,6 @@
 # TriCTI
 
-TriCTI is a high-performance, concurrent, dataflow-oriented programming language that unifies **ECS architectures, relational databases, array-oriented computation, and reactive programming** in a Rust-inspired, statically analyzable framework. It emphasizes **implicit optimization** via static concurrency analysis, SIMD/vectorized operations, and optional GPGPU acceleration.
+TriCTI is a high-performance (theoretically, it's too early to properly test), concurrent, data-oriented programming language that unifies **ECS architectures, relational databases, array-oriented computation, and reactive programming** in a Rust-inspired, statically analyzable framework. It emphasizes **implicit optimization** via static concurrency analysis, SIMD/vectorized operations, and optional GPGPU acceleration.
 
 ---
 
