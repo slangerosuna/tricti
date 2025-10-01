@@ -13,3 +13,13 @@ trap 'echo "[tools] cleaning tmp artifacts"; rm -f tests/tmp_*.o tests/tmp_*.out
 
 echo "[tools] cargo test -- --nocapture $*"
 cargo test -- --nocapture "$@"
+
+# gather all .tri files in the tests/ directory
+tri_files=$(find tests -name "*.tri")
+# union with files in tmp/ directory
+tri_files+=" $(find tests/tmp -name "*.tri")"
+
+cargo build --release
+for tri_file in $tri_files; do
+  ./target/release/tricti "$tri_file"
+done
