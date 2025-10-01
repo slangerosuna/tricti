@@ -1,5 +1,6 @@
 # PostgreSQL-backed relational database wrapper for TriCTI
-# Satisfies all 12 of Codd's rules and maintains static analyzability
+# Designed for Codd's 12 rules compliance and maintains static analyzability
+# See replit.md for current implementation status
 
 use prelude
 use core::errors
