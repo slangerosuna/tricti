@@ -1,5 +1,3 @@
-@SignalBackend @cfg(Local) { RingBuf } else { QUIC }
-
 use prelude
 use rt
 
@@ -174,7 +172,7 @@ redraw :: compose {
   
    # can fan out `foo -> (bar, baz)`
    # and merge `(foo, bar) -> baz`
-   # and tags to allow any arbitrary DAG (semantic error on cycles)
+   # and tags to allow any arbitrary DAG (semantic error on cycles (although they can be allowed with ?-> for optional continuation on optional outputs))
    # foo -> ((a: bar), (b: baz)), (a: bar) -> (b: baz)
    # this composes and decomposes tuples
 }
