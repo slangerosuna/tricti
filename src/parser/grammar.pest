@@ -100,17 +100,17 @@ db_entry = { identifier ~ (":" ~ identifier)? }
 expression    = { or }
 
 op_or         = { "or" | "xor" | "||" }
-or            = { and ~ (WHITESPACE+ ~ op_or ~ WHITESPACE+ ~ and )* }
+or            = { and ~ (op_or ~ and )* }
 op_and        = { "and" | "&&" }
-and           = { comparison ~ (WHITESPACE+ ~ op_and ~ WHITESPACE+ ~ comparison )* }
+and           = { comparison ~ (op_and ~ comparison )* }
 op_cmp        = { "==" | "~=" | "<=" | ">=" | ">" | "<" }
-comparison    = { shift ~ (WHITESPACE+ ~ op_cmp ~ WHITESPACE+ ~ shift )* }
+comparison    = { shift ~ (op_cmp ~ shift )* }
 op_shift      = { "<<" | ">>" }
-shift         = { addition ~ (WHITESPACE+ ~ op_shift ~ WHITESPACE+ ~ addition )* }
+shift         = { addition ~ (op_shift ~ addition )* }
 op_add        = { "+" | "-" }
-addition      = { multiplication ~ (WHITESPACE+ ~ op_add ~ WHITESPACE+ ~ multiplication )* }
+addition      = { multiplication ~ (op_add ~ multiplication )* }
 op_mul        = { "*" | ".*" | "/" | "./" | "\\" | "%" | ".%" }
-multiplication= { with_range ~ (WHITESPACE+ ~ op_mul ~ WHITESPACE+ ~ with_range)* }
+multiplication= { with_range ~ (op_mul ~ with_range)* }
 with_range    = { unary ~ (":" ~ unary ~ (":" ~ unary)?)? }
 op_unary      = { "-" | "~" | "*" | "&mut" | "&" | "!" | "some" }
 unary         = { op_unary? ~ post_fix }
@@ -120,12 +120,12 @@ postfix_question = { "?" ~ !ASCII_ALPHANUMERIC ~ !"*" }
 postfix_bang = { "!" ~ !ASCII_ALPHANUMERIC ~ !"*" }
 post_fix      = { primary ~ (WHITESPACE* ~ (call_suffix | cast_suffix | static_path_suffix | field_suffix | postfix_question | postfix_bang | ("[" ~ (expression ~ ","?)+ ~ "]")) )* }
 tuple_expr    = { "(" ~ expression ~ ("," ~ expression)+ ~ ","? ~ ")" }
-primary_struct = { identifier ~ type_args? ~ struct_literal }
+primary_struct = { identifier ~ type_args ~ struct_literal | identifier ~ struct_literal }
 primary       = { primary_struct | unsafe_block | block | number | loop | conditional | match | function | literal | array_new | matrix | shader | tuple_expr | path_struct | identifier | "(" ~ expression ~ ")" }
 path_struct    = { identifier ~ ("::" ~ identifier)+ ~ struct_literal }
 static_path    = { identifier ~ ("::" ~ identifier)+ }
 
-call_suffix   = { type_args? ~ "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
+call_suffix   = { type_args ~ "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" | "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
 cast_suffix   = { "as" ~ !ASCII_ALPHANUMERIC ~ WHITESPACE* ~ type }
 argument      = { (identifier ~ ":")? ~ expression }
 literal       = { integer | float | string | boolean | char | struct_literal }
@@ -147,7 +147,7 @@ matrix        = { "[" ~ (row ~ ";")* ~ row ~ ";"? ~ "]" }
 row           = { (expression ~ ","?)+ }
 
 type_params   = { "<" ~ identifier ~ ("," ~ identifier)* ~ ">" }
-type_args     = { "<" ~ type ~ ("," ~ type)* ~ ">" }
+type_args     = { !(" " | "\t" | "\n" | "\r") ~ "<" ~ type ~ ("," ~ type)* ~ ">" }
 function      = { attributes? ~ "async"? ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
 function_params = { (function_param | ("self" | "&self" | "&mut self" | "*self")) ~ ("," ~ function_param)* ~ ","? }
 function_param = { identifier ~ (":" ~ type)? ~ ("=" ~ expression)? }

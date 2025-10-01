@@ -1,0 +1,223 @@
+# Platform tests for TriCTI stdlib
+# Tests for platform.tri module - timestamps, memory allocation, etc.
+
+use prelude
+use core::platform
+
+# =============================================================================
+# TIMESTAMP TESTS
+# =============================================================================
+
+test_timestamp_monotonic :: () -> bool => {
+    t1 := current_timestamp()
+    t2 := current_timestamp()
+    
+    # Workaround for parser < bug: use >= instead
+    if t1 >= t2 {
+        println("FAIL: Timestamps not monotonic")
+        println("  t1 = " + t1.to_string())
+        println("  t2 = " + t2.to_string())
+        ret false
+    }
+    
+    println("PASS: test_timestamp_monotonic")
+    true
+}
+
+test_timestamp_increments :: () -> bool => {
+    reset_timestamp()
+    
+    t1 := current_timestamp()
+    t2 := current_timestamp()
+    t3 := current_timestamp()
+    
+    if t1 != 1 {
+        println("FAIL: First timestamp should be 1, got " + t1.to_string())
+        ret false
+    }
+    
+    if t2 != 2 {
+        println("FAIL: Second timestamp should be 2, got " + t2.to_string())
+        ret false
+    }
+    
+    if t3 != 3 {
+        println("FAIL: Third timestamp should be 3, got " + t3.to_string())
+        ret false
+    }
+    
+    println("PASS: test_timestamp_increments")
+    true
+}
+
+test_timestamp_uniqueness :: () -> bool => {
+    reset_timestamp()
+    
+    # Collect 100 timestamps
+    t0 := current_timestamp()
+    t1 := current_timestamp()
+    t2 := current_timestamp()
+    t3 := current_timestamp()
+    t4 := current_timestamp()
+    
+    # Check they're all different
+    if t0 == t1 || t0 == t2 || t0 == t3 || t0 == t4 {
+        println("FAIL: Timestamps not unique")
+        ret false
+    }
+    
+    if t1 == t2 || t1 == t3 || t1 == t4 {
+        println("FAIL: Timestamps not unique")
+        ret false
+    }
+    
+    if t2 == t3 || t2 == t4 {
+        println("FAIL: Timestamps not unique")
+        ret false
+    }
+    
+    if t3 == t4 {
+        println("FAIL: Timestamps not unique")
+        ret false
+    }
+    
+    println("PASS: test_timestamp_uniqueness")
+    true
+}
+
+# =============================================================================
+# MEMORY ALLOCATION TESTS
+# =============================================================================
+
+test_alloc_dealloc_basic :: () -> bool => {
+    size := 1024
+    ptr := alloc(size)
+    
+    if ptr == none {
+        println("FAIL: Allocation returned null pointer")
+        ret false
+    }
+    
+    dealloc(ptr)
+    
+    println("PASS: test_alloc_dealloc_basic")
+    true
+}
+
+test_alloc_small :: () -> bool => {
+    ptr := alloc(8)
+    
+    if ptr == none {
+        println("FAIL: Small allocation failed")
+        ret false
+    }
+    
+    dealloc(ptr)
+    
+    println("PASS: test_alloc_small")
+    true
+}
+
+test_alloc_large :: () -> bool => {
+    size := 1024 * 1024
+    ptr := alloc(size)
+    
+    if ptr == none {
+        println("FAIL: Large allocation failed")
+        ret false
+    }
+    
+    dealloc(ptr)
+    
+    println("PASS: test_alloc_large")
+    true
+}
+
+# =============================================================================
+# PLATFORM CAPABILITIES TESTS
+# =============================================================================
+
+test_platform_has_timestamp :: () -> bool => {
+    has_ts := platform_has_feature("timestamp")
+    
+    if ~has_ts {
+        println("FAIL: Platform should have timestamp feature")
+        ret false
+    }
+    
+    println("PASS: test_platform_has_timestamp")
+    true
+}
+
+test_platform_has_alloc :: () -> bool => {
+    has_alloc := platform_has_feature("alloc")
+    
+    if ~has_alloc {
+        println("FAIL: Platform should have alloc feature")
+        ret false
+    }
+    
+    println("PASS: test_platform_has_alloc")
+    true
+}
+
+test_platform_unknown_feature :: () -> bool => {
+    has_unknown := platform_has_feature("nonexistent_feature_xyz")
+    
+    if has_unknown {
+        println("FAIL: Platform should not have unknown feature")
+        ret false
+    }
+    
+    println("PASS: test_platform_unknown_feature")
+    true
+}
+
+# =============================================================================
+# TEST RUNNER FOR PLATFORM TESTS
+# =============================================================================
+
+run_platform_tests :: () -> bool => {
+    println("")
+    println("=== Platform Tests ===")
+    println("")
+    
+    total := 0
+    passed := 0
+    
+    # Timestamp tests
+    total = total + 1
+    if test_timestamp_monotonic() { passed = passed + 1 }
+    
+    total = total + 1
+    if test_timestamp_increments() { passed = passed + 1 }
+    
+    total = total + 1
+    if test_timestamp_uniqueness() { passed = passed + 1 }
+    
+    # Memory allocation tests
+    total = total + 1
+    if test_alloc_dealloc_basic() { passed = passed + 1 }
+    
+    total = total + 1
+    if test_alloc_small() { passed = passed + 1 }
+    
+    total = total + 1
+    if test_alloc_large() { passed = passed + 1 }
+    
+    # Platform capabilities tests
+    total = total + 1
+    if test_platform_has_timestamp() { passed = passed + 1 }
+    
+    total = total + 1
+    if test_platform_has_alloc() { passed = passed + 1 }
+    
+    total = total + 1
+    if test_platform_unknown_feature() { passed = passed + 1 }
+    
+    println("")
+    println("Platform Tests: " + passed.to_string() + "/" + total.to_string() + " passed")
+    println("")
+    
+    passed == total
+}

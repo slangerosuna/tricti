@@ -56,13 +56,14 @@ impl<T> Vec<T> {
     }
 
     # Set capacity to exactly `capacity`. Supports shrinking and growing.
-    # If capacity > current, allocates a new buffer, moves existing elements via __memmov,
-    # and updates the pointer. If capacity < len, drops elements above new capacity
+    # If capacity >= current, allocates a new buffer, moves existing elements via __memmov,
+    # and updates the pointer. If self.len >= capacity, drops elements above new capacity
     # (calls destructors) before resizing.
     set_capacity :: (&mut self, capacity: u64) => {
         if capacity == self.capacity { ret }
 
-        if capacity < self.len {
+        # Workaround for parser < bug
+        if self.len >= capacity && capacity >= 0 {
             for i in capacity:self.len {
                 unsafe {
                     drop(*(self.data + i))
@@ -84,7 +85,8 @@ impl<T> Vec<T> {
         # Allocate new buffer
         var new_data := unsafe { alloc(sizeof<T>() * capacity) } as *T
 
-        if self.len > 0 {
+        # Workaround for parser < bug
+        if self.len >= 1 {
             # move existing elements (raw memory) into new buffer
             # prefer a builtin memmove if available
             @ifdef(__memmov) {
@@ -504,6 +506,219 @@ impl HashMap_U64_TransactionLog {
         false
     }
 }
+
+# =============================================================================
+# CONCRETE VEC_U64 - Simple vector for u64 (C-style API for tests)
+# =============================================================================
+
+Vec_u64 :: struct {
+    data: *u64,
+    len: u64,
+    capacity: u64,
+}
+
+Vec_u64_new :: () -> *Vec_u64 => {
+    v := alloc(24) as *Vec_u64
+    v.data = unsafe { none as *u64 }
+    v.len = 0
+    v.capacity = 0
+    v
+}
+
+Vec_u64_len :: (v: *Vec_u64) -> u64 => {
+    v.len
+}
+
+Vec_u64_push :: (v: *Vec_u64, value: u64) => {
+    if v.len >= v.capacity {
+        new_cap := if v.capacity == 0 { 16 } else { v.capacity * 2 }
+        new_data := alloc(new_cap * 8) as *u64
+        
+        # Copy old data
+        for i in 0:v.len {
+            unsafe {
+                *(new_data + i) = *(v.data + i)
+            }
+        }
+        
+        # Free old data if it exists
+        if v.data != unsafe { none as *u64 } {
+            dealloc(v.data as *none)
+        }
+        
+        v.data = new_data
+        v.capacity = new_cap
+    }
+    
+    unsafe {
+        *(v.data + v.len) = value
+    }
+    v.len = v.len + 1
+}
+
+Vec_u64_get :: (v: *Vec_u64, index: u64) -> u64 => {
+    if index >= v.len {
+        ret 0
+    }
+    unsafe {
+        *(v.data + index)
+    }
+}
+
+Vec_u64_pop :: (v: *Vec_u64) -> u64 => {
+    if v.len == 0 {
+        ret 0
+    }
+    v.len = v.len - 1
+    unsafe {
+        *(v.data + v.len)
+    }
+}
+
+Vec_u64_set :: (v: *Vec_u64, index: u64, value: u64) => {
+    # Workaround for parser < bug: ~(index >= v.len) means index < v.len
+    if ~(index >= v.len) {
+        unsafe {
+            *(v.data + index) = value
+        }
+    }
+}
+
+# =============================================================================
+# CONCRETE HASHMAP_U64_U64 - Simple hashmap for u64->u64 (C-style API)
+# =============================================================================
+
+HashEntry_u64_u64 :: struct {
+    key: u64,
+    value: u64,
+    occupied: bool,
+}
+
+HashMap_u64_u64 :: struct {
+    buckets: *HashEntry_u64_u64,
+    capacity: u64,
+    size: u64,
+}
+
+hash_u64_simple :: (key: u64) -> u64 => {
+    key
+}
+
+HashMap_u64_u64_new :: () -> *HashMap_u64_u64 => {
+    m := alloc(24) as *HashMap_u64_u64
+    capacity := 64
+    
+    # Allocate buckets
+    m.buckets = alloc(capacity * 24) as *HashEntry_u64_u64
+    
+    # Initialize all buckets as unoccupied
+    for i in 0:capacity {
+        entry := unsafe { m.buckets + i }
+        entry.key = 0
+        entry.value = 0
+        entry.occupied = false
+    }
+    
+    m.capacity = capacity
+    m.size = 0
+    m
+}
+
+HashMap_u64_u64_size :: (m: *HashMap_u64_u64) -> u64 => {
+    m.size
+}
+
+HashMap_u64_u64_insert :: (m: *HashMap_u64_u64, key: u64, value: u64) => {
+    hash := hash_u64_simple(key)
+    idx := hash % m.capacity
+    
+    # Linear probing
+    for i in 0:m.capacity {
+        probe_idx := (idx + i) % m.capacity
+        entry := unsafe { m.buckets + probe_idx }
+        
+        if ~entry.occupied || entry.key == key {
+            was_occupied := entry.occupied
+            entry.key = key
+            entry.value = value
+            entry.occupied = true
+            
+            if ~was_occupied {
+                m.size = m.size + 1
+            }
+            ret
+        }
+    }
+}
+
+HashMap_u64_u64_get :: (m: *HashMap_u64_u64, key: u64) -> u64 => {
+    hash := hash_u64_simple(key)
+    idx := hash % m.capacity
+    
+    for i in 0:m.capacity {
+        probe_idx := (idx + i) % m.capacity
+        entry := unsafe { m.buckets + probe_idx }
+        
+        if entry.occupied && entry.key == key {
+            ret entry.value
+        }
+        if ~entry.occupied {
+            ret 0
+        }
+    }
+    
+    0
+}
+
+HashMap_u64_u64_remove :: (m: *HashMap_u64_u64, key: u64) -> bool => {
+    hash := hash_u64_simple(key)
+    idx := hash % m.capacity
+    
+    for i in 0:m.capacity {
+        probe_idx := (idx + i) % m.capacity
+        entry := unsafe { m.buckets + probe_idx }
+        
+        if entry.occupied && entry.key == key {
+            entry.occupied = false
+            m.size = m.size - 1
+            ret true
+        }
+        if ~entry.occupied {
+            ret false
+        }
+    }
+    
+    false
+}
+
+HashMap_u64_u64_has :: (m: *HashMap_u64_u64, key: u64) -> bool => {
+    hash := hash_u64_simple(key)
+    idx := hash % m.capacity
+    
+    for i in 0:m.capacity {
+        probe_idx := (idx + i) % m.capacity
+        entry := unsafe { m.buckets + probe_idx }
+        
+        if entry.occupied && entry.key == key {
+            ret true
+        }
+        if ~entry.occupied {
+            ret false
+        }
+    }
+    
+    false
+}
+
+# =============================================================================
+# STRING OPERATIONS
+# =============================================================================
+
+# External string operations (provided by runtime)
+extern string_length :: (s: string) -> u64
+extern string_equals :: (a: string, b: string) -> bool
+extern string_concat :: (a: string, b: string) -> string
+extern string_substring :: (s: string, start: u64, len: u64) -> string
 
 # =============================================================================
 # BTREEMAP - B-tree map (ordered map)

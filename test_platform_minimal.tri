@@ -1,0 +1,50 @@
+# Minimal test for platform module
+# Tests only a few functions to verify compilation
+
+use prelude
+use core::platform
+
+# Simple test runner
+main :: () => {
+    println("=== Running Minimal Platform Tests ===")
+    println("")
+    
+    # Test 1: current_timestamp works
+    println("Test 1: Testing current_timestamp...")
+    t1 := current_timestamp()
+    t2 := current_timestamp()
+    
+    # Workaround for parser bug: store comparison result first
+    not_monotonic := t1 >= t2
+    if not_monotonic {
+        println("  FAIL: Timestamps not monotonic")
+        ret
+    }
+    println("  PASS: Timestamps are monotonic")
+    
+    # Test 2: reset_timestamp works
+    println("")
+    println("Test 2: Testing reset_timestamp...")
+    reset_timestamp()
+    t3 := current_timestamp()
+    
+    if t3 != 1 {
+        println("  FAIL: First timestamp after reset should be 1")
+        ret
+    }
+    println("  PASS: Reset timestamp works")
+    
+    # Test 3: platform_has_feature
+    println("")
+    println("Test 3: Testing platform_has_feature...")
+    has_ts := platform_has_feature("timestamp")
+    
+    if ~has_ts {
+        println("  FAIL: Platform should have timestamp feature")
+        ret
+    }
+    println("  PASS: Platform has timestamp feature")
+    
+    println("")
+    println("=== All Minimal Tests Passed ===")
+}

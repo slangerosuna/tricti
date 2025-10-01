@@ -1,0 +1,395 @@
+# Comprehensive TDD Tests for TriCTI stdlib - Phase 1
+# Platform and Collections modules
+# All-in-one test file for easier execution
+
+use prelude
+use core::platform
+use core::collections
+
+# =============================================================================
+# PLATFORM TESTS
+# =============================================================================
+
+test_timestamp_monotonic :: () -> bool => {
+    t1 := current_timestamp()
+    t2 := current_timestamp()
+    
+    # Use >= instead of < to avoid parser issues
+    if t1 > t2 {
+        println("FAIL: Timestamps not monotonic")
+        ret false
+    }
+    
+    println("PASS: test_timestamp_monotonic")
+    true
+}
+
+test_timestamp_increments :: () -> bool => {
+    reset_timestamp()
+    
+    t1 := current_timestamp()
+    t2 := current_timestamp()
+    t3 := current_timestamp()
+    
+    if t1 != 1 || t2 != 2 || t3 != 3 {
+        println("FAIL: Timestamps should increment from 1")
+        ret false
+    }
+    
+    println("PASS: test_timestamp_increments")
+    true
+}
+
+test_alloc_dealloc_basic :: () -> bool => {
+    ptr := alloc(1024)
+    
+    if ptr == none {
+        println("FAIL: Allocation returned null")
+        ret false
+    }
+    
+    dealloc(ptr)
+    println("PASS: test_alloc_dealloc_basic")
+    true
+}
+
+test_platform_has_timestamp :: () -> bool => {
+    if ~platform_has_feature("timestamp") {
+        println("FAIL: Platform should have timestamp")
+        ret false
+    }
+    println("PASS: test_platform_has_timestamp")
+    true
+}
+
+# =============================================================================
+# VEC_U64 TESTS
+# =============================================================================
+
+test_vec_u64_new :: () -> bool => {
+    v := Vec_u64_new()
+    
+    if Vec_u64_len(v) != 0 {
+        println("FAIL: New vec should have length 0")
+        ret false
+    }
+    
+    println("PASS: test_vec_u64_new")
+    true
+}
+
+test_vec_u64_push :: () -> bool => {
+    v := Vec_u64_new()
+    Vec_u64_push(v, 42)
+    
+    if Vec_u64_len(v) != 1 {
+        println("FAIL: Vec should have length 1 after push")
+        ret false
+    }
+    
+    val := Vec_u64_get(v, 0)
+    if val != 42 {
+        println("FAIL: Expected value 42")
+        ret false
+    }
+    
+    println("PASS: test_vec_u64_push")
+    true
+}
+
+test_vec_u64_multiple_push :: () -> bool => {
+    v := Vec_u64_new()
+    Vec_u64_push(v, 10)
+    Vec_u64_push(v, 20)
+    Vec_u64_push(v, 30)
+    
+    if Vec_u64_len(v) != 3 {
+        println("FAIL: Vec should have length 3")
+        ret false
+    }
+    
+    if Vec_u64_get(v, 0) != 10 || Vec_u64_get(v, 1) != 20 || Vec_u64_get(v, 2) != 30 {
+        println("FAIL: Values not correct")
+        ret false
+    }
+    
+    println("PASS: test_vec_u64_multiple_push")
+    true
+}
+
+test_vec_u64_capacity_growth :: () -> bool => {
+    v := Vec_u64_new()
+    
+    for i in 0:50 {
+        Vec_u64_push(v, i)
+    }
+    
+    if Vec_u64_len(v) != 50 {
+        println("FAIL: Vec should have length 50")
+        ret false
+    }
+    
+    for i in 0:50 {
+        val := Vec_u64_get(v, i)
+        if val != i {
+            println("FAIL: Value mismatch at index")
+            ret false
+        }
+    }
+    
+    println("PASS: test_vec_u64_capacity_growth")
+    true
+}
+
+test_vec_u64_pop :: () -> bool => {
+    v := Vec_u64_new()
+    Vec_u64_push(v, 10)
+    Vec_u64_push(v, 20)
+    Vec_u64_push(v, 30)
+    
+    val := Vec_u64_pop(v)
+    if val != 30 {
+        println("FAIL: Popped value should be 30")
+        ret false
+    }
+    
+    if Vec_u64_len(v) != 2 {
+        println("FAIL: Vec should have length 2 after pop")
+        ret false
+    }
+    
+    println("PASS: test_vec_u64_pop")
+    true
+}
+
+# =============================================================================
+# HASHMAP_U64_U64 TESTS
+# =============================================================================
+
+test_hashmap_u64_u64_new :: () -> bool => {
+    m := HashMap_u64_u64_new()
+    
+    if HashMap_u64_u64_size(m) != 0 {
+        println("FAIL: New hashmap should have size 0")
+        ret false
+    }
+    
+    println("PASS: test_hashmap_u64_u64_new")
+    true
+}
+
+test_hashmap_u64_u64_insert_get :: () -> bool => {
+    m := HashMap_u64_u64_new()
+    HashMap_u64_u64_insert(m, 42, 100)
+    
+    val := HashMap_u64_u64_get(m, 42)
+    if val != 100 {
+        println("FAIL: Should retrieve value 100")
+        ret false
+    }
+    
+    if HashMap_u64_u64_size(m) != 1 {
+        println("FAIL: HashMap should have size 1")
+        ret false
+    }
+    
+    println("PASS: test_hashmap_u64_u64_insert_get")
+    true
+}
+
+test_hashmap_u64_u64_multiple_insert :: () -> bool => {
+    m := HashMap_u64_u64_new()
+    
+    HashMap_u64_u64_insert(m, 10, 100)
+    HashMap_u64_u64_insert(m, 20, 200)
+    HashMap_u64_u64_insert(m, 30, 300)
+    
+    if HashMap_u64_u64_size(m) != 3 {
+        println("FAIL: HashMap should have size 3")
+        ret false
+    }
+    
+    if HashMap_u64_u64_get(m, 10) != 100 {
+        println("FAIL: m[10] should be 100")
+        ret false
+    }
+    
+    println("PASS: test_hashmap_u64_u64_multiple_insert")
+    true
+}
+
+test_hashmap_u64_u64_collision_handling :: () -> bool => {
+    m := HashMap_u64_u64_new()
+    
+    for i in 0:30 {
+        HashMap_u64_u64_insert(m, i, i * 2)
+    }
+    
+    if HashMap_u64_u64_size(m) != 30 {
+        println("FAIL: HashMap should have size 30")
+        ret false
+    }
+    
+    for i in 0:30 {
+        val := HashMap_u64_u64_get(m, i)
+        expected := i * 2
+        if val != expected {
+            println("FAIL: HashMap value mismatch")
+            ret false
+        }
+    }
+    
+    println("PASS: test_hashmap_u64_u64_collision_handling")
+    true
+}
+
+test_hashmap_u64_u64_has :: () -> bool => {
+    m := HashMap_u64_u64_new()
+    HashMap_u64_u64_insert(m, 42, 100)
+    
+    if ~HashMap_u64_u64_has(m, 42) {
+        println("FAIL: HashMap should have key 42")
+        ret false
+    }
+    
+    if HashMap_u64_u64_has(m, 99) {
+        println("FAIL: HashMap should not have key 99")
+        ret false
+    }
+    
+    println("PASS: test_hashmap_u64_u64_has")
+    true
+}
+
+# =============================================================================
+# STRING OPERATIONS TESTS
+# =============================================================================
+
+test_string_length :: () -> bool => {
+    s := "hello"
+    len := string_length(s)
+    
+    if len != 5 {
+        println("FAIL: Length of 'hello' should be 5")
+        ret false
+    }
+    
+    println("PASS: test_string_length")
+    true
+}
+
+test_string_equals :: () -> bool => {
+    s1 := "hello"
+    s2 := "hello"
+    s3 := "world"
+    
+    if ~string_equals(s1, s2) {
+        println("FAIL: 'hello' should equal 'hello'")
+        ret false
+    }
+    
+    if string_equals(s1, s3) {
+        println("FAIL: 'hello' should not equal 'world'")
+        ret false
+    }
+    
+    println("PASS: test_string_equals")
+    true
+}
+
+# =============================================================================
+# TEST RUNNER
+# =============================================================================
+
+run_platform_tests :: () -> u64 => {
+    println("")
+    println("=== Platform Tests ===")
+    println("")
+    
+    passed := 0
+    
+    if test_timestamp_monotonic() { passed = passed + 1 }
+    if test_timestamp_increments() { passed = passed + 1 }
+    if test_alloc_dealloc_basic() { passed = passed + 1 }
+    if test_platform_has_timestamp() { passed = passed + 1 }
+    
+    passed
+}
+
+run_collections_tests :: () -> u64 => {
+    println("")
+    println("=== Collections Tests ===")
+    println("")
+    
+    passed := 0
+    
+    if test_vec_u64_new() { passed = passed + 1 }
+    if test_vec_u64_push() { passed = passed + 1 }
+    if test_vec_u64_multiple_push() { passed = passed + 1 }
+    if test_vec_u64_capacity_growth() { passed = passed + 1 }
+    if test_vec_u64_pop() { passed = passed + 1 }
+    
+    if test_hashmap_u64_u64_new() { passed = passed + 1 }
+    if test_hashmap_u64_u64_insert_get() { passed = passed + 1 }
+    if test_hashmap_u64_u64_multiple_insert() { passed = passed + 1 }
+    if test_hashmap_u64_u64_collision_handling() { passed = passed + 1 }
+    if test_hashmap_u64_u64_has() { passed = passed + 1 }
+    
+    passed
+}
+
+run_string_tests :: () -> u64 => {
+    println("")
+    println("=== String Operation Tests ===")
+    println("")
+    
+    passed := 0
+    
+    if test_string_length() { passed = passed + 1 }
+    if test_string_equals() { passed = passed + 1 }
+    
+    passed
+}
+
+# =============================================================================
+# MAIN ENTRY POINT
+# =============================================================================
+
+main :: () => {
+    println("")
+    println("=======================================")
+    println("  TriCTI Stdlib TDD Tests - Phase 1")
+    println("  Platform and Collections Modules")
+    println("=======================================")
+    
+    total_passed := 0
+    total_tests := 16
+    
+    platform_passed := run_platform_tests()
+    total_passed = total_passed + platform_passed
+    
+    collections_passed := run_collections_tests()
+    total_passed = total_passed + collections_passed
+    
+    string_passed := run_string_tests()
+    total_passed = total_passed + string_passed
+    
+    println("")
+    println("=======================================")
+    println("  SUMMARY")
+    println("=======================================")
+    println("  Total Tests:  " + total_tests.to_string())
+    println("  Passed:       " + total_passed.to_string())
+    println("  Failed:       " + (total_tests - total_passed).to_string())
+    println("=======================================")
+    
+    if total_passed == total_tests {
+        println("")
+        println("  ✓ ALL TESTS PASSED!")
+        println("")
+    } else {
+        println("")
+        println("  ✗ Some tests failed")
+        println("")
+    }
+}

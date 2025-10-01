@@ -14,97 +14,97 @@ pub use std_err
 
 # Legacy result functions for backward compatibility during migration
 std_result_is_ok<T> :: (result: StdResult<T>) -> bool => {
-	match result {
-		StdResult::Ok { .. } => true,
-		StdResult::Err { .. } => false,
-	}
+        match result {
+                StdResult::Ok { .. } => true,
+                StdResult::Err { .. } => false,
+        }
 }
 
 std_result_unwrap<T> :: (result: StdResult<T>) -> T => {
-	match result {
-		StdResult::Ok { value } => value,
-		StdResult::Err { error } => panic(std_error_message(error)),
-	}
+        match result {
+                StdResult::Ok { value } => value,
+                StdResult::Err { error } => panic(std_error_message(error)),
+        }
 }
 
 std_result_error<T> :: (result: StdResult<T>) -> ?StdError => {
-	match result {
-		StdResult::Ok { .. } => none,
-		StdResult::Err { error } => some error,
-	}
+        match result {
+                StdResult::Ok { .. } => none,
+                StdResult::Err { error } => some error,
+        }
 }
 
 # Helper functions for creating modern error types
 std_error_message_only :: (message: string) -> StdError => {
-	StdError::Message { message: message }
+        StdError::Message { message: message }
 }
 
 std_error_panic :: (message: string, source: ?string) -> StdError => {
-	StdError::Panic { message: message, source: source }
+        StdError::Panic { message: message, source: source }
 }
 
 std_error_invalid_argument :: (parameter: string, message: string) -> StdError => {
-	StdError::InvalidArgument { parameter: parameter, message: message }
+        StdError::InvalidArgument { parameter: parameter, message: message }
 }
 
 std_error_unsupported :: (feature: string) -> StdError => {
-	StdError::Unsupported { feature: feature }
+        StdError::Unsupported { feature: feature }
 }
 
 LogLevel :: enum {
-	Trace,
-	Debug,
-	Info,
-	Warn,
-	Error,
+        Trace,
+        Debug,
+        Info,
+        Warn,
+        Error,
 }
 
 log_message :: (level: LogLevel, message: string) -> none => {
-	label := match level {
-		LogLevel::Trace => "[trace]",
-		LogLevel::Debug => "[debug]",
-		LogLevel::Info => "[info]",
-		LogLevel::Warn => "[warn]",
-		LogLevel::Error => "[error]",
-	}
-	println(label)
-	println(message)
+        label := match level {
+                LogLevel::Trace => "[trace]",
+                LogLevel::Debug => "[debug]",
+                LogLevel::Info => "[info]",
+                LogLevel::Warn => "[warn]",
+                LogLevel::Error => "[error]",
+        }
+        println(label)
+        println(message)
 }
 
 log_info :: (message: string) -> none => {
-	log_message(LogLevel::Info, message)
+        log_message(LogLevel::Info, message)
 }
 
 log_error :: (message: string) -> none => {
-	log_message(LogLevel::Error, message)
+        log_message(LogLevel::Error, message)
 }
 
 RuntimeConfigOptions :: struct {
-	enable_preemption: bool,
-	scheduling_quantum_ms: i64,
+        enable_preemption: bool,
+        scheduling_quantum_ms: i64,
 }
 
 IOConfigOptions :: struct {
-	default_timeout_ms: i64,
-	enable_tracing: bool,
+        default_timeout_ms: i64,
+        enable_tracing: bool,
 }
 
 StdConfig :: struct {
-	runtime: RuntimeConfigOptions,
-	io: IOConfigOptions,
+        runtime: RuntimeConfigOptions,
+        io: IOConfigOptions,
 }
 
 std_default_config :: () -> StdConfig => {
-	{
-		runtime: {
-			enable_preemption: true,
-			scheduling_quantum_ms: 10,
-		},
-		io: {
-			default_timeout_ms: 5_000,
-			enable_tracing: false,
-		},
-	}
+        {
+                runtime: {
+                        enable_preemption: true,
+                        scheduling_quantum_ms: 10,
+                },
+                io: {
+                        default_timeout_ms: 5_000,
+                        enable_tracing: false,
+                },
+        }
 }
 
 # println is a builtin, but we expose a convenient alias
@@ -123,51 +123,53 @@ id :: (x: i64) -> i64 => x
 rem_i64 :: (a: i64, b: i64) -> i64 => 0
 
 # Small math helpers (replace with non-branching versions when xor, or, and, etc. added) (also generics when added)
-abs_i64 :: (x: i64) -> i64 => { if x < 0 { -x } else { x } }
-min_i64 :: (a: i64, b: i64) -> i64 => { if a < b { a } else { b } }
-max_i64 :: (a: i64, b: i64) -> i64 => { if a > b { a } else { b } }
+# Workaround for parser < bug: use negated >= or flipped comparisons
+abs_i64 :: (x: i64) -> i64 => { if ~(x >= 0) { -x } else { x } }
+min_i64 :: (a: i64, b: i64) -> i64 => { if b >= a { a } else { b } }
+max_i64 :: (a: i64, b: i64) -> i64 => { if a >= b { a } else { b } }
 
 # Extended math helpers
+# Workaround for parser < bug
 clamp_i64 :: (value: i64, min_value: i64, max_value: i64) -> i64 => {
-	if value < min_value {
-		ret min_value
-	}
-	if value > max_value {
-		ret max_value
-	}
-	value
+        if min_value >= value {
+                ret min_value
+        }
+        if value >= max_value {
+                ret max_value
+        }
+        value
 }
 
 sign_i64 :: (value: i64) -> i64 => {
-	if value < 0 { ret -1 }
-	if value > 0 { ret 1 }
-	0
+        if ~(value >= 0) { ret -1 }
+        if value >= 1 { ret 1 }
+        0
 }
 
 is_even_i64 :: (value: i64) -> bool => {
-	rem_i64(value, 2) == 0
+        rem_i64(value, 2) == 0
 }
 
 is_odd_i64 :: (value: i64) -> bool => {
-	rem_i64(value, 2) ~= 0
+        rem_i64(value, 2) ~= 0
 }
 
 
 # Errors and assertions
 # Print a message and terminate the process with non-zero status
 panic :: (msg: string) -> none => {
-	println("Assertion failed:", msg)
-	exit(1)
+        println("Assertion failed:", msg)
+        exit(1)
 }
 
 # Assert a condition holds; otherwise panic with message
 assert :: (cond: bool, msg: string) -> none => {
-	if ~cond { panic(msg) }
+        if ~cond { panic(msg) }
 }
 
 # Assert equality for i64 values; otherwise panic
 assert_eq_i64 :: (a: i64, b: i64, msg: string) -> none => {
-	if a ~= b { panic(msg) }
+        if a ~= b { panic(msg) }
 }
 
 
@@ -175,17 +177,17 @@ assert_eq_i64 :: (a: i64, b: i64, msg: string) -> none => {
 # Given a pointer to i64 (e.g., an array decays to &i64) and a length, build a slice_i64 value.
 # For now, accept a fixed-size array [i64; 5]; future iterations will generalize.
 slice_i64_from :: (arr: [i64; 5], len: i64) -> slice_i64 => {
-	{ ptr: arr, len: len }
+        { ptr: arr, len: len }
 }
 
 # Prototype slice for bool
 slice_bool :: struct {
-	ptr: &bool,
-	len: i64,
+        ptr: &bool,
+        len: i64,
 }
 
 slice_bool_from :: (arr: [bool; 5], len: i64) -> slice_bool => {
-	{ ptr: arr, len: len }
+        { ptr: arr, len: len }
 }
 
 slice_len_bool :: (s: slice_bool) -> i64 => s.len
@@ -193,9 +195,9 @@ slice_len_bool :: (s: slice_bool) -> i64 => s.len
 slice_is_empty_bool :: (s: slice_bool) -> bool => s.len == 0
 
 slice_get_bool :: (s: slice_bool, idx: i64) -> bool => {
-	if idx < 0 { panic("slice_bool index negative") }
-	if idx >= s.len { panic("slice_bool index out of bounds") }
-	s.ptr[idx]
+        if ~(idx >= 0) { panic("slice_bool index negative") }
+        if idx >= s.len { panic("slice_bool index out of bounds") }
+        s.ptr[idx]
 }
 
 # Dynamic arrays (Vec)
@@ -204,28 +206,28 @@ Vec_i64 :: struct { len: i64, ptr: *i64, cap: i64 }
 new_vec_i64 :: () -> Vec_i64 => { { len: 0, ptr: 0, cap: 0 } }
 
 realloc_i64 :: (old_ptr: *i64, len: i64, new_cap: i64) -> *i64 => {
-	new_ptr := alloc(new_cap * 8)
-	for i in 0:len {
-		new_ptr[i] = old_ptr[i]
-	}
-	if old_ptr ~= 0 { dealloc(old_ptr) }
-	new_ptr
+        new_ptr := alloc(new_cap * 8)
+        for i in 0:len {
+                new_ptr[i] = old_ptr[i]
+        }
+        if old_ptr ~= 0 { dealloc(old_ptr) }
+        new_ptr
 }
 
 vec_push_i64 :: (v: *Vec_i64, val: i64) -> none => {
-	if v.len == v.cap {
-		new_cap := if v.cap == 0 { 1 } else { v.cap * 2 }
-		v.ptr = realloc_i64(v.ptr, v.len, new_cap)
-		v.cap = new_cap
-	}
-	v.ptr[v.len] = val
-	v.len = v.len + 1
+        if v.len == v.cap {
+                new_cap := if v.cap == 0 { 1 } else { v.cap * 2 }
+                v.ptr = realloc_i64(v.ptr, v.len, new_cap)
+                v.cap = new_cap
+        }
+        v.ptr[v.len] = val
+        v.len = v.len + 1
 }
 
 vec_pop_i64 :: (v: *Vec_i64) -> i64 => {
-	if v.len == 0 { panic("pop from empty vec") }
-	v.len = v.len - 1
-	v.ptr[v.len]
+        if v.len == 0 { panic("pop from empty vec") }
+        v.len = v.len - 1
+        v.ptr[v.len]
 }
 
 vec_len_i64 :: (v: *Vec_i64) -> i64 => { v.len }
@@ -234,158 +236,159 @@ vec_len_i64 :: (v: *Vec_i64) -> i64 => { v.len }
 # Generic array helpers
 
 array_append<T> :: (items: &[T], value: T) -> [T] => {
-	new_len := items.len() + 1
-	output := new [T; new_len]
-	for i in 0:items.len() {
-		output[i] = items[i]
-	}
-	output[new_len - 1] = value
-	output
+        new_len := items.len() + 1
+        output := new [T; new_len]
+        for i in 0:items.len() {
+                output[i] = items[i]
+        }
+        output[new_len - 1] = value
+        output
 }
 
 array_set_at<T> :: (items: &[T], idx: i64, value: T) -> [T] => {
-	output := new [T; items.len()]
-	for i in 0:items.len() {
-		if i == idx {
-			output[i] = value
-		} else {
-			output[i] = items[i]
-		}
-	}
-	output
+        output := new [T; items.len()]
+        for i in 0:items.len() {
+                if i == idx {
+                        output[i] = value
+                } else {
+                        output[i] = items[i]
+                }
+        }
+        output
 }
 
 array_remove_at<T> :: (items: &[T], remove_idx: i64) -> [T] => {
-	len := items.len()
-	if len == 0 {
-		ret new [T; 0]
-	}
+        len := items.len()
+        if len == 0 {
+                ret new [T; 0]
+        }
 
-	if remove_idx < 0 || remove_idx >= len {
-		copy := new [T; len]
-		for i in 0:len {
-			copy[i] = items[i]
-		}
-		ret copy
-	}
+        # Workaround for parser < bug
+        if ~(remove_idx >= 0) || remove_idx >= len {
+                copy := new [T; len]
+                for i in 0:len {
+                        copy[i] = items[i]
+                }
+                ret copy
+        }
 
-	new_len := len - 1
-	if new_len <= 0 {
-		ret new [T; 0]
-	}
+        new_len := len - 1
+        if new_len <= 0 {
+                ret new [T; 0]
+        }
 
-	output := new [T; new_len]
-	out_idx := 0
-	for i in 0:len {
-		if i == remove_idx {
-			continue
-		}
-		output[out_idx] = items[i]
-		out_idx = out_idx + 1
-	}
-	output
+        output := new [T; new_len]
+        out_idx := 0
+        for i in 0:len {
+                if i == remove_idx {
+                        continue
+                }
+                output[out_idx] = items[i]
+                out_idx = out_idx + 1
+        }
+        output
 }
 
 array_remove_where<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
-	keep_count := 0
-	for i in 0:items.len() {
-		if ~predicate(items[i]) {
-			keep_count = keep_count + 1
-		}
-	}
+        keep_count := 0
+        for i in 0:items.len() {
+                if ~predicate(items[i]) {
+                        keep_count = keep_count + 1
+                }
+        }
 
-	if keep_count == 0 {
-		ret new [T; 0]
-	}
+        if keep_count == 0 {
+                ret new [T; 0]
+        }
 
-	output := new [T; keep_count]
-	out_idx := 0
-	for i in 0:items.len() {
-		item := items[i]
-		if predicate(item) {
-			continue
-		}
-		output[out_idx] = item
-		out_idx = out_idx + 1
-	}
-	output
+        output := new [T; keep_count]
+        out_idx := 0
+        for i in 0:items.len() {
+                item := items[i]
+                if predicate(item) {
+                        continue
+                }
+                output[out_idx] = item
+                out_idx = out_idx + 1
+        }
+        output
 }
 
 array_filter<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
-	match array_find_index(items, predicate) {
-		none => ret new [T; 0]
-		_ => {}
-	}
+        match array_find_index(items, predicate) {
+                none => ret new [T; 0]
+                _ => {}
+        }
 
-	# Collect matches
-	count := 0
-	for i in 0:items.len() {
-		if predicate(items[i]) {
-			count = count + 1
-		}
-	}
+        # Collect matches
+        count := 0
+        for i in 0:items.len() {
+                if predicate(items[i]) {
+                        count = count + 1
+                }
+        }
 
-	output := new [T; count]
-	out_idx := 0
-	for i in 0:items.len() {
-		item := items[i]
-		if predicate(item) {
-			output[out_idx] = item
-			out_idx = out_idx + 1
-		}
-	}
-	output
+        output := new [T; count]
+        out_idx := 0
+        for i in 0:items.len() {
+                item := items[i]
+                if predicate(item) {
+                        output[out_idx] = item
+                        out_idx = out_idx + 1
+                }
+        }
+        output
 }
 
 array_find_index<T> :: (items: &[T], predicate: (T) -> bool) -> ?i64 => {
-	for i in 0:items.len() {
-		if predicate(items[i]) {
-			ret some i
-		}
-	}
-	none
+        for i in 0:items.len() {
+                if predicate(items[i]) {
+                        ret some i
+                }
+        }
+        none
 }
 
 array_contains<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
-	match array_find_index(items, predicate) {
-		some _ => true,
-		none => false,
-	}
+        match array_find_index(items, predicate) {
+                some _ => true,
+                none => false,
+        }
 }
 
 array_map<T> :: (items: &[T], transform: (T) -> T) -> [T] => {
-	if items.len() == 0 {
-		ret new [T; 0]
-	}
+        if items.len() == 0 {
+                ret new [T; 0]
+        }
 
-	output := new [T; items.len()]
-	for i in 0:items.len() {
-		output[i] = transform(items[i])
-	}
-	output
+        output := new [T; items.len()]
+        for i in 0:items.len() {
+                output[i] = transform(items[i])
+        }
+        output
 }
 
 array_all<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
-	for i in 0:items.len() {
-		if ~predicate(items[i]) {
-			ret false
-		}
-	}
-	true
+        for i in 0:items.len() {
+                if ~predicate(items[i]) {
+                        ret false
+                }
+        }
+        true
 }
 
 array_any<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
-	match array_find_index(items, predicate) {
-		some _ => true,
-		none => false,
-	}
+        match array_find_index(items, predicate) {
+                some _ => true,
+                none => false,
+        }
 }
 
 array_fold<T> :: (items: &[T], initial: T, reducer: (T, T) -> T) -> T => {
-	acc := initial
-	for i in 0:items.len() {
-		acc = reducer(acc, items[i])
-	}
-	acc
+        acc := initial
+        for i in 0:items.len() {
+                acc = reducer(acc, items[i])
+        }
+        acc
 }
 

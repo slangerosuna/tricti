@@ -1,0 +1,49 @@
+# Test Runner for TriCTI stdlib tests
+# Main entry point for running all stdlib tests
+
+use prelude
+use core::platform
+
+# Include test modules
+# Note: These would normally be imported, but we'll include them directly
+# use test::platform_tests
+# use test::collections_tests
+
+# For now, we'll assume the test functions are available
+# In a real implementation, we'd use a proper module system
+
+# =============================================================================
+# TEST RUNNER MAIN ENTRY POINT
+# =============================================================================
+
+main :: () => {
+    println("=== Running TriCTI Stdlib Tests ===")
+    println("Testing Platform and Collections modules")
+    println("")
+    
+    all_passed := true
+    
+    # Run platform tests
+    platform_passed := run_platform_tests()
+    all_passed = all_passed and platform_passed
+    
+    # Run collections tests
+    collections_passed := run_collections_tests()
+    all_passed = all_passed and collections_passed
+    
+    # Print summary
+    println("")
+    println("=======================================")
+    if all_passed {
+        println("✓ ALL TESTS PASSED")
+        println("=======================================")
+    } else {
+        println("✗ SOME TESTS FAILED")
+        println("=======================================")
+    }
+    println("")
+}
+
+# Note: These functions are implemented in their respective test files
+# and would be imported here. For this initial version, we're keeping
+# everything together for simplicity.

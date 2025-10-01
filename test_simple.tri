@@ -1,0 +1,20 @@
+# Simplest possible test
+main :: () => {
+    println("Starting simple test...")
+    
+    # Test simple equality
+    x := 5
+    y := 5
+    
+    if x == y {
+        println("PASS: Equality works")
+    }
+    
+    # Test inequality  
+    z := 10
+    if x ~= z {
+        println("PASS: Inequality works")
+    }
+    
+    println("Simple test complete")
+}

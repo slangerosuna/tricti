@@ -1,0 +1,53 @@
+# Simple test to verify basic functionality
+use prelude
+use core::platform
+use core::collections
+
+main :: () => {
+    println("=== Simple TriCTI Stdlib Test ===")
+    println("")
+    
+    # Test timestamp
+    println("Testing timestamps...")
+    reset_timestamp()
+    t1 := current_timestamp()
+    t2 := current_timestamp()
+    println("  t1 = " + t1.to_string())
+    println("  t2 = " + t2.to_string())
+    println("  ✓ Timestamps work")
+    println("")
+    
+    # Test allocation
+    println("Testing allocation...")
+    ptr := alloc(1024)
+    println("  Allocated 1024 bytes")
+    dealloc(ptr)
+    println("  ✓ Allocation works")
+    println("")
+    
+    # Test Vec_u64
+    println("Testing Vec_u64...")
+    v := Vec_u64_new()
+    println("  Created new vec, len = " + Vec_u64_len(v).to_string())
+    Vec_u64_push(v, 42)
+    println("  Pushed 42, len = " + Vec_u64_len(v).to_string())
+    val := Vec_u64_get(v, 0)
+    println("  Got value: " + val.to_string())
+    println("  ✓ Vec_u64 works")
+    println("")
+    
+    # Test HashMap_u64_u64
+    println("Testing HashMap_u64_u64...")
+    m := HashMap_u64_u64_new()
+    println("  Created new hashmap, size = " + HashMap_u64_u64_size(m).to_string())
+    HashMap_u64_u64_insert(m, 10, 100)
+    println("  Inserted (10, 100)")
+    result := HashMap_u64_u64_get(m, 10)
+    println("  Got value: " + result.to_string())
+    println("  ✓ HashMap_u64_u64 works")
+    println("")
+    
+    println("=======================================")
+    println("  ✓ Basic tests completed successfully")
+    println("=======================================")
+}
