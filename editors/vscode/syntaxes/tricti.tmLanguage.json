@@ -4,6 +4,7 @@
   "scopeName": "source.tricti",
   "patterns": [
     { "include": "#comments" },
+    { "include": "#attributes" },
     { "include": "#keywords" },
     { "include": "#strings" },
     { "include": "#numbers" },
@@ -157,6 +158,56 @@
         {
           "name": "constant.language.null.tricti",
           "match": "\\bnone\\b"
+        }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        {
+          "name": "meta.attribute.tricti",
+          "begin": "@\\w+",
+          "beginCaptures": {
+            "0": { "name": "entity.name.function.decorator.tricti" }
+          },
+          "end": "(?=[,\\n\\r]|$|[;})])",
+          "patterns": [
+            { "include": "#attribute-contents" }
+          ]
+        }
+      ]
+    },
+    "attribute-contents": {
+      "patterns": [
+        {
+          "name": "meta.attribute.parameters.tricti",
+          "begin": "\\(",
+          "end": "\\)",
+          "patterns": [
+            { "include": "#strings" },
+            { "include": "#numbers" },
+            { "include": "#types" },
+            { "include": "#identifiers" },
+            {
+              "name": "punctuation.separator.attribute.tricti",
+              "match": ","
+            }
+          ]
+        },
+        {
+          "name": "entity.name.attribute.parameter.tricti",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+        },
+        {
+          "name": "punctuation.separator.attribute.tricti", 
+          "match": ","
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.tricti",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
         }
       ]
     }
