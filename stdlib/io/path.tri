@@ -1,0 +1,156 @@
+# Path operations for TriCTI
+# Provides high-level path manipulation and queries
+
+use core::traits
+use core::string
+use io::posix
+
+# =============================================================================
+# PATH TYPE
+# =============================================================================
+
+# Path represents a filesystem path
+Path :: struct {
+    path: String,
+}
+
+impl Path {
+    # Create new path from string
+    new :: (path: String) -> Path => {
+        Path { path: path }
+    }
+    
+    # Check if path exists (file or directory)
+    exists :: (path: &Path) -> bool => {
+        ret posix_access(String::as_ptr(&path.path), F_OK) == 0
+    }
+    
+    # Check if path is a regular file
+    is_file :: (path: &Path) -> bool => {
+        mut stat_buf: [u8; 144] = [0; 144]
+        if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) != 0 {
+            ret false
+        }
+        
+        mode_ptr := (&stat_buf[24]) as *u32
+        mode := *mode_ptr
+        
+        file_type := mode & S_IFMT
+        ret file_type == S_IFREG
+    }
+    
+    # Check if path is a directory
+    is_dir :: (path: &Path) -> bool => {
+        mut stat_buf: [u8; 144] = [0; 144]
+        if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) != 0 {
+            ret false
+        }
+        
+        mode_ptr := (&stat_buf[24]) as *u32
+        mode := *mode_ptr
+        
+        file_type := mode & S_IFMT
+        ret file_type == S_IFDIR
+    }
+    
+    # Get file name (last component of path)
+    file_name :: (path: &Path) -> ?String => {
+        if path.path.len == 0 { ret none }
+        
+        mut last_slash := -1i64
+        for i in 0:path.path.len {
+            if path.path.data[i] == 47 {
+                last_slash = i as i64
+            }
+        }
+        
+        if last_slash < 0 {
+            ret some String::clone(&path.path)
+        }
+        
+        if (last_slash as u64) == path.path.len - 1 {
+            ret none
+        }
+        
+        start := (last_slash + 1) as u64
+        len := path.path.len - start
+        
+        result := String::with_capacity(len)
+        for i in 0:len {
+            String::push_char(&result, path.path.data[start + i])
+        }
+        
+        ret some result
+    }
+    
+    # Get parent directory
+    parent :: (path: &Path) -> ?Path => {
+        if path.path.len == 0 { ret none }
+        
+        mut last_slash := -1i64
+        for i in 0:path.path.len {
+            if path.path.data[i] == 47 {
+                last_slash = i as i64
+            }
+        }
+        
+        if last_slash <= 0 { ret none }
+        
+        parent_str := String::with_capacity(last_slash as u64)
+        for i in 0:(last_slash as u64) {
+            String::push_char(&parent_str, path.path.data[i])
+        }
+        
+        ret some Path { path: parent_str }
+    }
+    
+    # Join path with another component
+    join :: (path: &Path, other: String) -> Path => {
+        mut result := String::clone(&path.path)
+        
+        if result.len > 0 && result.data[result.len - 1] != 47 {
+            String::push_char(&result, 47)
+        }
+        
+        String::push_str(&result, &other)
+        ret Path { path: result }
+    }
+    
+    # Convert to string
+    to_string :: (path: &Path) -> String => {
+        String::clone(&path.path)
+    }
+    
+    # Get path as C string pointer
+    as_ptr :: (path: &Path) -> *u8 => {
+        String::as_ptr(&path.path)
+    }
+}
+
+# Trait implementations for Path
+impl Clone for Path {
+    clone :: (&self) -> Path => {
+        Path { path: String::clone(&self.path) }
+    }
+}
+
+impl Display for Path {
+    to_string :: (&self) -> String => {
+        String::clone(&self.path)
+    }
+}
+
+impl Debug for Path {
+    debug_string :: (&self) -> String => {
+        result := String::from_cstr("Path(\"" as *u8)
+        String::push_str(&result, &self.path)
+        String::push_str(&result, &String::from_cstr("\")" as *u8))
+        result
+    }
+}
+
+impl Drop for Path {
+    drop :: (&mut self) => {
+        String::destroy(&mut self.path)
+    }
+}

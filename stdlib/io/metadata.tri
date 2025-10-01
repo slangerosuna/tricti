@@ -1,0 +1,163 @@
+# Metadata operations for TriCTI
+# Provides file and directory metadata queries
+
+use core::traits
+use core::string
+use io::posix
+
+# =============================================================================
+# METADATA TYPE
+# =============================================================================
+
+# Metadata contains file/directory information
+Metadata :: struct {
+    size: u64,
+    is_file: bool,
+    is_dir: bool,
+    permissions: u32,
+    modified_time: i64,
+    accessed_time: i64,
+    created_time: i64,
+}
+
+impl Metadata {
+    # Get metadata for path
+    # Returns Some(metadata) on success, None on error
+    from_path :: (path: String) -> ?Metadata => {
+        mut stat_buf: [u8; 144] = [0; 144]
+        if posix_stat(String::as_ptr(&path), &stat_buf as *u8) != 0 {
+            ret none
+        }
+        
+        Metadata::parse_stat_buf(&stat_buf)
+    }
+    
+    # Parse stat buffer into Metadata
+    # Internal helper function
+    parse_stat_buf :: (stat_buf: &[u8; 144]) -> ?Metadata => {
+        mode_ptr := (&stat_buf[24]) as *u32
+        mode := *mode_ptr
+        
+        size_ptr := (&stat_buf[48]) as *u64
+        size := *size_ptr
+        
+        file_type := mode & S_IFMT
+        is_file := file_type == S_IFREG
+        is_dir := file_type == S_IFDIR
+        
+        permissions := mode & 511u32
+        
+        atime_ptr := (&stat_buf[72]) as *i64
+        atime := *atime_ptr
+        
+        mtime_ptr := (&stat_buf[88]) as *i64
+        mtime := *mtime_ptr
+        
+        ctime_ptr := (&stat_buf[104]) as *i64
+        ctime := *ctime_ptr
+        
+        ret some Metadata {
+            size: size,
+            is_file: is_file,
+            is_dir: is_dir,
+            permissions: permissions,
+            modified_time: mtime,
+            accessed_time: atime,
+            created_time: ctime,
+        }
+    }
+    
+    # Get file size in bytes
+    size :: (meta: &Metadata) -> u64 => {
+        meta.size
+    }
+    
+    # Check if metadata is for a file
+    is_file :: (meta: &Metadata) -> bool => {
+        meta.is_file
+    }
+    
+    # Check if metadata is for a directory
+    is_dir :: (meta: &Metadata) -> bool => {
+        meta.is_dir
+    }
+    
+    # Get permission bits
+    permissions :: (meta: &Metadata) -> u32 => {
+        meta.permissions
+    }
+    
+    # Get last modified time (Unix timestamp)
+    modified :: (meta: &Metadata) -> i64 => {
+        meta.modified_time
+    }
+    
+    # Get last accessed time (Unix timestamp)
+    accessed :: (meta: &Metadata) -> i64 => {
+        meta.accessed_time
+    }
+    
+    # Get creation time (Unix timestamp)
+    created :: (meta: &Metadata) -> i64 => {
+        meta.created_time
+    }
+    
+    # Check if readable
+    is_readable :: (meta: &Metadata) -> bool => {
+        (meta.permissions & S_IRUSR) != 0
+    }
+    
+    # Check if writable
+    is_writable :: (meta: &Metadata) -> bool => {
+        (meta.permissions & S_IWUSR) != 0
+    }
+    
+    # Check if executable
+    is_executable :: (meta: &Metadata) -> bool => {
+        (meta.permissions & S_IXUSR) != 0
+    }
+}
+
+# Trait implementations for Metadata
+impl Clone for Metadata {
+    clone :: (&self) -> Metadata => {
+        Metadata {
+            size: self.size,
+            is_file: self.is_file,
+            is_dir: self.is_dir,
+            permissions: self.permissions,
+            modified_time: self.modified_time,
+            accessed_time: self.accessed_time,
+            created_time: self.created_time,
+        }
+    }
+}
+
+impl Display for Metadata {
+    to_string :: (&self) -> String => {
+        result := String::from_cstr("Metadata { size: " as *u8)
+        String::push_str(&result, &String::from_u64(self.size))
+        String::push_str(&result, &String::from_cstr(", permissions: " as *u8))
+        String::push_str(&result, &String::from_u64(self.permissions as u64))
+        String::push_str(&result, &String::from_cstr(" }" as *u8))
+        result
+    }
+}
+
+impl Debug for Metadata {
+    debug_string :: (&self) -> String => {
+        result := String::from_cstr("Metadata { " as *u8)
+        
+        String::push_str(&result, &String::from_cstr("size: " as *u8))
+        String::push_str(&result, &String::from_u64(self.size))
+        String::push_str(&result, &String::from_cstr(", is_file: " as *u8))
+        String::push_str(&result, &(if self.is_file { String::from_cstr("true" as *u8) } else { String::from_cstr("false" as *u8) }))
+        String::push_str(&result, &String::from_cstr(", is_dir: " as *u8))
+        String::push_str(&result, &(if self.is_dir { String::from_cstr("true" as *u8) } else { String::from_cstr("false" as *u8) }))
+        String::push_str(&result, &String::from_cstr(", permissions: " as *u8))
+        String::push_str(&result, &String::from_u64(self.permissions as u64))
+        
+        String::push_str(&result, &String::from_cstr(" }" as *u8))
+        result
+    }
+}

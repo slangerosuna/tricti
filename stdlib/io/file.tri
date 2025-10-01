@@ -1,0 +1,250 @@
+# File I/O for TriCTI
+# Provides high-level file operations wrapping POSIX file descriptors
+
+use core::traits
+use core::string
+use io::posix
+
+# =============================================================================
+# FILE TYPE
+# =============================================================================
+
+# File handle wrapping POSIX file descriptor
+File :: struct {
+    fd: i32,
+    path: String,
+    is_open: bool,
+}
+
+impl File {
+    # Open file for reading
+    # Returns Some(File) on success, None on error
+    open :: (path: String) -> ?File => {
+        fd := posix_open(String::as_ptr(&path), O_RDONLY, 0)
+        if fd < 0 { ret none }
+        ret some File { fd: fd, path: path, is_open: true }
+    }
+    
+    # Create file for writing (truncates if exists)
+    # Returns Some(File) on success, None on error
+    create :: (path: String) -> ?File => {
+        fd := posix_open(String::as_ptr(&path), O_WRONLY | O_CREAT | O_TRUNC, 420)
+        if fd < 0 { ret none }
+        ret some File { fd: fd, path: path, is_open: true }
+    }
+    
+    # Open file with custom flags and mode
+    # flags: O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_APPEND
+    # mode: permission bits (e.g., 0644 = 420, 0755 = 493)
+    # Returns Some(File) on success, None on error
+    open_with_mode :: (path: String, flags: i32, mode: i32) -> ?File => {
+        fd := posix_open(String::as_ptr(&path), flags, mode)
+        if fd < 0 { ret none }
+        ret some File { fd: fd, path: path, is_open: true }
+    }
+    
+    # Open file for appending
+    # Returns Some(File) on success, None on error
+    append :: (path: String) -> ?File => {
+        fd := posix_open(String::as_ptr(&path), O_WRONLY | O_CREAT | O_APPEND, 420)
+        if fd < 0 { ret none }
+        ret some File { fd: fd, path: path, is_open: true }
+    }
+    
+    # Close file and release file descriptor
+    # Returns true on success, false on error
+    close :: (file: &mut File) -> bool => {
+        if !file.is_open { ret true }
+        result := posix_close(file.fd)
+        file.is_open = false
+        ret result == 0
+    }
+    
+    # Read bytes from file into buffer
+    # Returns Some(bytes_read) on success, None on error
+    read_bytes :: (file: &mut File, buf: *u8, len: u64) -> ?u64 => {
+        if !file.is_open { ret none }
+        bytes_read := posix_read(file.fd, buf, len)
+        if bytes_read < 0 { ret none }
+        ret some (bytes_read as u64)
+    }
+    
+    # Write bytes from buffer to file
+    # Returns Some(bytes_written) on success, None on error
+    write_bytes :: (file: &mut File, buf: *u8, len: u64) -> ?u64 => {
+        if !file.is_open { ret none }
+        bytes_written := posix_write(file.fd, buf, len)
+        if bytes_written < 0 { ret none }
+        ret some (bytes_written as u64)
+    }
+    
+    # Seek to position in file
+    # pos: offset in bytes
+    # whence: SEEK_SET (from start), SEEK_CUR (from current), SEEK_END (from end)
+    # Returns Some(new_position) on success, None on error
+    seek_pos :: (file: &mut File, pos: i64, whence: i32) -> ?i64 => {
+        if !file.is_open { ret none }
+        result := posix_lseek(file.fd, pos, whence)
+        if result < 0 { ret none }
+        ret some result
+    }
+    
+    # Get current position in file
+    # Returns Some(position) on success, None on error
+    position :: (file: &File) -> ?i64 => {
+        if !file.is_open { ret none }
+        result := posix_lseek(file.fd, 0, SEEK_CUR)
+        if result < 0 { ret none }
+        ret some result
+    }
+    
+    # Get file size
+    # Returns Some(size) on success, None on error
+    size :: (file: &File) -> ?i64 => {
+        if !file.is_open { ret none }
+        current_pos := posix_lseek(file.fd, 0, SEEK_CUR)
+        if current_pos < 0 { ret none }
+        
+        file_size := posix_lseek(file.fd, 0, SEEK_END)
+        if file_size < 0 { ret none }
+        
+        posix_lseek(file.fd, current_pos, SEEK_SET)
+        ret some file_size
+    }
+    
+    # Synchronize file data to disk
+    # Returns true on success, false on error
+    sync :: (file: &mut File) -> bool => {
+        if !file.is_open { ret false }
+        ret posix_fsync(file.fd) == 0
+    }
+    
+    # Read entire file to string
+    # Returns Some(content) on success, None on error
+    read_to_string :: (path: String) -> ?String => {
+        mut file := File::open(path)? else { ret none }
+        
+        file_size := File::size(&file)? else {
+            File::close(&mut file)
+            ret none
+        }
+        
+        if file_size == 0 {
+            File::close(&mut file)
+            ret some String::new()
+        }
+        
+        result := String::with_capacity(file_size as u64)
+        
+        bytes_read := File::read_bytes(&mut file, result.data, file_size as u64)? else {
+            File::close(&mut file)
+            ret none
+        }
+        
+        result.len = bytes_read
+        File::close(&mut file)
+        ret some result
+    }
+    
+    # Write string to file (truncates existing file)
+    # Returns true on success, false on error
+    write_string :: (path: String, content: String) -> bool => {
+        mut file := File::create(path)? else { ret false }
+        
+        bytes_written := File::write_bytes(&mut file, content.data, content.len)? else {
+            File::close(&mut file)
+            ret false
+        }
+        
+        success := bytes_written == content.len
+        File::close(&mut file)
+        ret success
+    }
+    
+    # Append string to file
+    # Returns true on success, false on error
+    append_string :: (path: String, content: String) -> bool => {
+        mut file := File::append(path)? else { ret false }
+        
+        bytes_written := File::write_bytes(&mut file, content.data, content.len)? else {
+            File::close(&mut file)
+            ret false
+        }
+        
+        success := bytes_written == content.len
+        File::close(&mut file)
+        ret success
+    }
+    
+    # Read file line by line
+    # Returns Some(lines) on success, None on error
+    read_lines :: (path: String) -> ?String => {
+        File::read_to_string(path)
+    }
+}
+
+# =============================================================================
+# TRAIT IMPLEMENTATIONS
+# =============================================================================
+
+# Implement Read trait for File
+impl Read for File {
+    read :: (&mut self, buf: *u8, len: u64) -> ?u64 => {
+        File::read_bytes(self, buf, len)
+    }
+    
+    read_exact :: (&mut self, buf: *u8, len: u64) -> bool => {
+        mut total := 0u64
+        loop {
+            if total >= len { ret true }
+            
+            bytes := File::read_bytes(self, buf + total, len - total)? else { ret false }
+            
+            if bytes == 0 { ret false }
+            
+            total = total + bytes
+        }
+    }
+}
+
+# Implement Write trait for File
+impl Write for File {
+    write :: (&mut self, buf: *u8, len: u64) -> ?u64 => {
+        File::write_bytes(self, buf, len)
+    }
+    
+    write_all :: (&mut self, buf: *u8, len: u64) -> bool => {
+        mut total := 0u64
+        loop {
+            if total >= len { ret true }
+            
+            bytes := File::write_bytes(self, buf + total, len - total)? else { ret false }
+            
+            if bytes == 0 { ret false }
+            
+            total = total + bytes
+        }
+    }
+    
+    flush :: (&mut self) -> bool => {
+        File::sync(self)
+    }
+}
+
+# Implement Seek trait for File
+impl Seek for File {
+    seek :: (&mut self, pos: i64, whence: i32) -> ?i64 => {
+        File::seek_pos(self, pos, whence)
+    }
+    
+    tell :: (&self) -> ?i64 => {
+        File::position(self)
+    }
+}
+
+# Implement Drop trait for File (auto-close on destruction)
+impl Drop for File {
+    drop :: (&mut self) => {
+        File::close(self)
+    }
+}

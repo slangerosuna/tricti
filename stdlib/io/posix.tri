@@ -1,0 +1,218 @@
+# POSIX FFI Layer for TriCTI I/O
+# Provides low-level bindings to POSIX file and directory operations
+
+# =============================================================================
+# FILE OPERATIONS
+# =============================================================================
+
+# Open a file and return file descriptor
+# Parameters:
+#   path: null-terminated path string
+#   flags: O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_APPEND, etc.
+#   mode: permission bits (e.g., 0644, 0755)
+# Returns: file descriptor on success, -1 on error
+extern fn posix_open(path: *u8, flags: i32, mode: i32) -> i32
+
+# Close a file descriptor
+# Returns: 0 on success, -1 on error
+extern fn posix_close(fd: i32) -> i32
+
+# Read from file descriptor into buffer
+# Returns: number of bytes read, -1 on error
+extern fn posix_read(fd: i32, buf: *u8, count: u64) -> i64
+
+# Write from buffer to file descriptor
+# Returns: number of bytes written, -1 on error
+extern fn posix_write(fd: i32, buf: *u8, count: u64) -> i64
+
+# Seek to position in file
+# Parameters:
+#   fd: file descriptor
+#   offset: offset to seek to
+#   whence: SEEK_SET, SEEK_CUR, or SEEK_END
+# Returns: new offset on success, -1 on error
+extern fn posix_lseek(fd: i32, offset: i64, whence: i32) -> i64
+
+# Synchronize file data to disk
+# Returns: 0 on success, -1 on error
+extern fn posix_fsync(fd: i32) -> i32
+
+# =============================================================================
+# FILE STATUS
+# =============================================================================
+
+# Get file status by path
+# Parameters:
+#   path: null-terminated path string
+#   buf: pointer to stat structure buffer (144 bytes)
+# Returns: 0 on success, -1 on error
+extern fn posix_stat(path: *u8, buf: *u8) -> i32
+
+# Get file status by file descriptor
+# Returns: 0 on success, -1 on error
+extern fn posix_fstat(fd: i32, buf: *u8) -> i32
+
+# Check file accessibility
+# Parameters:
+#   path: null-terminated path string
+#   mode: F_OK, R_OK, W_OK, X_OK
+# Returns: 0 if accessible, -1 if not
+extern fn posix_access(path: *u8, mode: i32) -> i32
+
+# =============================================================================
+# DIRECTORY OPERATIONS
+# =============================================================================
+
+# Open directory for reading
+# Returns: DIR* pointer on success, null on error
+extern fn posix_opendir(path: *u8) -> *u8
+
+# Read next directory entry
+# Returns: dirent* pointer on success, null at end or error
+extern fn posix_readdir(dir: *u8) -> *u8
+
+# Close directory
+# Returns: 0 on success, -1 on error
+extern fn posix_closedir(dir: *u8) -> i32
+
+# Create directory
+# Parameters:
+#   path: null-terminated path string
+#   mode: permission bits (e.g., 0755)
+# Returns: 0 on success, -1 on error
+extern fn posix_mkdir(path: *u8, mode: u32) -> i32
+
+# Remove empty directory
+# Returns: 0 on success, -1 on error
+extern fn posix_rmdir(path: *u8) -> i32
+
+# =============================================================================
+# FILE MANAGEMENT
+# =============================================================================
+
+# Remove file
+# Returns: 0 on success, -1 on error
+extern fn posix_unlink(path: *u8) -> i32
+
+# Rename/move file or directory
+# Returns: 0 on success, -1 on error
+extern fn posix_rename(old: *u8, new: *u8) -> i32
+
+# =============================================================================
+# CONSTANTS - File Open Flags
+# =============================================================================
+
+# Open for reading only
+O_RDONLY :: 0
+
+# Open for writing only
+O_WRONLY :: 1
+
+# Open for reading and writing
+O_RDWR :: 2
+
+# Create file if it doesn't exist
+O_CREAT :: 64
+
+# Truncate file to zero length
+O_TRUNC :: 512
+
+# Append mode - writes go to end of file
+O_APPEND :: 1024
+
+# =============================================================================
+# CONSTANTS - Seek Whence
+# =============================================================================
+
+# Seek from beginning of file
+SEEK_SET :: 0
+
+# Seek from current position
+SEEK_CUR :: 1
+
+# Seek from end of file
+SEEK_END :: 2
+
+# =============================================================================
+# CONSTANTS - Access Mode
+# =============================================================================
+
+# Check if file exists
+F_OK :: 0
+
+# Check read permission
+R_OK :: 4
+
+# Check write permission
+W_OK :: 2
+
+# Check execute permission
+X_OK :: 1
+
+# =============================================================================
+# CONSTANTS - File Permissions
+# =============================================================================
+
+# Owner read/write/execute
+S_IRWXU :: 448
+
+# Owner read
+S_IRUSR :: 256
+
+# Owner write
+S_IWUSR :: 128
+
+# Owner execute
+S_IXUSR :: 64
+
+# Group read/write/execute
+S_IRWXG :: 56
+
+# Group read
+S_IRGRP :: 32
+
+# Group write
+S_IWGRP :: 16
+
+# Group execute
+S_IXGRP :: 8
+
+# Others read/write/execute
+S_IRWXO :: 7
+
+# Others read
+S_IROTH :: 4
+
+# Others write
+S_IWOTH :: 2
+
+# Others execute
+S_IXOTH :: 1
+
+# =============================================================================
+# CONSTANTS - File Type Masks (for stat st_mode)
+# =============================================================================
+
+# File type mask
+S_IFMT :: 61440
+
+# Regular file
+S_IFREG :: 32768
+
+# Directory
+S_IFDIR :: 16384
+
+# Character device
+S_IFCHR :: 8192
+
+# Block device
+S_IFBLK :: 24576
+
+# FIFO/pipe
+S_IFIFO :: 4096
+
+# Symbolic link
+S_IFLNK :: 40960
+
+# Socket
+S_IFSOCK :: 49152

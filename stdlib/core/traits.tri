@@ -218,6 +218,29 @@ ShrAssign :: trait {
 }
 
 # =============================================================================
+# I/O TRAITS
+# =============================================================================
+
+# Read trait for reading bytes from a source
+Read :: trait {
+    read : (&mut Self, buf: *u8, len: u64) -> ?u64,
+    read_exact : (&mut Self, buf: *u8, len: u64) -> bool,
+}
+
+# Write trait for writing bytes to a destination
+Write :: trait {
+    write : (&mut Self, buf: *u8, len: u64) -> ?u64,
+    write_all : (&mut Self, buf: *u8, len: u64) -> bool,
+    flush : (&mut Self) -> bool,
+}
+
+# Seek trait for positioning within a stream
+Seek :: trait {
+    seek : (&mut Self, pos: i64, whence: i32) -> ?i64,
+    tell : (&Self) -> ?i64,
+}
+
+# =============================================================================
 # ITERATOR TRAITS
 # =============================================================================
 
