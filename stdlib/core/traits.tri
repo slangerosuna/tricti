@@ -1,0 +1,311 @@
+# Trait system for TriCTI
+# Provides polymorphism through traits and implementations
+
+use prelude
+use core::errors
+
+# =============================================================================
+# CORE TRAITS
+# =============================================================================
+
+# Equality comparison
+trait Eq {
+    eq :: (&self, other: &Self) -> bool
+    ne :: (&self, other: &Self) -> bool => { ~self.eq(other) }
+}
+
+# Ordering comparison
+trait Ord: Eq {
+    lt :: (&self, other: &Self) -> bool
+    le :: (&self, other: &Self) -> bool => { self.lt(other) || self.eq(other) }
+    gt :: (&self, other: &Self) -> bool => { ~self.le(other) }
+    ge :: (&self, other: &Self) -> bool => { ~self.lt(other) }
+}
+
+# Hash for HashMap/HashSet
+trait Hash {
+    hash :: (&self) -> u64
+}
+
+# Clone (deep copy)
+trait Clone {
+    clone :: (&self) -> Self
+}
+
+# Copy (bitwise copy)
+trait Copy: Clone {
+    # Automatically implements Clone as bitwise copy
+}
+
+# Drop (destructor)
+trait Drop {
+    drop :: (self) => { }
+}
+
+# Display for string representation
+trait Display {
+    to_string :: (&self) -> string
+}
+
+# Debug for debug printing
+trait Debug {
+    debug_string :: (&self) -> string
+}
+
+# Default value
+trait Default {
+    default :: () -> Self
+}
+
+# =============================================================================
+# ITERATOR TRAITS
+# =============================================================================
+
+trait Iterator {
+    type Item
+    
+    next :: (&mut self) -> ?Item
+    
+    # Provided methods
+    collect :: (&mut self) -> Vec<Item> => {
+        result := Vec::new()
+        loop {
+            match self.next() {
+                some item => result.push(item),
+                none => break,
+            }
+        }
+        result
+    }
+    
+    map<U> :: (&mut self, f: (Item) -> U) -> Map<Self, U> => {
+        Map { iter: self, func: f }
+    }
+    
+    filter :: (&mut self, predicate: (Item) -> bool) -> Filter<Self> => {
+        Filter { iter: self, predicate: predicate }
+    }
+    
+    fold<B> :: (&mut self, init: B, f: (B, Item) -> B) -> B => {
+        acc := init
+        loop {
+            match self.next() {
+                some item => { acc = f(acc, item) },
+                none => break,
+            }
+        }
+        acc
+    }
+    
+    count :: (&mut self) -> u64 => {
+        self.fold(0, (acc, _) => acc + 1)
+    }
+    
+    any :: (&mut self, predicate: (Item) -> bool) -> bool => {
+        loop {
+            match self.next() {
+                some item => {
+                    if predicate(item) { ret true }
+                },
+                none => break,
+            }
+        }
+        false
+    }
+    
+    all :: (&mut self, predicate: (Item) -> bool) -> bool => {
+        loop {
+            match self.next() {
+                some item => {
+                    if ~predicate(item) { ret false }
+                },
+                none => break,
+            }
+        }
+        true
+    }
+}
+
+# Map iterator adapter
+Map<I, U> :: {
+    iter: I,
+    func: (I::Item) -> U,
+}
+
+impl<I, U> Iterator for Map<I, U> where I: Iterator {
+    type Item = U
+    
+    next :: (&mut self) -> ?U => {
+        match self.iter.next() {
+            some item => some self.func(item),
+            none => none,
+        }
+    }
+}
+
+# Filter iterator adapter
+Filter<I> :: {
+    iter: I,
+    predicate: (I::Item) -> bool,
+}
+
+impl<I> Iterator for Filter<I> where I: Iterator {
+    type Item = I::Item
+    
+    next :: (&mut self) -> ?Item => {
+        loop {
+            match self.iter.next() {
+                some item => {
+                    if self.predicate(item) {
+                        ret some item
+                    }
+                },
+                none => ret none,
+            }
+        }
+    }
+}
+
+# =============================================================================
+# SERIALIZATION TRAITS
+# =============================================================================
+
+trait Serialize {
+    serialize :: (&self) -> StdResult<Vec<u8>>
+}
+
+trait Deserialize {
+    deserialize :: (data: Vec<u8>) -> StdResult<Self>
+}
+
+# =============================================================================
+# ASYNC TRAITS
+# =============================================================================
+
+trait Future {
+    type Output
+    
+    poll :: (&mut self) -> Poll<Output>
+}
+
+Poll<T> :: enum {
+    Ready { value: T },
+    Pending,
+}
+
+trait AsyncRead {
+    read_async :: (&mut self, buf: &mut Vec<u8>) -> impl Future<Output = StdResult<u64>>
+}
+
+trait AsyncWrite {
+    write_async :: (&mut self, buf: &Vec<u8>) -> impl Future<Output = StdResult<u64>>
+}
+
+# =============================================================================
+# TRAIT IMPLEMENTATIONS FOR PRIMITIVES
+# =============================================================================
+
+# i64 implementations
+impl Eq for i64 {
+    eq :: (&self, other: &i64) -> bool => { *self == *other }
+}
+
+impl Ord for i64 {
+    lt :: (&self, other: &i64) -> bool => { *self < *other }
+}
+
+impl Hash for i64 {
+    hash :: (&self) -> u64 => { *self as u64 }
+}
+
+impl Display for i64 {
+    to_string :: (&self) -> string => {
+        # TODO: Implement i64 to string conversion
+        "i64"
+    }
+}
+
+impl Default for i64 {
+    default :: () -> i64 => { 0 }
+}
+
+# u64 implementations
+impl Eq for u64 {
+    eq :: (&self, other: &u64) -> bool => { *self == *other }
+}
+
+impl Ord for u64 {
+    lt :: (&self, other: &u64) -> bool => { *self < *other }
+}
+
+impl Hash for u64 {
+    hash :: (&self) -> u64 => { *self }
+}
+
+impl Display for u64 {
+    to_string :: (&self) -> string => {
+        # TODO: Implement u64 to string conversion
+        "u64"
+    }
+}
+
+impl Default for u64 {
+    default :: () -> u64 => { 0 }
+}
+
+# bool implementations
+impl Eq for bool {
+    eq :: (&self, other: &bool) -> bool => { *self == *other }
+}
+
+impl Display for bool {
+    to_string :: (&self) -> string => {
+        if *self { "true" } else { "false" }
+    }
+}
+
+impl Default for bool {
+    default :: () -> bool => { false }
+}
+
+# =============================================================================
+# TRAIT OBJECTS (DYNAMIC DISPATCH)
+# =============================================================================
+
+# Trait object wrapper for dynamic dispatch
+TraitObject<T> :: {
+    data: *none,
+    vtable: *VTable<T>,
+}
+
+VTable<T> :: {
+    # Function pointers for trait methods
+    # Layout depends on trait definition
+    methods: Vec<*none>,
+}
+
+impl<T> TraitObject<T> {
+    # Create trait object from concrete type
+    new<C> :: (value: C) -> TraitObject<T> where C: T => {
+        data := box value
+        vtable := get_vtable::<C, T>()
+        
+        TraitObject<T> {
+            data: data as *none,
+            vtable: vtable,
+        }
+    }
+    
+    # Call trait method
+    call :: (&self, method_index: u64, args: Vec<*none>) -> *none => {
+        method_ptr := self.vtable.methods[method_index]
+        # TODO: Call method with args
+        unsafe { none }
+    }
+}
+
+# Get vtable for concrete type implementing trait
+get_vtable<C, T> :: () -> *VTable<T> where C: T => {
+    # TODO: Compiler generates vtables
+    unsafe { none as *VTable<T> }
+}

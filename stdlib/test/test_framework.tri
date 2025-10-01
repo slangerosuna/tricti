@@ -1,0 +1,222 @@
+# Test framework for TriCTI stdlib
+# Provides assertion utilities and test runner infrastructure
+
+use prelude
+
+# =============================================================================
+# TEST FRAMEWORK
+# =============================================================================
+
+TestResult :: enum {
+    Pass,
+    Fail { message: string, file: string, line: u64 },
+    Skip { reason: string },
+}
+
+TestCase :: {
+    name: string,
+    test_fn: () -> TestResult,
+    suite: string,
+}
+
+TestSuite :: {
+    name: string,
+    tests: Vec<TestCase>,
+    setup: ?() -> none,
+    teardown: ?() -> none,
+}
+
+TestRunner :: {
+    suites: Vec<TestSuite>,
+    total_tests: u64,
+    passed: u64,
+    failed: u64,
+    skipped: u64,
+}
+
+impl TestRunner {
+    new :: () -> TestRunner => {
+        TestRunner {
+            suites: Vec::new(),
+            total_tests: 0,
+            passed: 0,
+            failed: 0,
+            skipped: 0,
+        }
+    }
+
+    add_suite :: (&mut self, suite: TestSuite) => {
+        self.total_tests += suite.tests.len()
+        self.suites.push(suite)
+    }
+
+    run :: (&mut self) -> bool => {
+        println("Running tests...")
+        println("")
+
+        for suite in self.suites {
+            println("Suite: " + suite.name)
+            
+            # Run setup if provided
+            if suite.setup.is_some() {
+                suite.setup?()
+            }
+
+            for test in suite.tests {
+                result := test.test_fn()
+                
+                match result {
+                    TestResult::Pass => {
+                        println("  ✓ " + test.name)
+                        self.passed += 1
+                    },
+                    TestResult::Fail { message, file, line } => {
+                        println("  ✗ " + test.name)
+                        println("    " + message)
+                        println("    at " + file + ":" + line.to_string())
+                        self.failed += 1
+                    },
+                    TestResult::Skip { reason } => {
+                        println("  ⊘ " + test.name + " (skipped: " + reason + ")")
+                        self.skipped += 1
+                    },
+                }
+            }
+
+            # Run teardown if provided
+            if suite.teardown.is_some() {
+                suite.teardown?()
+            }
+
+            println("")
+        }
+
+        println("Results:")
+        println("  Total:   " + self.total_tests.to_string())
+        println("  Passed:  " + self.passed.to_string())
+        println("  Failed:  " + self.failed.to_string())
+        println("  Skipped: " + self.skipped.to_string())
+        println("")
+
+        self.failed == 0
+    }
+}
+
+# =============================================================================
+# ASSERTION UTILITIES
+# =============================================================================
+
+assert_true :: (condition: bool, message: string, file: string, line: u64) -> TestResult => {
+    if condition {
+        TestResult::Pass
+    } else {
+        TestResult::Fail {
+            message: "Expected true, got false: " + message,
+            file: file,
+            line: line,
+        }
+    }
+}
+
+assert_false :: (condition: bool, message: string, file: string, line: u64) -> TestResult => {
+    if ~condition {
+        TestResult::Pass
+    } else {
+        TestResult::Fail {
+            message: "Expected false, got true: " + message,
+            file: file,
+            line: line,
+        }
+    }
+}
+
+assert_eq<T> :: (actual: T, expected: T, message: string, file: string, line: u64) -> TestResult 
+    where T: Eq => {
+    if actual == expected {
+        TestResult::Pass
+    } else {
+        TestResult::Fail {
+            message: "Expected " + expected.to_string() + ", got " + actual.to_string() + ": " + message,
+            file: file,
+            line: line,
+        }
+    }
+}
+
+assert_ne<T> :: (actual: T, expected: T, message: string, file: string, line: u64) -> TestResult
+    where T: Eq => {
+    if actual ~= expected {
+        TestResult::Pass
+    } else {
+        TestResult::Fail {
+            message: "Expected values to be different, but both were " + actual.to_string(),
+            file: file,
+            line: line,
+        }
+    }
+}
+
+assert_some<T> :: (value: ?T, message: string, file: string, line: u64) -> TestResult => {
+    match value {
+        some _ => TestResult::Pass,
+        none => TestResult::Fail {
+            message: "Expected Some, got None: " + message,
+            file: file,
+            line: line,
+        },
+    }
+}
+
+assert_none<T> :: (value: ?T, message: string, file: string, line: u64) -> TestResult => {
+    match value {
+        none => TestResult::Pass,
+        some _ => TestResult::Fail {
+            message: "Expected None, got Some: " + message,
+            file: file,
+            line: line,
+        },
+    }
+}
+
+assert_ok<T> :: (result: StdResult<T>, message: string, file: string, line: u64) -> TestResult => {
+    match result {
+        StdResult::Ok { .. } => TestResult::Pass,
+        StdResult::Err { error } => TestResult::Fail {
+            message: "Expected Ok, got Err(" + std_error_message(error) + "): " + message,
+            file: file,
+            line: line,
+        },
+    }
+}
+
+assert_err<T> :: (result: StdResult<T>, message: string, file: string, line: u64) -> TestResult => {
+    match result {
+        StdResult::Err { .. } => TestResult::Pass,
+        StdResult::Ok { .. } => TestResult::Fail {
+            message: "Expected Err, got Ok: " + message,
+            file: file,
+            line: line,
+        },
+    }
+}
+
+# Macro-like helpers for location tracking
+# In a real implementation, these would be macros that capture __FILE__ and __LINE__
+# For now, we pass them manually
+
+test :: (name: string, test_fn: () -> TestResult) -> TestCase => {
+    TestCase {
+        name: name,
+        test_fn: test_fn,
+        suite: "default",
+    }
+}
+
+suite :: (name: string, tests: Vec<TestCase>) -> TestSuite => {
+    TestSuite {
+        name: name,
+        tests: tests,
+        setup: none,
+        teardown: none,
+    }
+}

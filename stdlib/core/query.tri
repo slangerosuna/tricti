@@ -1,0 +1,365 @@
+# Query engine with relational algebra operations
+# Implements SELECT, JOIN, PROJECT, FILTER, GROUP BY, etc.
+
+use prelude
+use core::table
+use core::errors
+use core::result
+
+# =============================================================================
+# QUERY AST
+# =============================================================================
+
+QueryOp :: enum {
+    Scan {
+        table: string,
+        filter: ?Predicate,
+    },
+    Select {
+        source: *QueryOp,
+        columns: [string],
+    },
+    Filter {
+        source: *QueryOp,
+        predicate: Predicate,
+    },
+    Join {
+        left: *QueryOp,
+        right: *QueryOp,
+        join_type: JoinType,
+        condition: JoinCondition,
+    },
+    GroupBy {
+        source: *QueryOp,
+        group_columns: [string],
+        aggregates: [Aggregate],
+    },
+    OrderBy {
+        source: *QueryOp,
+        columns: [OrderColumn],
+    },
+    Limit {
+        source: *QueryOp,
+        count: u64,
+        offset: u64,
+    },
+}
+
+JoinType :: enum {
+    Inner,
+    Left,
+    Right,
+    Full,
+    Cross,
+}
+
+JoinCondition :: enum {
+    On { predicate: Predicate },
+    Using { columns: [string] },
+}
+
+Predicate :: enum {
+    Eq { left: Expr, right: Expr },
+    Ne { left: Expr, right: Expr },
+    Lt { left: Expr, right: Expr },
+    Le { left: Expr, right: Expr },
+    Gt { left: Expr, right: Expr },
+    Ge { left: Expr, right: Expr },
+    And { left: *Predicate, right: *Predicate },
+    Or { left: *Predicate, right: *Predicate },
+    Not { predicate: *Predicate },
+    IsNull { expr: Expr },
+    IsNotNull { expr: Expr },
+    In { expr: Expr, values: [Expr] },
+}
+
+Expr :: enum {
+    Column { name: string },
+    Literal { value: Value },
+    Function { name: string, args: [Expr] },
+    BinaryOp { op: BinaryOp, left: *Expr, right: *Expr },
+}
+
+BinaryOp :: enum {
+    Add, Sub, Mul, Div, Mod,
+    Concat,
+}
+
+Value :: enum {
+    I64 { val: i64 },
+    U64 { val: u64 },
+    F64 { val: f64 },
+    String { val: string },
+    Bool { val: bool },
+    Null,
+}
+
+Aggregate :: enum {
+    Count { column: ?string, alias: string },
+    Sum { column: string, alias: string },
+    Avg { column: string, alias: string },
+    Min { column: string, alias: string },
+    Max { column: string, alias: string },
+}
+
+OrderColumn :: {
+    column: string,
+    ascending: bool,
+}
+
+# =============================================================================
+# QUERY OPTIMIZER
+# =============================================================================
+
+OptimizationRule :: enum {
+    PredicatePushdown,
+    JoinReordering,
+    IndexSelection,
+    ProjectionPruning,
+    ConstantFolding,
+}
+
+QueryPlan :: {
+    root: QueryOp,
+    estimated_cost: f64,
+    estimated_rows: u64,
+}
+
+impl QueryPlan {
+    # Apply optimization rules to the query plan
+    optimize :: (&mut self) -> StdResult<none> => {
+        self.apply_predicate_pushdown()?
+        self.apply_projection_pruning()?
+        self.apply_constant_folding()?
+        std_ok(none)
+    }
+
+    # Push predicates down to table scans
+    apply_predicate_pushdown :: (&mut self) -> StdResult<none> => {
+        # TODO: Implement predicate pushdown optimization
+        # Walk the query tree and move Filter ops closer to Scan ops
+        std_ok(none)
+    }
+
+    # Remove unnecessary column projections
+    apply_projection_pruning :: (&mut self) -> StdResult<none> => {
+        # TODO: Analyze which columns are actually used and prune others
+        std_ok(none)
+    }
+
+    # Fold constant expressions at compile time
+    apply_constant_folding :: (&mut self) -> StdResult<none> => {
+        # TODO: Evaluate constant expressions and replace with literals
+        std_ok(none)
+    }
+
+    # Estimate query cost for optimizer decisions
+    estimate_cost :: (&self) -> f64 => {
+        # TODO: Implement cost estimation based on:
+        # - Table sizes
+        # - Index availability
+        # - Join selectivity
+        # - Predicate selectivity
+        0.0
+    }
+}
+
+# =============================================================================
+# QUERY EXECUTOR
+# =============================================================================
+
+QueryExecutor :: {
+    tables: HashMap<string, Table>,
+    transaction_id: TransactionId,
+}
+
+impl QueryExecutor {
+    new :: (tx_id: TransactionId) -> QueryExecutor => {
+        QueryExecutor {
+            tables: HashMap::new(),
+            transaction_id: tx_id,
+        }
+    }
+
+    # Register a table for query execution
+    register_table :: (&mut self, name: string, table: Table) => {
+        self.tables.insert(name, table)
+    }
+
+    # Execute a query plan and return result set
+    execute :: (&self, plan: QueryPlan) -> StdResult<ResultSet> => {
+        self.execute_op(plan.root)
+    }
+
+    # Execute a single query operation
+    execute_op :: (&self, op: QueryOp) -> StdResult<ResultSet> => {
+        match op {
+            QueryOp::Scan { table, filter } => {
+                self.execute_scan(table, filter)
+            },
+            QueryOp::Select { source, columns } => {
+                rows := self.execute_op(*source)?
+                self.execute_select(rows, columns)
+            },
+            QueryOp::Filter { source, predicate } => {
+                rows := self.execute_op(*source)?
+                self.execute_filter(rows, predicate)
+            },
+            QueryOp::Join { left, right, join_type, condition } => {
+                left_rows := self.execute_op(*left)?
+                right_rows := self.execute_op(*right)?
+                self.execute_join(left_rows, right_rows, join_type, condition)
+            },
+            QueryOp::GroupBy { source, group_columns, aggregates } => {
+                rows := self.execute_op(*source)?
+                self.execute_group_by(rows, group_columns, aggregates)
+            },
+            QueryOp::OrderBy { source, columns } => {
+                rows := self.execute_op(*source)?
+                self.execute_order_by(rows, columns)
+            },
+            QueryOp::Limit { source, count, offset } => {
+                rows := self.execute_op(*source)?
+                self.execute_limit(rows, count, offset)
+            },
+        }
+    }
+
+    # Scan table with optional filter
+    execute_scan :: (&self, table_name: string, filter: ?Predicate) -> StdResult<ResultSet> => {
+        table := self.tables.get(table_name)?
+        
+        rows := Vec::new()
+        
+        # Scan all rows visible to this transaction
+        for row_id in 0..table.next_row_id {
+            row_data := table.get(self.transaction_id, row_id)?
+            
+            if row_data.is_some() {
+                # Apply filter if present
+                if filter.is_some() {
+                    if self.evaluate_predicate(filter?, row_data?)? {
+                        rows.push(row_data?)
+                    }
+                } else {
+                    rows.push(row_data?)
+                }
+            }
+        }
+        
+        std_ok(ResultSet { rows: rows, schema: table.schema })
+    }
+
+    # Select specific columns
+    execute_select :: (&self, input: ResultSet, columns: [string]) -> StdResult<ResultSet> => {
+        # TODO: Project only selected columns
+        std_ok(input)
+    }
+
+    # Filter rows by predicate
+    execute_filter :: (&self, input: ResultSet, predicate: Predicate) -> StdResult<ResultSet> => {
+        filtered := Vec::new()
+        
+        for row in input.rows {
+            if self.evaluate_predicate(predicate, row)? {
+                filtered.push(row)
+            }
+        }
+        
+        std_ok(ResultSet { rows: filtered, schema: input.schema })
+    }
+
+    # Join two result sets
+    execute_join :: (&self, left: ResultSet, right: ResultSet, 
+                     join_type: JoinType, condition: JoinCondition) -> StdResult<ResultSet> => {
+        # TODO: Implement join algorithms (nested loop, hash join, merge join)
+        std_ok(left)
+    }
+
+    # Group by and aggregate
+    execute_group_by :: (&self, input: ResultSet, group_columns: [string], 
+                         aggregates: [Aggregate]) -> StdResult<ResultSet> => {
+        # TODO: Implement grouping and aggregation
+        std_ok(input)
+    }
+
+    # Order by columns
+    execute_order_by :: (&self, input: ResultSet, columns: [OrderColumn]) -> StdResult<ResultSet> => {
+        # TODO: Implement sorting
+        std_ok(input)
+    }
+
+    # Limit result set
+    execute_limit :: (&self, input: ResultSet, count: u64, offset: u64) -> StdResult<ResultSet> => {
+        rows := Vec::new()
+        start := offset
+        end := min(offset + count, input.rows.len())
+        
+        for i in start..end {
+            rows.push(input.rows[i])
+        }
+        
+        std_ok(ResultSet { rows: rows, schema: input.schema })
+    }
+
+    # Evaluate predicate against a row
+    evaluate_predicate :: (&self, pred: Predicate, row: *none) -> StdResult<bool> => {
+        match pred {
+            Predicate::Eq { left, right } => {
+                left_val := self.evaluate_expr(left, row)?
+                right_val := self.evaluate_expr(right, row)?
+                std_ok(left_val == right_val)
+            },
+            Predicate::And { left, right } => {
+                left_result := self.evaluate_predicate(*left, row)?
+                if ~left_result { ret std_ok(false) }
+                self.evaluate_predicate(*right, row)
+            },
+            Predicate::Or { left, right } => {
+                left_result := self.evaluate_predicate(*left, row)?
+                if left_result { ret std_ok(true) }
+                self.evaluate_predicate(*right, row)
+            },
+            # TODO: Implement other predicate types
+            _ => std_ok(true),
+        }
+    }
+
+    # Evaluate expression against a row
+    evaluate_expr :: (&self, expr: Expr, row: *none) -> StdResult<Value> => {
+        match expr {
+            Expr::Column { name } => {
+                # TODO: Extract column value from row
+                std_ok(Value::Null)
+            },
+            Expr::Literal { value } => {
+                std_ok(value)
+            },
+            # TODO: Implement function calls and binary ops
+            _ => std_ok(Value::Null),
+        }
+    }
+}
+
+# =============================================================================
+# RESULT SET
+# =============================================================================
+
+ResultSet :: {
+    rows: Vec<*none>,
+    schema: TableSchema,
+}
+
+impl ResultSet {
+    len :: (&self) -> u64 => {
+        self.rows.len()
+    }
+
+    is_empty :: (&self) -> bool => {
+        self.rows.is_empty()
+    }
+
+    get :: (&self, index: u64) -> ?*none => {
+        self.rows.get(index)
+    }
+}

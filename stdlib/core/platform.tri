@@ -1,0 +1,32 @@
+# Platform-specific functions for TriCTI
+# Provides low-level primitives and system interfaces
+
+use prelude
+use core::errors
+
+# Global counter for timestamps (since we don't have real time yet)
+global_timestamp_counter: u64 = 0
+
+# Get current timestamp (monotonically increasing counter for now)
+current_timestamp :: () -> u64 => {
+    global_timestamp_counter += 1
+    global_timestamp_counter
+}
+
+# Reset timestamp counter (for testing)
+reset_timestamp :: () -> none => {
+    global_timestamp_counter = 0
+}
+
+# Memory allocation (extern functions provided by runtime)
+extern alloc :: (size: u64) -> *none
+extern dealloc :: (ptr: *none) -> none
+
+# Platform capabilities
+platform_has_feature :: (feature: string) -> bool => {
+    match feature {
+        "timestamp" => true,
+        "alloc" => true,
+        _ => false,
+    }
+}

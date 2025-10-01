@@ -1,0 +1,256 @@
+# IO and platform abstraction for TriCTI
+# Provides cross-platform file, network, and system operations
+
+use prelude
+use core::errors
+use core::result
+
+# =============================================================================
+# FILE SYSTEM
+# =============================================================================
+
+File :: {
+    path: string,
+    handle: FileHandle,
+    mode: FileMode,
+}
+
+FileHandle :: u64
+
+FileMode :: enum {
+    Read,
+    Write,
+    ReadWrite,
+    Append,
+}
+
+impl File {
+    open :: (path: string, mode: FileMode) -> StdResult<File> => {
+        handle := platform_open_file(path, mode)?
+        
+        std_ok(File {
+            path: path,
+            handle: handle,
+            mode: mode,
+        })
+    }
+
+    read :: (&self) -> StdResult<Vec<u8>> => {
+        platform_read_file(self.handle)
+    }
+
+    read_to_string :: (&self) -> StdResult<string> => {
+        bytes := self.read()?
+        string_from_bytes(bytes)
+    }
+
+    write :: (&mut self, data: Vec<u8>) -> StdResult<u64> => {
+        platform_write_file(self.handle, data)
+    }
+
+    write_string :: (&mut self, data: string) -> StdResult<u64> => {
+        bytes := string_to_bytes(data)?
+        self.write(bytes)
+    }
+
+    close :: (&mut self) -> StdResult<none> => {
+        platform_close_file(self.handle)
+    }
+
+    # File metadata
+    size :: (&self) -> StdResult<u64> => {
+        platform_file_size(self.handle)
+    }
+
+    exists :: (path: string) -> bool => {
+        match platform_file_exists(path) {
+            StdResult::Ok { value } => value,
+            StdResult::Err { .. } => false,
+        }
+    }
+}
+
+# =============================================================================
+# DIRECTORY OPERATIONS
+# =============================================================================
+
+Directory :: {
+    path: string,
+}
+
+impl Directory {
+    create :: (path: string) -> StdResult<none> => {
+        platform_create_directory(path)
+    }
+
+    remove :: (path: string) -> StdResult<none> => {
+        platform_remove_directory(path)
+    }
+
+    list :: (path: string) -> StdResult<Vec<string>> => {
+        platform_list_directory(path)
+    }
+
+    exists :: (path: string) -> bool => {
+        match platform_directory_exists(path) {
+            StdResult::Ok { value } => value,
+            StdResult::Err { .. } => false,
+        }
+    }
+}
+
+# =============================================================================
+# NETWORK OPERATIONS
+# =============================================================================
+
+TcpListener :: {
+    address: string,
+    port: u16,
+    handle: SocketHandle,
+}
+
+TcpStream :: {
+    peer_address: string,
+    handle: SocketHandle,
+}
+
+SocketHandle :: u64
+
+impl TcpListener {
+    bind :: (address: string, port: u16) -> StdResult<TcpListener> => {
+        handle := platform_bind_tcp(address, port)?
+        
+        std_ok(TcpListener {
+            address: address,
+            port: port,
+            handle: handle,
+        })
+    }
+
+    accept :: (&self) -> StdResult<TcpStream> => {
+        stream_handle := platform_accept_tcp(self.handle)?
+        peer := platform_get_peer_address(stream_handle)?
+        
+        std_ok(TcpStream {
+            peer_address: peer,
+            handle: stream_handle,
+        })
+    }
+}
+
+impl TcpStream {
+    connect :: (address: string, port: u16) -> StdResult<TcpStream> => {
+        handle := platform_connect_tcp(address, port)?
+        
+        std_ok(TcpStream {
+            peer_address: address + ":" + port.to_string(),
+            handle: handle,
+        })
+    }
+
+    read :: (&self, buffer_size: u64) -> StdResult<Vec<u8>> => {
+        platform_read_tcp(self.handle, buffer_size)
+    }
+
+    write :: (&self, data: Vec<u8>) -> StdResult<u64> => {
+        platform_write_tcp(self.handle, data)
+    }
+
+    close :: (&mut self) -> StdResult<none> => {
+        platform_close_tcp(self.handle)
+    }
+}
+
+# =============================================================================
+# PLATFORM ABSTRACTION
+# =============================================================================
+
+# These are platform-specific implementations
+# On Replit/Linux, these map to syscalls
+# On other platforms, they map to appropriate APIs
+
+# File operations
+extern platform_open_file :: (path: string, mode: FileMode) -> StdResult<FileHandle>
+extern platform_read_file :: (handle: FileHandle) -> StdResult<Vec<u8>>
+extern platform_write_file :: (handle: FileHandle, data: Vec<u8>) -> StdResult<u64>
+extern platform_close_file :: (handle: FileHandle) -> StdResult<none>
+extern platform_file_size :: (handle: FileHandle) -> StdResult<u64>
+extern platform_file_exists :: (path: string) -> StdResult<bool>
+
+# Directory operations
+extern platform_create_directory :: (path: string) -> StdResult<none>
+extern platform_remove_directory :: (path: string) -> StdResult<none>
+extern platform_list_directory :: (path: string) -> StdResult<Vec<string>>
+extern platform_directory_exists :: (path: string) -> StdResult<bool>
+
+# Network operations
+extern platform_bind_tcp :: (address: string, port: u16) -> StdResult<SocketHandle>
+extern platform_accept_tcp :: (handle: SocketHandle) -> StdResult<SocketHandle>
+extern platform_connect_tcp :: (address: string, port: u16) -> StdResult<SocketHandle>
+extern platform_read_tcp :: (handle: SocketHandle, buffer_size: u64) -> StdResult<Vec<u8>>
+extern platform_write_tcp :: (handle: SocketHandle, data: Vec<u8>) -> StdResult<u64>
+extern platform_close_tcp :: (handle: SocketHandle) -> StdResult<none>
+extern platform_get_peer_address :: (handle: SocketHandle) -> StdResult<string>
+
+# Utility functions
+string_from_bytes :: (bytes: Vec<u8>) -> StdResult<string> => {
+    # TODO: UTF-8 validation and conversion
+    std_ok(unsafe { bytes as string })
+}
+
+string_to_bytes :: (s: string) -> StdResult<Vec<u8>> => {
+    # TODO: Convert string to UTF-8 bytes
+    std_ok(unsafe { s as Vec<u8> })
+}
+
+# =============================================================================
+# ASYNC IO
+# =============================================================================
+
+AsyncFile :: {
+    file: File,
+    io_uring: ?IoUringHandle,
+}
+
+IoUringHandle :: u64
+
+impl AsyncFile {
+    open_async :: (path: string, mode: FileMode) -> StdResult<AsyncFile> => {
+        file := File::open(path, mode)?
+        
+        # Initialize io_uring if available
+        uring := platform_init_io_uring()
+        
+        std_ok(AsyncFile {
+            file: file,
+            io_uring: uring,
+        })
+    }
+
+    read_async :: (&self) -> StdResult<Future<Vec<u8>>> => {
+        # TODO: Implement async read using io_uring or epoll
+        std_err(StdError::Unsupported {
+            feature: "Async IO not yet implemented",
+        })
+    }
+
+    write_async :: (&self, data: Vec<u8>) -> StdResult<Future<u64>> => {
+        # TODO: Implement async write
+        std_err(StdError::Unsupported {
+            feature: "Async IO not yet implemented",
+        })
+    }
+}
+
+extern platform_init_io_uring :: () -> ?IoUringHandle
+
+Future<T> :: {
+    # Placeholder for future implementation
+    state: FutureState<T>,
+}
+
+FutureState<T> :: enum {
+    Pending,
+    Ready { value: T },
+    Error { error: StdError },
+}

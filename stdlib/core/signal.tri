@@ -1,0 +1,372 @@
+# Signal infrastructure for TriCTI
+# Implements typed channels with topology and buffering semantics
+
+use prelude
+use core::errors
+use core::result
+
+# =============================================================================
+# SIGNAL TYPES AND TOPOLOGY
+# =============================================================================
+
+SignalTopology :: enum {
+    # Multiple producers, single consumer
+    MPSC,
+    # Single producer, multiple consumers  
+    SPMC,
+    # Multiple producers, multiple consumers
+    MPMC,
+    # Single producer, single consumer (optimized)
+    SPSC,
+}
+
+BufferingStrategy :: enum {
+    # First-in-first-out queue with capacity
+    FIFO { capacity: u64 },
+    # Overwrite oldest on full
+    Overwrite { capacity: u64 },
+    # Fail send when full
+    FailOnFull { capacity: u64 },
+    # Unbounded (use with caution)
+    Unbounded,
+    # Ordered by priority
+    Priority { capacity: u64 },
+}
+
+SignalBackend :: enum {
+    # Local in-memory queue
+    Local,
+    # QUIC network protocol
+    QUIC { endpoint: string },
+    # WebRTC data channel
+    WebRTC { peer_id: string },
+    # Shared memory
+    SharedMemory { region: string },
+}
+
+# =============================================================================
+# SIGNAL DEFINITION
+# =============================================================================
+
+Signal<T> :: {
+    name: string,
+    topology: SignalTopology,
+    buffering: BufferingStrategy,
+    backend: SignalBackend,
+    
+    # Runtime state
+    senders: Vec<SenderId>,
+    receivers: Vec<ReceiverId>,
+    buffer: SignalBuffer<T>,
+    
+    # Statistics
+    messages_sent: u64,
+    messages_received: u64,
+    messages_dropped: u64,
+}
+
+SenderId :: u64
+ReceiverId :: u64
+
+# =============================================================================
+# SIGNAL BUFFER
+# =============================================================================
+
+SignalBuffer<T> :: enum {
+    FIFO { queue: RingBuffer<T>, capacity: u64 },
+    Overwrite { queue: RingBuffer<T>, capacity: u64 },
+    Priority { heap: BinaryHeap<PriorityMessage<T>>, capacity: u64 },
+    Unbounded { queue: Vec<T> },
+}
+
+PriorityMessage<T> :: {
+    priority: u64,
+    payload: T,
+    timestamp: u64,
+}
+
+RingBuffer<T> :: {
+    data: Vec<T>,
+    read_pos: u64,
+    write_pos: u64,
+    capacity: u64,
+    size: u64,
+}
+
+impl<T> RingBuffer<T> {
+    new :: (capacity: u64) -> RingBuffer<T> => {
+        RingBuffer<T> {
+            data: Vec::with_capacity(capacity),
+            read_pos: 0,
+            write_pos: 0,
+            capacity: capacity,
+            size: 0,
+        }
+    }
+
+    push :: (&mut self, item: T) -> StdResult<none> => {
+        if self.size >= self.capacity {
+            ret std_err(StdError::Message { message: "Ring buffer full" })
+        }
+        
+        self.data.set(self.write_pos, item)
+        self.write_pos = (self.write_pos + 1) % self.capacity
+        self.size += 1
+        
+        std_ok(none)
+    }
+
+    pop :: (&mut self) -> StdResult<T> => {
+        if self.size == 0 {
+            ret std_err(StdError::Message { message: "Ring buffer empty" })
+        }
+        
+        item := self.data.get(self.read_pos)?
+        self.read_pos = (self.read_pos + 1) % self.capacity
+        self.size -= 1
+        
+        std_ok(item?)
+    }
+
+    is_full :: (&self) -> bool => {
+        self.size >= self.capacity
+    }
+
+    is_empty :: (&self) -> bool => {
+        self.size == 0
+    }
+
+    len :: (&self) -> u64 => {
+        self.size
+    }
+}
+
+# =============================================================================
+# SIGNAL OPERATIONS
+# =============================================================================
+
+impl<T> Signal<T> {
+    # Create a new signal with specified configuration
+    new :: (name: string, topology: SignalTopology, 
+            buffering: BufferingStrategy, backend: SignalBackend) -> Signal<T> => {
+        
+        buffer := match buffering {
+            BufferingStrategy::FIFO { capacity } => {
+                SignalBuffer::FIFO {
+                    queue: RingBuffer::new(capacity),
+                    capacity: capacity,
+                }
+            },
+            BufferingStrategy::Overwrite { capacity } => {
+                SignalBuffer::Overwrite {
+                    queue: RingBuffer::new(capacity),
+                    capacity: capacity,
+                }
+            },
+            BufferingStrategy::Unbounded => {
+                SignalBuffer::Unbounded { queue: Vec::new() }
+            },
+            _ => SignalBuffer::Unbounded { queue: Vec::new() },
+        }
+        
+        Signal<T> {
+            name: name,
+            topology: topology,
+            buffering: buffering,
+            backend: backend,
+            senders: Vec::new(),
+            receivers: Vec::new(),
+            buffer: buffer,
+            messages_sent: 0,
+            messages_received: 0,
+            messages_dropped: 0,
+        }
+    }
+
+    # Register a sender
+    register_sender :: (&mut self) -> StdResult<SenderId> => {
+        # Check topology constraints
+        match self.topology {
+            SignalTopology::SPSC | SignalTopology::SPMC => {
+                if self.senders.len() > 0 {
+                    ret std_err(StdError::InvalidArgument {
+                        parameter: "sender",
+                        message: "Signal topology allows only one sender",
+                    })
+                }
+            },
+            _ => {},
+        }
+        
+        sender_id := self.senders.len()
+        self.senders.push(sender_id)
+        std_ok(sender_id)
+    }
+
+    # Register a receiver
+    register_receiver :: (&mut self) -> StdResult<ReceiverId> => {
+        # Check topology constraints
+        match self.topology {
+            SignalTopology::SPSC | SignalTopology::MPSC => {
+                if self.receivers.len() > 0 {
+                    ret std_err(StdError::InvalidArgument {
+                        parameter: "receiver",
+                        message: "Signal topology allows only one receiver",
+                    })
+                }
+            },
+            _ => {},
+        }
+        
+        receiver_id := self.receivers.len()
+        self.receivers.push(receiver_id)
+        std_ok(receiver_id)
+    }
+
+    # Send a message
+    send :: (&mut self, sender_id: SenderId, message: T) -> StdResult<none> => {
+        # Verify sender is registered
+        if ~self.senders.contains(sender_id) {
+            ret std_err(StdError::InvalidArgument {
+                parameter: "sender_id",
+                message: "Sender not registered",
+            })
+        }
+        
+        # Handle based on buffering strategy
+        result := match &mut self.buffer {
+            SignalBuffer::FIFO { queue, .. } => {
+                queue.push(message)
+            },
+            SignalBuffer::Overwrite { queue, .. } => {
+                if queue.is_full() {
+                    # Discard oldest message
+                    _ := queue.pop()
+                    self.messages_dropped += 1
+                }
+                queue.push(message)
+            },
+            SignalBuffer::Unbounded { queue } => {
+                queue.push(message)
+                std_ok(none)
+            },
+            _ => std_ok(none),
+        }
+        
+        if result.is_ok() {
+            self.messages_sent += 1
+        }
+        
+        result
+    }
+
+    # Receive a message (blocking)
+    receive :: (&mut self, receiver_id: ReceiverId) -> StdResult<T> => {
+        # Verify receiver is registered
+        if ~self.receivers.contains(receiver_id) {
+            ret std_err(StdError::InvalidArgument {
+                parameter: "receiver_id",
+                message: "Receiver not registered",
+            })
+        }
+        
+        # Get message from buffer
+        message := match &mut self.buffer {
+            SignalBuffer::FIFO { queue, .. } => {
+                queue.pop()
+            },
+            SignalBuffer::Overwrite { queue, .. } => {
+                queue.pop()
+            },
+            SignalBuffer::Unbounded { queue } => {
+                if queue.is_empty() {
+                    std_err(StdError::Message { message: "No messages available" })
+                } else {
+                    std_ok(queue.remove(0)?)
+                }
+            },
+            _ => std_err(StdError::Message { message: "Receive not supported" }),
+        }
+        
+        if message.is_ok() {
+            self.messages_received += 1
+        }
+        
+        message
+    }
+
+    # Try receive (non-blocking)
+    try_receive :: (&mut self, receiver_id: ReceiverId) -> StdResult<?T> => {
+        match self.receive(receiver_id) {
+            StdResult::Ok { value } => std_ok(some value),
+            StdResult::Err { .. } => std_ok(none),
+        }
+    }
+
+    # Get signal statistics
+    stats :: (&self) -> SignalStats => {
+        SignalStats {
+            messages_sent: self.messages_sent,
+            messages_received: self.messages_received,
+            messages_dropped: self.messages_dropped,
+            buffer_size: self.buffer_size(),
+            sender_count: self.senders.len(),
+            receiver_count: self.receivers.len(),
+        }
+    }
+
+    buffer_size :: (&self) -> u64 => {
+        match &self.buffer {
+            SignalBuffer::FIFO { queue, .. } => queue.len(),
+            SignalBuffer::Overwrite { queue, .. } => queue.len(),
+            SignalBuffer::Unbounded { queue } => queue.len(),
+            _ => 0,
+        }
+    }
+}
+
+SignalStats :: {
+    messages_sent: u64,
+    messages_received: u64,
+    messages_dropped: u64,
+    buffer_size: u64,
+    sender_count: u64,
+    receiver_count: u64,
+}
+
+# =============================================================================
+# NETWORK BACKENDS
+# =============================================================================
+
+# QUIC backend for network signals
+impl<T> Signal<T> {
+    send_network :: (&mut self, message: T) -> StdResult<none> 
+        where T: Serialize => {
+        match &self.backend {
+            SignalBackend::QUIC { endpoint } => {
+                # Serialize message
+                bytes := serialize(message)?
+                
+                # Send over QUIC
+                send_quic(endpoint, bytes)?
+                
+                self.messages_sent += 1
+                std_ok(none)
+            },
+            _ => std_err(StdError::Unsupported {
+                feature: "Network send only supported for QUIC backend",
+            }),
+        }
+    }
+}
+
+# Placeholder for network operations
+send_quic :: (endpoint: string, data: [u8]) -> StdResult<none> => {
+    # TODO: Implement actual QUIC send
+    std_ok(none)
+}
+
+serialize<T> :: (value: T) -> StdResult<[u8]> where T: Serialize => {
+    # TODO: Implement serialization
+    std_ok([])
+}

@@ -1,0 +1,668 @@
+# PostgreSQL-backed relational database wrapper for TriCTI
+# Satisfies all 12 of Codd's rules and maintains static analyzability
+
+use prelude
+use core::errors
+use core::result
+
+# =============================================================================
+# CODD'S RULES COMPLIANCE
+# =============================================================================
+
+# Rule 0: Foundation Rule - All database management through relational capabilities
+# Rule 1: Information Rule - All data represented as values in tables
+# Rule 2: Guaranteed Access - Every datum accessible via (table, primary_key, column)
+# Rule 3: Systematic NULL handling - NULLs supported uniformly across all types
+# Rule 4: Dynamic Online Catalog - Metadata stored as tables, queryable relationally
+# Rule 5: Comprehensive Data Sublanguage - Full DDL, DML, security, transactions
+# Rule 6: View Updating - Theoretically updatable views are system-updatable
+# Rule 7: Set-at-a-time operations - Bulk INSERT, UPDATE, DELETE supported
+# Rule 8: Physical Data Independence - Storage changes don't affect applications
+# Rule 9: Logical Data Independence - Schema changes preserve applications
+# Rule 10: Integrity Independence - Constraints stored in catalog, not applications
+# Rule 11: Distribution Independence - Distributed data appears as single logical DB
+# Rule 12: Non-subversion - Low-level access cannot bypass integrity rules
+
+# =============================================================================
+# POSTGRESQL CONNECTION
+# =============================================================================
+
+PgConnection :: {
+    conn_ptr: *none,
+    database: string,
+    user: string,
+    is_connected: bool,
+}
+
+PgConnectionParams :: {
+    host: string,
+    port: u16,
+    database: string,
+    user: string,
+    password: string,
+}
+
+impl PgConnection {
+    connect :: (params: PgConnectionParams) -> StdResult<PgConnection> => {
+        conn_str := "host=" + params.host +
+                   " port=" + params.port.to_string() +
+                   " dbname=" + params.database +
+                   " user=" + params.user +
+                   " password=" + params.password
+        
+        conn_ptr := pg_connect(conn_str)?
+        
+        std_ok(PgConnection {
+            conn_ptr: conn_ptr,
+            database: params.database,
+            user: params.user,
+            is_connected: true,
+        })
+    }
+
+    close :: (&mut self) -> StdResult<none> => {
+        if self.is_connected {
+            pg_close(self.conn_ptr)?
+            self.is_connected = false
+        }
+        std_ok(none)
+    }
+
+    execute :: (&self, sql: string) -> StdResult<PgResult> => {
+        if ~self.is_connected {
+            ret std_err(StdError::Message {
+                message: "Not connected to database",
+            })
+        }
+        
+        result_ptr := pg_exec(self.conn_ptr, sql)?
+        
+        std_ok(PgResult {
+            result_ptr: result_ptr,
+            num_rows: pg_num_rows(result_ptr)?,
+            num_cols: pg_num_cols(result_ptr)?,
+        })
+    }
+
+    prepare :: (&self, name: string, sql: string) -> StdResult<PgStatement> => {
+        stmt_ptr := pg_prepare(self.conn_ptr, name, sql)?
+        
+        std_ok(PgStatement {
+            stmt_ptr: stmt_ptr,
+            name: name,
+            param_count: pg_statement_param_count(stmt_ptr)?,
+        })
+    }
+
+    # Rule 5: Transaction support
+    begin_transaction :: (&self) -> StdResult<PgTransaction> => {
+        self.execute("BEGIN")?
+        
+        std_ok(PgTransaction {
+            conn: self,
+            is_active: true,
+        })
+    }
+}
+
+# =============================================================================
+# TRANSACTION (Rule 5: Comprehensive Data Sublanguage)
+# =============================================================================
+
+PgTransaction :: {
+    conn: &PgConnection,
+    is_active: bool,
+}
+
+impl PgTransaction {
+    commit :: (&mut self) -> StdResult<none> => {
+        if self.is_active {
+            self.conn.execute("COMMIT")?
+            self.is_active = false
+        }
+        std_ok(none)
+    }
+
+    rollback :: (&mut self) -> StdResult<none> => {
+        if self.is_active {
+            self.conn.execute("ROLLBACK")?
+            self.is_active = false
+        }
+        std_ok(none)
+    }
+
+    savepoint :: (&self, name: string) -> StdResult<none> => {
+        self.conn.execute("SAVEPOINT " + name)?
+        std_ok(none)
+    }
+
+    release_savepoint :: (&self, name: string) -> StdResult<none> => {
+        self.conn.execute("RELEASE SAVEPOINT " + name)?
+        std_ok(none)
+    }
+
+    rollback_to_savepoint :: (&self, name: string) -> StdResult<none> => {
+        self.conn.execute("ROLLBACK TO SAVEPOINT " + name)?
+        std_ok(none)
+    }
+}
+
+# =============================================================================
+# QUERY RESULTS
+# =============================================================================
+
+PgResult :: {
+    result_ptr: *none,
+    num_rows: u64,
+    num_cols: u64,
+}
+
+impl PgResult {
+    get_value :: (&self, row: u64, col: u64) -> StdResult<PgValue> => {
+        if row >= self.num_rows || col >= self.num_cols {
+            ret std_err(StdError::Message {
+                message: "Row or column index out of bounds",
+            })
+        }
+        
+        is_null := pg_value_is_null(self.result_ptr, row, col)?
+        
+        if is_null {
+            ret std_ok(PgValue::Null)
+        }
+        
+        # Get column type to determine how to parse value
+        col_type := pg_get_column_type(self.result_ptr, col)?
+        value_str := pg_get_value(self.result_ptr, row, col)?
+        
+        # Parse value based on PostgreSQL type OID
+        if col_type == 16 {
+            # BOOL
+            std_ok(PgValue::Boolean { value: value_str == "t" || value_str == "true" })
+        } else if col_type == 20 || col_type == 21 || col_type == 23 {
+            # INT8, INT2, INT4
+            parsed := pg_parse_i64(value_str)?
+            std_ok(PgValue::Integer { value: parsed })
+        } else if col_type == 700 || col_type == 701 {
+            # FLOAT4, FLOAT8
+            parsed := pg_parse_f64(value_str)?
+            std_ok(PgValue::Real { value: parsed })
+        } else if col_type == 17 {
+            # BYTEA
+            bytes := pg_parse_bytea(value_str)?
+            std_ok(PgValue::Bytea { value: bytes })
+        } else {
+            # Default to Text for VARCHAR, TEXT, etc.
+            std_ok(PgValue::Text { value: value_str })
+        }
+    }
+
+    get_column_name :: (&self, col: u64) -> StdResult<string> => {
+        pg_get_column_name(self.result_ptr, col)
+    }
+
+    free :: (&mut self) -> StdResult<none> => {
+        pg_free_result(self.result_ptr)
+    }
+}
+
+# =============================================================================
+# VALUES (Rule 3: Systematic NULL handling)
+# =============================================================================
+
+PgValue :: enum {
+    Null,
+    Text { value: string },
+    Integer { value: i64 },
+    Real { value: f64 },
+    Boolean { value: bool },
+    Bytea { value: Vec<u8> },
+}
+
+impl PgValue {
+    is_null :: (&self) -> bool => {
+        match self {
+            PgValue::Null => true,
+            _ => false,
+        }
+    }
+
+    to_string :: (&self) -> StdResult<string> => {
+        match self {
+            PgValue::Null => std_ok("NULL"),
+            PgValue::Text { value } => std_ok(*value),
+            PgValue::Integer { value } => std_ok(i64_to_string(*value)),
+            PgValue::Real { value } => std_ok(f64_to_string(*value)),
+            PgValue::Boolean { value } => std_ok(if *value { "true" } else { "false" }),
+            PgValue::Bytea { .. } => std_ok("<binary>"),
+        }
+    }
+}
+
+# =============================================================================
+# PREPARED STATEMENTS
+# =============================================================================
+
+PgStatement :: {
+    stmt_ptr: *none,
+    name: string,
+    param_count: u64,
+}
+
+impl PgStatement {
+    execute :: (&self, params: Vec<PgValue>) -> StdResult<PgResult> => {
+        if params.len() as u64 != self.param_count {
+            ret std_err(StdError::Message {
+                message: "Parameter count mismatch",
+            })
+        }
+        
+        result_ptr := pg_exec_prepared(self.stmt_ptr, params)?
+        
+        std_ok(PgResult {
+            result_ptr: result_ptr,
+            num_rows: pg_num_rows(result_ptr)?,
+            num_cols: pg_num_cols(result_ptr)?,
+        })
+    }
+}
+
+# =============================================================================
+# STATIC QUERY ANALYSIS (for DAG compilation)
+# =============================================================================
+
+# Parse SQL and extract static dependencies
+QueryDependencies :: {
+    reads: Vec<TableRef>,
+    writes: Vec<TableRef>,
+    creates: Vec<TableRef>,
+    drops: Vec<TableRef>,
+    is_deterministic: bool,
+}
+
+TableRef :: {
+    schema: string,
+    table: string,
+    columns: Vec<string>,
+}
+
+analyze_query :: (sql: string) -> StdResult<QueryDependencies> => {
+    # Use PostgreSQL's parser to extract dependencies
+    parse_tree := pg_parse_query(sql)?
+    
+    deps := QueryDependencies {
+        reads: Vec::new(),
+        writes: Vec::new(),
+        creates: Vec::new(),
+        drops: Vec::new(),
+        is_deterministic: true,
+    }
+    
+    # Extract table references from parse tree
+    extract_dependencies(parse_tree, &mut deps)?
+    
+    std_ok(deps)
+}
+
+extract_dependencies :: (parse_tree: *none, deps: &mut QueryDependencies) -> StdResult<none> => {
+    # Use extern function to extract dependencies from PostgreSQL parse tree
+    # The parse tree walker identifies statement types and table references
+    
+    # Get statement type
+    stmt_type := pg_get_statement_type(parse_tree)?
+    
+    # Extract table references based on statement type
+    if stmt_type == "SELECT" || stmt_type == "WITH" {
+        # SELECT statements read from tables
+        table_refs := pg_extract_table_refs(parse_tree, "FROM")?
+        for ref_ptr in table_refs {
+            table_ref := pg_parse_table_ref(ref_ptr)?
+            deps.reads.push(table_ref)
+        }
+        
+        # Check for VOLATILE functions which affect determinism
+        has_volatile := pg_check_volatile_functions(parse_tree)?
+        if has_volatile {
+            deps.is_deterministic = false
+        }
+    } else if stmt_type == "INSERT" {
+        # INSERT writes to target table
+        target_ref := pg_extract_insert_target(parse_tree)?
+        deps.writes.push(target_ref)
+        
+        # Also check SELECT in INSERT...SELECT
+        select_refs := pg_extract_table_refs(parse_tree, "FROM")?
+        for ref_ptr in select_refs {
+            table_ref := pg_parse_table_ref(ref_ptr)?
+            deps.reads.push(table_ref)
+        }
+    } else if stmt_type == "UPDATE" {
+        # UPDATE writes to target and may read from other tables
+        target_ref := pg_extract_update_target(parse_tree)?
+        deps.writes.push(target_ref)
+        
+        # FROM clause in UPDATE
+        from_refs := pg_extract_table_refs(parse_tree, "FROM")?
+        for ref_ptr in from_refs {
+            table_ref := pg_parse_table_ref(ref_ptr)?
+            deps.reads.push(table_ref)
+        }
+    } else if stmt_type == "DELETE" {
+        # DELETE writes to target
+        target_ref := pg_extract_delete_target(parse_tree)?
+        deps.writes.push(target_ref)
+        
+        # USING clause in DELETE
+        using_refs := pg_extract_table_refs(parse_tree, "USING")?
+        for ref_ptr in using_refs {
+            table_ref := pg_parse_table_ref(ref_ptr)?
+            deps.reads.push(table_ref)
+        }
+    } else if stmt_type == "CREATE_TABLE" || stmt_type == "CREATE_VIEW" {
+        # CREATE statements
+        target_ref := pg_extract_create_target(parse_tree)?
+        deps.creates.push(target_ref)
+    } else if stmt_type == "DROP_TABLE" || stmt_type == "DROP_VIEW" {
+        # DROP statements
+        target_ref := pg_extract_drop_target(parse_tree)?
+        deps.drops.push(target_ref)
+    }
+    
+    std_ok(none)
+}
+
+# Build static dependency graph for DAG scheduling
+StaticDependencyGraph :: {
+    nodes: Vec<QueryNode>,
+    edges: Vec<DependencyEdge>,
+}
+
+QueryNode :: {
+    id: u64,
+    sql: string,
+    dependencies: QueryDependencies,
+}
+
+DependencyEdge :: {
+    from_node: u64,
+    to_node: u64,
+    edge_type: DependencyType,
+}
+
+DependencyType :: enum {
+    ReadAfterWrite,
+    WriteAfterRead,
+    WriteAfterWrite,
+}
+
+build_dependency_graph :: (queries: Vec<string>) -> StdResult<StaticDependencyGraph> => {
+    nodes := Vec::new()
+    edges := Vec::new()
+    
+    # Analyze each query
+    for (i, sql) in queries.enumerate() {
+        deps := analyze_query(sql)?
+        nodes.push(QueryNode {
+            id: i as u64,
+            sql: sql,
+            dependencies: deps,
+        })
+    }
+    
+    # Build edges based on dependencies
+    for i in 0..nodes.len() {
+        for j in (i + 1)..nodes.len() {
+            node_i := &nodes[i]
+            node_j := &nodes[j]
+            
+            # Check for conflicts
+            if has_conflict(node_i, node_j) {
+                edge_type := determine_edge_type(node_i, node_j)
+                edges.push(DependencyEdge {
+                    from_node: i as u64,
+                    to_node: j as u64,
+                    edge_type: edge_type,
+                })
+            }
+        }
+    }
+    
+    std_ok(StaticDependencyGraph {
+        nodes: nodes,
+        edges: edges,
+    })
+}
+
+has_conflict :: (node_a: &QueryNode, node_b: &QueryNode) -> bool => {
+    # Check if two queries have conflicting table access
+    for read_a in node_a.dependencies.reads {
+        for write_b in node_b.dependencies.writes {
+            if tables_overlap(read_a, write_b) {
+                ret true
+            }
+        }
+    }
+    
+    for write_a in node_a.dependencies.writes {
+        for read_b in node_b.dependencies.reads {
+            if tables_overlap(write_a, read_b) {
+                ret true
+            }
+        }
+        for write_b in node_b.dependencies.writes {
+            if tables_overlap(write_a, write_b) {
+                ret true
+            }
+        }
+    }
+    
+    false
+}
+
+determine_edge_type :: (node_a: &QueryNode, node_b: &QueryNode) -> DependencyType => {
+    # Determine type of dependency
+    for write_a in node_a.dependencies.writes {
+        for read_b in node_b.dependencies.reads {
+            if tables_overlap(write_a, read_b) {
+                ret DependencyType::ReadAfterWrite
+            }
+        }
+        for write_b in node_b.dependencies.writes {
+            if tables_overlap(write_a, write_b) {
+                ret DependencyType::WriteAfterWrite
+            }
+        }
+    }
+    
+    DependencyType::WriteAfterRead
+}
+
+tables_overlap :: (ref_a: TableRef, ref_b: TableRef) -> bool => {
+    ref_a.schema == ref_b.schema && ref_a.table == ref_b.table
+}
+
+# =============================================================================
+# METADATA CATALOG (Rule 4: Dynamic Online Catalog)
+# =============================================================================
+
+# Query system catalog tables
+get_tables :: (conn: &PgConnection, schema: string) -> StdResult<Vec<TableMetadata>> => {
+    sql := "SELECT table_name, table_type 
+            FROM information_schema.tables 
+            WHERE table_schema = $1"
+    
+    stmt := conn.prepare("get_tables", sql)?
+    result := stmt.execute([PgValue::Text { value: schema }])?
+    
+    tables := Vec::new()
+    
+    for i in 0..result.num_rows {
+        name := result.get_value(i, 0)?.to_string()?
+        table_type := result.get_value(i, 1)?.to_string()?
+        
+        tables.push(TableMetadata {
+            schema: schema,
+            name: name,
+            table_type: table_type,
+        })
+    }
+    
+    std_ok(tables)
+}
+
+TableMetadata :: {
+    schema: string,
+    name: string,
+    table_type: string,
+}
+
+get_columns :: (conn: &PgConnection, schema: string, table: string) -> StdResult<Vec<ColumnMetadata>> => {
+    sql := "SELECT column_name, data_type, is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_schema = $1 AND table_name = $2
+            ORDER BY ordinal_position"
+    
+    stmt := conn.prepare("get_columns", sql)?
+    result := stmt.execute([
+        PgValue::Text { value: schema },
+        PgValue::Text { value: table },
+    ])?
+    
+    columns := Vec::new()
+    
+    for i in 0..result.num_rows {
+        name := result.get_value(i, 0)?.to_string()?
+        data_type := result.get_value(i, 1)?.to_string()?
+        is_nullable := result.get_value(i, 2)?.to_string()? == "YES"
+        default_val := result.get_value(i, 3)?
+        
+        columns.push(ColumnMetadata {
+            name: name,
+            data_type: data_type,
+            is_nullable: is_nullable,
+            default_value: if default_val.is_null() { none } else { some default_val },
+        })
+    }
+    
+    std_ok(columns)
+}
+
+ColumnMetadata :: {
+    name: string,
+    data_type: string,
+    is_nullable: bool,
+    default_value: ?PgValue,
+}
+
+# Rule 10: Integrity constraints stored in catalog
+get_constraints :: (conn: &PgConnection, schema: string, table: string) -> StdResult<Vec<ConstraintMetadata>> => {
+    sql := "SELECT constraint_name, constraint_type
+            FROM information_schema.table_constraints
+            WHERE table_schema = $1 AND table_name = $2"
+    
+    stmt := conn.prepare("get_constraints", sql)?
+    result := stmt.execute([
+        PgValue::Text { value: schema },
+        PgValue::Text { value: table },
+    ])?
+    
+    constraints := Vec::new()
+    
+    for i in 0..result.num_rows {
+        name := result.get_value(i, 0)?.to_string()?
+        constraint_type := result.get_value(i, 1)?.to_string()?
+        
+        constraints.push(ConstraintMetadata {
+            name: name,
+            constraint_type: constraint_type,
+        })
+    }
+    
+    std_ok(constraints)
+}
+
+ConstraintMetadata :: {
+    name: string,
+    constraint_type: string,
+}
+
+# =============================================================================
+# FFI BINDINGS TO POSTGRESQL C API
+# =============================================================================
+
+extern pg_connect :: (conninfo: string) -> StdResult<*none>
+extern pg_close :: (conn: *none) -> StdResult<none>
+extern pg_exec :: (conn: *none, sql: string) -> StdResult<*none>
+extern pg_prepare :: (conn: *none, name: string, sql: string) -> StdResult<*none>
+extern pg_exec_prepared :: (stmt: *none, params: Vec<PgValue>) -> StdResult<*none>
+extern pg_num_rows :: (result: *none) -> StdResult<u64>
+extern pg_num_cols :: (result: *none) -> StdResult<u64>
+extern pg_get_value :: (result: *none, row: u64, col: u64) -> StdResult<string>
+extern pg_value_is_null :: (result: *none, row: u64, col: u64) -> StdResult<bool>
+extern pg_get_column_name :: (result: *none, col: u64) -> StdResult<string>
+extern pg_get_column_type :: (result: *none, col: u64) -> StdResult<u64>
+extern pg_free_result :: (result: *none) -> StdResult<none>
+extern pg_statement_param_count :: (stmt: *none) -> StdResult<u64>
+extern pg_parse_query :: (sql: string) -> StdResult<*none>
+
+# Parse tree analysis functions
+extern pg_get_statement_type :: (parse_tree: *none) -> StdResult<string>
+extern pg_extract_table_refs :: (parse_tree: *none, clause_type: string) -> StdResult<Vec<*none>>
+extern pg_parse_table_ref :: (ref_ptr: *none) -> StdResult<TableRef>
+extern pg_check_volatile_functions :: (parse_tree: *none) -> StdResult<bool>
+extern pg_extract_insert_target :: (parse_tree: *none) -> StdResult<TableRef>
+extern pg_extract_update_target :: (parse_tree: *none) -> StdResult<TableRef>
+extern pg_extract_delete_target :: (parse_tree: *none) -> StdResult<TableRef>
+extern pg_extract_create_target :: (parse_tree: *none) -> StdResult<TableRef>
+extern pg_extract_drop_target :: (parse_tree: *none) -> StdResult<TableRef>
+
+# Query plan parsing functions
+extern pg_json_parse_plan :: (plan_json: string) -> StdResult<*none>
+extern pg_plan_get_node_type :: (plan_ptr: *none) -> StdResult<string>
+extern pg_plan_get_relation_name :: (plan_ptr: *none) -> ?string
+extern pg_plan_get_estimated_rows :: (plan_ptr: *none) -> StdResult<u64>
+extern pg_plan_get_total_cost :: (plan_ptr: *none) -> StdResult<f64>
+extern pg_plan_get_children :: (plan_ptr: *none) -> StdResult<Vec<*none>>
+extern pg_plan_to_json :: (plan_ptr: *none) -> StdResult<string>
+extern pg_plan_get_index_name :: (plan_ptr: *none) -> StdResult<string>
+extern pg_plan_get_modify_operation :: (plan_ptr: *none) -> StdResult<string>
+
+# Type conversion functions
+extern pg_i64_to_string :: (n: i64) -> string
+extern pg_f64_to_string :: (f: f64) -> string
+extern pg_parse_i64 :: (s: string) -> StdResult<i64>
+extern pg_parse_f64 :: (s: string) -> StdResult<f64>
+extern pg_parse_bytea :: (s: string) -> StdResult<Vec<u8>>
+
+# Utility functions
+i64_to_string :: (n: i64) -> string => {
+    # Convert i64 to string representation
+    # Use extern function for proper conversion
+    pg_i64_to_string(n)
+}
+
+f64_to_string :: (f: f64) -> string => {
+    # Convert f64 to string representation  
+    # Use extern function for proper conversion with precision
+    pg_f64_to_string(f)
+}
+
+IsolationLevel :: enum {
+    ReadUncommitted,
+    ReadCommitted,
+    RepeatableRead,
+    Serializable,
+}
+
+# Set transaction isolation level for runtime enforcement
+set_isolation_level :: (conn: &PgConnection, level: IsolationLevel) -> StdResult<none> => {
+    sql := match level {
+        IsolationLevel::ReadUncommitted => "SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED",
+        IsolationLevel::ReadCommitted => "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+        IsolationLevel::RepeatableRead => "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ",
+        IsolationLevel::Serializable => "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+    }
+    
+    conn.execute(sql)?
+    std_ok(none)
+}

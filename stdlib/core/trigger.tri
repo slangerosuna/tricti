@@ -1,0 +1,388 @@
+# Trigger system for reactive composition in TriCTI
+# Implements event-driven system execution with composition DSL
+
+use prelude
+use core::system
+use core::signal
+use core::errors
+use core::result
+
+# =============================================================================
+# TRIGGER DEFINITIONS
+# =============================================================================
+
+TriggerDef :: {
+    name: string,
+    trigger_type: TriggerType,
+    composed_systems: CompositionGraph,
+    
+    # Execution semantics
+    is_async: bool,
+    max_execution_time_ms: ?u64,
+}
+
+TriggerType :: enum {
+    # Triggered by a signal
+    Signal { signal_name: string },
+    
+    # Triggered by database change
+    Database { table_name: string, operation: DBOperation },
+    
+    # Periodic trigger
+    Scheduled { interval_ms: u64 },
+    
+    # Manual trigger
+    Manual,
+    
+    # Application startup
+    Init,
+}
+
+DBOperation :: enum {
+    Insert,
+    Update,
+    Delete,
+    Any,
+}
+
+# =============================================================================
+# COMPOSITION GRAPH
+# =============================================================================
+
+CompositionGraph :: {
+    nodes: Vec<CompositionNode>,
+    edges: Vec<CompositionEdge>,
+}
+
+CompositionNode :: enum {
+    System { name: string },
+    Fork { branches: Vec<CompositionGraph> },
+    Merge { inputs: Vec<string> },
+    Conditional { predicate: string, true_branch: *CompositionGraph, false_branch: ?*CompositionGraph },
+}
+
+CompositionEdge :: {
+    from: string,  # System or node name
+    to: string,
+    edge_semantics: EdgeSemantics,
+}
+
+EdgeSemantics :: enum {
+    # Sequential: wait for completion
+    Sequential,
+    
+    # Optional: may or may not execute based on result
+    Optional { on_condition: string },
+    
+    # Parallel: execute concurrently
+    Parallel,
+    
+    # Fan-out: broadcast to multiple systems
+    FanOut,
+    
+    # Fan-in: wait for all inputs
+    FanIn,
+}
+
+# =============================================================================
+# COMPOSITION DSL PARSER
+# =============================================================================
+
+# Parse composition syntax like:
+# foo -> bar -> baz
+# foo -> (a, b) -> merge
+# (a, b) -> c
+
+CompositionParser :: {
+    tokens: Vec<Token>,
+    position: u64,
+}
+
+Token :: enum {
+    Identifier { name: string },
+    Arrow,           # ->
+    OptionalArrow,   # ?->
+    ParenOpen,       # (
+    ParenClose,      # )
+    Comma,           # ,
+    Pipe,            # |
+}
+
+impl CompositionParser {
+    new :: (source: string) -> CompositionParser => {
+        CompositionParser {
+            tokens: tokenize(source),
+            position: 0,
+        }
+    }
+
+    parse :: (&mut self) -> StdResult<CompositionGraph> => {
+        nodes := Vec::new()
+        edges := Vec::new()
+        
+        # Parse composition expressions
+        while ~self.is_at_end() {
+            expr := self.parse_expression()?
+            
+            # Add nodes and edges from expression
+            self.add_to_graph(expr, &mut nodes, &mut edges)?
+        }
+        
+        std_ok(CompositionGraph {
+            nodes: nodes,
+            edges: edges,
+        })
+    }
+
+    parse_expression :: (&mut self) -> StdResult<CompositionExpr> => {
+        left := self.parse_primary()?
+        
+        # Check for arrow operators
+        if self.match_token(Token::Arrow) {
+            right := self.parse_expression()?
+            std_ok(CompositionExpr::Sequential {
+                left: box left,
+                right: box right,
+            })
+        } else if self.match_token(Token::OptionalArrow) {
+            right := self.parse_expression()?
+            std_ok(CompositionExpr::Optional {
+                left: box left,
+                right: box right,
+            })
+        } else {
+            std_ok(left)
+        }
+    }
+
+    parse_primary :: (&mut self) -> StdResult<CompositionExpr> => {
+        # System name
+        if self.match_identifier() {
+            name := self.previous_token_value()
+            std_ok(CompositionExpr::System { name: name })
+        }
+        # Grouped expression (a, b)
+        else if self.match_token(Token::ParenOpen) {
+            systems := Vec::new()
+            
+            loop {
+                if self.match_identifier() {
+                    systems.push(self.previous_token_value())
+                }
+                
+                if ~self.match_token(Token::Comma) {
+                    break
+                }
+            }
+            
+            self.expect_token(Token::ParenClose)?
+            
+            std_ok(CompositionExpr::Parallel { systems: systems })
+        }
+        else {
+            std_err(StdError::Message {
+                message: "Expected identifier or grouped expression",
+            })
+        }
+    }
+
+    match_token :: (&mut self, token_type: Token) -> bool => {
+        # TODO: Implement token matching
+        false
+    }
+
+    match_identifier :: (&mut self) -> bool => {
+        # TODO: Check if current token is identifier
+        false
+    }
+
+    previous_token_value :: (&self) -> string => {
+        # TODO: Get value of previous token
+        ""
+    }
+
+    expect_token :: (&mut self, token_type: Token) -> StdResult<none> => {
+        # TODO: Verify expected token
+        std_ok(none)
+    }
+
+    is_at_end :: (&self) -> bool => {
+        self.position >= self.tokens.len()
+    }
+
+    add_to_graph :: (&mut self, expr: CompositionExpr,
+                     nodes: &mut Vec<CompositionNode>,
+                     edges: &mut Vec<CompositionEdge>) -> StdResult<none> => {
+        # TODO: Convert expression to graph nodes and edges
+        std_ok(none)
+    }
+}
+
+CompositionExpr :: enum {
+    System { name: string },
+    Sequential { left: *CompositionExpr, right: *CompositionExpr },
+    Optional { left: *CompositionExpr, right: *CompositionExpr },
+    Parallel { systems: Vec<string> },
+}
+
+tokenize :: (source: string) -> Vec<Token> => {
+    # TODO: Implement lexer
+    Vec::new()
+}
+
+# =============================================================================
+# TRIGGER EXECUTOR
+# =============================================================================
+
+TriggerExecutor :: {
+    triggers: HashMap<string, TriggerDef>,
+    active_executions: Vec<TriggerExecution>,
+    
+    # Signal subscriptions
+    signal_subscribers: HashMap<string, Vec<string>>,  # signal_name -> trigger_names
+}
+
+TriggerExecution :: {
+    trigger_name: string,
+    started_at: u64,
+    status: ExecutionStatus,
+    current_system: ?string,
+}
+
+ExecutionStatus :: enum {
+    Running,
+    Completed { result: *none },
+    Failed { error: StdError },
+    Cancelled,
+}
+
+impl TriggerExecutor {
+    new :: () -> TriggerExecutor => {
+        TriggerExecutor {
+            triggers: HashMap::new(),
+            active_executions: Vec::new(),
+            signal_subscribers: HashMap::new(),
+        }
+    }
+
+    # Register a trigger
+    register_trigger :: (&mut self, trigger: TriggerDef) -> StdResult<none> => {
+        # Register signal subscriptions
+        match &trigger.trigger_type {
+            TriggerType::Signal { signal_name } => {
+                subscribers := self.signal_subscribers
+                    .get_or_default(signal_name, Vec::new())
+                subscribers.push(trigger.name)
+                self.signal_subscribers.insert(signal_name, subscribers)
+            },
+            _ => {},
+        }
+        
+        self.triggers.insert(trigger.name, trigger)
+        std_ok(none)
+    }
+
+    # Fire a trigger
+    fire :: (&mut self, trigger_name: string, input: ?*none) -> StdResult<*none> => {
+        trigger := self.triggers.get(trigger_name)?
+        
+        # Compile composition into DAG
+        compiler := DAGCompiler::new()
+        
+        # Register systems from composition
+        self.register_composition_systems(&trigger?.composed_systems, &mut compiler)?
+        
+        # Compile DAG
+        dag := compiler.compile(self.get_root_systems(&trigger?.composed_systems)?)?
+        
+        # Execute DAG
+        scheduler := SystemScheduler::new(dag)
+        scheduler.execute()?
+        
+        # TODO: Return actual result
+        std_ok(unsafe { none })
+    }
+
+    # Handle signal event
+    on_signal :: (&mut self, signal_name: string, payload: *none) -> StdResult<none> => {
+        subscribers := self.signal_subscribers.get(signal_name)?
+        
+        for trigger_name in subscribers? {
+            self.fire(trigger_name, some payload)?
+        }
+        
+        std_ok(none)
+    }
+
+    register_composition_systems :: (&self, graph: &CompositionGraph,
+                                     compiler: &mut DAGCompiler) -> StdResult<none> => {
+        # TODO: Register all systems from composition graph
+        std_ok(none)
+    }
+
+    get_root_systems :: (&self, graph: &CompositionGraph) -> StdResult<Vec<string>> => {
+        # TODO: Find root systems (no incoming edges)
+        std_ok(Vec::new())
+    }
+}
+
+# =============================================================================
+# COMPOSITION HELPERS
+# =============================================================================
+
+# Builder API for programmatic composition
+compose :: () -> CompositionBuilder => {
+    CompositionBuilder::new()
+}
+
+CompositionBuilder :: {
+    graph: CompositionGraph,
+}
+
+impl CompositionBuilder {
+    new :: () -> CompositionBuilder => {
+        CompositionBuilder {
+            graph: CompositionGraph {
+                nodes: Vec::new(),
+                edges: Vec::new(),
+            },
+        }
+    }
+
+    # Add sequential composition: a -> b
+    then :: (&mut self, from: string, to: string) -> &mut Self => {
+        self.graph.edges.push(CompositionEdge {
+            from: from,
+            to: to,
+            edge_semantics: EdgeSemantics::Sequential,
+        })
+        self
+    }
+
+    # Add optional composition: a ?-> b
+    then_optional :: (&mut self, from: string, to: string, condition: string) -> &mut Self => {
+        self.graph.edges.push(CompositionEdge {
+            from: from,
+            to: to,
+            edge_semantics: EdgeSemantics::Optional { on_condition: condition },
+        })
+        self
+    }
+
+    # Add parallel composition: a -> (b, c)
+    fan_out :: (&mut self, from: string, to: Vec<string>) -> &mut Self => {
+        for target in to {
+            self.graph.edges.push(CompositionEdge {
+                from: from,
+                to: target,
+                edge_semantics: EdgeSemantics::FanOut,
+            })
+        }
+        self
+    }
+
+    # Build final composition
+    build :: (&self) -> CompositionGraph => {
+        self.graph.clone()
+    }
+}
