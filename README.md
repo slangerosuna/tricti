@@ -14,7 +14,7 @@ TriCTI was created to generalize multiple paradigms into a coherent language cap
 
 While Rust macros could approximate much of this, they lack shared global state, making **static DAG analysis, query inspection, and safe concurrency heuristics** infeasible. GPGPU execution would require explicit management via libraries like **rust-gpu**, and dynamic scheduling would prevent full compile-time optimization. Implementing TriCTI as an **LLVM frontend** enables native expression of vectorized, GPU-aware operations and static scheduling analysis.
 
-The design was inspired by practical experience with **Gnu Octave** (array and SIMD semantics), **Axum** (reactive programming), **Rusqlite** (relational state management), and [a custom Bevy-inspired ECS](https://github.com/slangerosuna/klaus_of_death_again). Another key motivation was a personal interest in **learning compiler construction**.
+The design was inspired by practical experience with **Gnu Octave** (array and SIMD semantics), **Axum** (reactive programming), **SQL** via rusqlite (relational state management), and [a custom Bevy-inspired ECS](https://github.com/slangerosuna/klaus_of_death_again). Another key motivation was a personal interest in **learning compiler construction**.
 
 ---
 
