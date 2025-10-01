@@ -1,0 +1,8 @@
+[build]
+rustflags = [
+    "-L", "/nix/store/b95p6fylgiqz93bd6mx6kvbyfmph5g1p-llvm-18.1.8-lib/lib",
+    "-L", "native=/nix/store/rnn29mhynsa4ncmk0fkcrdr29n0j20l4-libffi-3.4.8/lib",
+    "-L", "native=/nix/store/jl19fdc7gdxqz9a1s368r9d15vpirnqy-zlib-1.3.1/lib",
+    "-L", "native=/nix/store/4mys0gv17cn0lrdvlhks0zx27854nmkg-ncurses-6.5/lib",
+    "-L", "native=/nix/store/8y5ai2bi4s96nqb3bwphxnrlgwscir3c-libxml2-2.13.8/lib",
+]
