@@ -1,4 +1,5 @@
 use tricti::ast::*;
+use tricti::computed_columns::DependencyGraph;
 use tricti::parser;
 use tricti::semantic;
 
@@ -261,8 +262,6 @@ fn test_computed_column_with_nested_function_calls() {
 #[test]
 fn test_function_identifiers_not_treated_as_dependencies() {
     use tricti::computed_columns::DependencyGraph;
-    use std::collections::HashSet;
-
     let src = r#"
         TestTable :: table {
             data: String,

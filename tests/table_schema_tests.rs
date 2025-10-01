@@ -119,7 +119,7 @@ fn test_table_with_default_values() {
                     assert!(price_col.default_value.is_some());
                     match &price_col.default_value {
                         Some(Expression::Literal(Literal::Float(val))) => {
-                            assert_eq!(val, 0.0);
+                            assert!((*val - 0.0).abs() < f64::EPSILON);
                         }
                         other => panic!("Expected float 0.0 default, got {:?}", other),
                     }
