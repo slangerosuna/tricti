@@ -218,113 +218,23 @@ ShrAssign :: trait {
 }
 
 # =============================================================================
-# ITERATOR TRAITS (COMMENTED OUT - Vec, Map, Filter not yet implemented)
+# ITERATOR TRAITS
 # =============================================================================
 
-# trait Iterator {
-#     type Item
-#     
-#     next :: (&mut self) -> ?Item
-#     
-#     # Provided methods
-#     collect :: (&mut self) -> Vec<Item> => {
-#         result := Vec::new()
-#         loop {
-#             match self.next() {
-#                 some item => result.push(item),
-#                 none => break,
-#             }
-#         }
-#         result
-#     }
-#     
-#     map<U> :: (&mut self, f: (Item) -> U) -> Map<Self, U> => {
-#         Map { iter: self, func: f }
-#     }
-#     
-#     filter :: (&mut self, predicate: (Item) -> bool) -> Filter<Self> => {
-#         Filter { iter: self, predicate: predicate }
-#     }
-#     
-#     fold<B> :: (&mut self, init: B, f: (B, Item) -> B) -> B => {
-#         acc := init
-#         loop {
-#             match self.next() {
-#                 some item => { acc = f(acc, item) },
-#                 none => break,
-#             }
-#         }
-#         acc
-#     }
-#     
-#     count :: (&mut self) -> u64 => {
-#         self.fold(0, (acc, _) => acc + 1)
-#     }
-#     
-#     any :: (&mut self, predicate: (Item) -> bool) -> bool => {
-#         loop {
-#             match self.next() {
-#                 some item => {
-#                     if predicate(item) { ret true }
-#                 },
-#                 none => break,
-#             }
-#         }
-#         false
-#     }
-#     
-#     all :: (&mut self, predicate: (Item) -> bool) -> bool => {
-#         loop {
-#             match self.next() {
-#                 some item => {
-#                     if ~predicate(item) { ret false }
-#                 },
-#                 none => break,
-#             }
-#         }
-#         true
-#     }
-# }
+# Core iterator trait - provides sequential access to elements
+Iterator<T> :: trait {
+    next : (&mut Self) -> ?T,
+}
 
-# Map iterator adapter
-# Map<I, U> :: {
-#     iter: I,
-#     func: (I::Item) -> U,
-# }
+# Conversion into an iterator
+IntoIterator<T> :: trait {
+    into_iter : (Self) -> Self,
+}
 
-# impl<I, U> Iterator for Map<I, U> where I: Iterator {
-#     type Item = U
-#     
-#     next :: (&mut self) -> ?U => {
-#         match self.iter.next() {
-#             some item => some self.func(item),
-#             none => none,
-#         }
-#     }
-# }
-
-# Filter iterator adapter
-# Filter<I> :: {
-#     iter: I,
-#     predicate: (I::Item) -> bool,
-# }
-
-# impl<I> Iterator for Filter<I> where I: Iterator {
-#     type Item = I::Item
-#     
-#     next :: (&mut self) -> ?Item => {
-#         loop {
-#             match self.iter.next() {
-#                 some item => {
-#                     if self.predicate(item) {
-#                         ret some item
-#                     }
-#                 },
-#                 none => ret none,
-#             }
-#         }
-#     }
-# }
+# Double-ended iterator for bidirectional iteration
+DoubleEndedIterator<T> :: trait {
+    next_back : (&mut Self) -> ?T,
+}
 
 # =============================================================================
 # SERIALIZATION TRAITS (COMMENTED OUT - Vec and StdResult not yet implemented)

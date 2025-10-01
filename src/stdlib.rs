@@ -5,7 +5,9 @@
 
 pub mod legacy;
 pub mod modern;
+pub mod parallel_vec;
 
 // Re-export commonly used types and functions
 pub use legacy::*;
 pub use modern::*;
+pub use parallel_vec::*;

@@ -1,0 +1,926 @@
+# Extended Vec<T> with TRUE parallel collection methods for TriCTI stdlib
+# 
+# TRUE PARALLEL OPERATIONS (using Rayon FFI):
+# ===========================================
+#
+# This module provides 20 specialized parallel operations that use Rayon for TRUE multi-threading:
+#
+# For i64 (12 operations):
+#   - Reductions: parallel_sum, parallel_product, parallel_min, parallel_max
+#   - Maps: parallel_map_add, parallel_map_mul, parallel_map_square, parallel_map_negate  
+#   - Filters: parallel_filter_positive, parallel_filter_negative, parallel_filter_even, parallel_filter_odd
+#
+# For u64 (4 operations):
+#   - Reductions: parallel_sum, parallel_product, parallel_min, parallel_max
+#
+# For f64 (4 operations):
+#   - Reductions: parallel_sum, parallel_product, parallel_min, parallel_max
+#
+# LANGUAGE LIMITATION:
+# Generic parallel operations (parallel_map<U>, parallel_filter, parallel_fold<U>) are NOT possible
+# because TriCTI closures cannot be passed to FFI functions. Only specialized operations with 
+# pre-compiled Rayon implementations can achieve TRUE parallelism.
+#
+# USAGE:
+#   vec := ParVec<i64>::new()
+#   vec.push(1); vec.push(2); vec.push(3)
+#   doubled := vec.parallel_map_mul(2, 4)      # TRUE parallel using Rayon with 4 threads
+#   sum := vec.parallel_sum(4)                  # TRUE parallel reduction with 4 threads
+
+use prelude
+
+extern malloc :: (size: u64) -> *u8
+extern free :: (ptr: *u8) -> none
+extern memcpy :: (dest: *u8, src: *u8, n: u64) -> *u8
+
+extern par_sum_i64 :: (input: *i64, len: u64, num_threads: u64) -> i64
+extern par_product_i64 :: (input: *i64, len: u64, num_threads: u64) -> i64
+extern par_min_i64 :: (input: *i64, len: u64, num_threads: u64, has_value: *u8) -> i64
+extern par_max_i64 :: (input: *i64, len: u64, num_threads: u64, has_value: *u8) -> i64
+
+extern par_sum_u64 :: (input: *u64, len: u64, num_threads: u64) -> u64
+extern par_product_u64 :: (input: *u64, len: u64, num_threads: u64) -> u64
+extern par_min_u64 :: (input: *u64, len: u64, num_threads: u64, has_value: *u8) -> u64
+extern par_max_u64 :: (input: *u64, len: u64, num_threads: u64, has_value: *u8) -> u64
+
+extern par_sum_f64 :: (input: *f64, len: u64, num_threads: u64) -> f64
+extern par_product_f64 :: (input: *f64, len: u64, num_threads: u64) -> f64
+extern par_min_f64 :: (input: *f64, len: u64, num_threads: u64, has_value: *u8) -> f64
+extern par_max_f64 :: (input: *f64, len: u64, num_threads: u64, has_value: *u8) -> f64
+
+extern par_map_add_i64 :: (input: *i64, output: *i64, len: u64, addend: i64, num_threads: u64) -> none
+extern par_map_mul_i64 :: (input: *i64, output: *i64, len: u64, multiplier: i64, num_threads: u64) -> none
+extern par_map_square_i64 :: (input: *i64, output: *i64, len: u64, num_threads: u64) -> none
+extern par_map_negate_i64 :: (input: *i64, output: *i64, len: u64, num_threads: u64) -> none
+
+extern par_filter_positive_i64 :: (input: *i64, output: *i64, len: u64, result_len: *u64, num_threads: u64) -> none
+extern par_filter_negative_i64 :: (input: *i64, output: *i64, len: u64, result_len: *u64, num_threads: u64) -> none
+extern par_filter_even_i64 :: (input: *i64, output: *i64, len: u64, result_len: *u64, num_threads: u64) -> none
+extern par_filter_odd_i64 :: (input: *i64, output: *i64, len: u64, result_len: *u64, num_threads: u64) -> none
+
+VEC_INITIAL_CAPACITY :: 4
+
+ParVec<T> :: {
+    data: *T,
+    len: u64,
+    capacity: u64
+}
+
+impl<T> ParVec<T> {
+    new :: () -> ParVec<T> => {
+        ParVec<T> {
+            data: unsafe { 0 as *T },
+            len: 0,
+            capacity: 0
+        }
+    }
+
+    with_capacity :: (cap: u64) -> ParVec<T> => {
+        if cap == 0 {
+            ret ParVec::new()
+        }
+
+        size := cap * sizeof<T>()
+        data := unsafe { malloc(size) as *T }
+        
+        ParVec<T> {
+            data: data,
+            len: 0,
+            capacity: cap
+        }
+    }
+
+    push :: (&mut self, value: T) => {
+        if self.len >= self.capacity {
+            self.grow()
+        }
+
+        unsafe {
+            *(self.data + self.len) = value
+        }
+        self.len += 1
+    }
+
+    pop :: (&mut self) -> ?T => {
+        if self.len == 0 {
+            ret none
+        }
+
+        self.len -= 1
+        value := unsafe { *(self.data + self.len) }
+        some value
+    }
+
+    get :: (&self, index: u64) -> ?T => {
+        if index >= self.len {
+            ret none
+        }
+        some unsafe { *(self.data + index) }
+    }
+
+    set :: (&mut self, index: u64, value: T) -> bool => {
+        if index >= self.len {
+            ret false
+        }
+        unsafe { *(self.data + index) = value }
+        true
+    }
+
+    len :: (&self) -> u64 => {
+        self.len
+    }
+
+    capacity :: (&self) -> u64 => {
+        self.capacity
+    }
+
+    is_empty :: (&self) -> bool => {
+        self.len == 0
+    }
+
+    clear :: (&mut self) => {
+        self.len = 0
+    }
+
+    reserve :: (&mut self, additional: u64) => {
+        if additional == 0 {
+            ret
+        }
+
+        needed := self.len + additional
+        if needed <= self.capacity {
+            ret
+        }
+
+        mut new_cap := self.capacity
+        if new_cap == 0 {
+            new_cap = VEC_INITIAL_CAPACITY
+        }
+
+        while new_cap < needed {
+            new_cap = new_cap * 2
+        }
+
+        self.resize_internal(new_cap)
+    }
+
+    grow :: (&mut self) => {
+        new_cap := if self.capacity == 0 { VEC_INITIAL_CAPACITY } else { self.capacity * 2 }
+        self.resize_internal(new_cap)
+    }
+
+    resize_internal :: (&mut self, new_cap: u64) => {
+        if new_cap == 0 {
+            ret
+        }
+
+        size := new_cap * sizeof<T>()
+        new_data := unsafe { malloc(size) as *T }
+
+        if self.len > 0 {
+            old_size := self.len * sizeof<T>()
+            unsafe { memcpy(new_data as *u8, self.data as *u8, old_size) }
+            if self.data != (unsafe { 0 as *T }) {
+                unsafe { free(self.data as *u8) }
+            }
+        }
+
+        self.data = new_data
+        self.capacity = new_cap
+    }
+
+    destroy :: (&mut self) => {
+        if self.data != (unsafe { 0 as *T }) {
+            unsafe { free(self.data as *u8) }
+            self.data = unsafe { 0 as *T }
+        }
+        self.len = 0
+        self.capacity = 0
+    }
+
+    reverse :: (&mut self) => {
+        if self.len <= 1 {
+            ret
+        }
+
+        mut i := 0
+        mut j := self.len - 1
+
+        while i < j {
+            tmp := unsafe { *(self.data + i) }
+            unsafe { *(self.data + i) = *(self.data + j) }
+            unsafe { *(self.data + j) = tmp }
+            i += 1
+            j -= 1
+        }
+    }
+
+    remove :: (&mut self, index: u64) -> ?T => {
+        if index >= self.len {
+            ret none
+        }
+
+        removed := unsafe { *(self.data + index) }
+        
+        mut i := index
+        while i < self.len - 1 {
+            unsafe { *(self.data + i) = *(self.data + (i + 1)) }
+            i += 1
+        }
+
+        self.len -= 1
+        
+        some removed
+    }
+
+    insert :: (&mut self, index: u64, value: T) => {
+        if index > self.len {
+            ret
+        }
+
+        if self.len >= self.capacity {
+            self.grow()
+        }
+
+        mut i := self.len
+        while i > index {
+            unsafe { *(self.data + i) = *(self.data + (i - 1)) }
+            i -= 1
+        }
+
+        unsafe { *(self.data + index) = value }
+        self.len += 1
+    }
+
+    extend :: (&mut self, other: &ParVec<T>) => {
+        if other.len == 0 {
+            ret
+        }
+
+        self.reserve(other.len)
+
+        for i in 0:other.len {
+            elem := unsafe { *(other.data + i) }
+            self.push(elem)
+        }
+    }
+
+    map :: <U>(&self, func: (T) -> U) -> ParVec<U> => {
+        mut result := ParVec::with_capacity(self.len)
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            mapped := func(elem)
+            result.push(mapped)
+        }
+
+        result
+    }
+
+    filter :: (&self, pred: (T) -> bool) -> ParVec<T> => {
+        mut result := ParVec::new()
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            if pred(elem) {
+                result.push(elem)
+            }
+        }
+
+        result
+    }
+
+    fold :: <U>(&self, init: U, func: (U, T) -> U) -> U => {
+        mut acc := init
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            acc = func(acc, elem)
+        }
+
+        acc
+    }
+
+    count_where :: (&self, pred: (T) -> bool) -> u64 => {
+        mut count := 0
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            if pred(elem) {
+                count += 1
+            }
+        }
+
+        count
+    }
+
+    find :: (&self, pred: (T) -> bool) -> ?T => {
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            if pred(elem) {
+                ret some elem
+            }
+        }
+
+        none
+    }
+
+    any :: (&self, pred: (T) -> bool) -> bool => {
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            if pred(elem) {
+                ret true
+            }
+        }
+        false
+    }
+
+    all :: (&self, pred: (T) -> bool) -> bool => {
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            if !pred(elem) {
+                ret false
+            }
+        }
+        true
+    }
+
+    first :: (&self) -> ?T => {
+        if self.len == 0 {
+            ret none
+        }
+        some unsafe { *(self.data + 0) }
+    }
+
+    last :: (&self) -> ?T => {
+        if self.len == 0 {
+            ret none
+        }
+        some unsafe { *(self.data + (self.len - 1)) }
+    }
+
+    contains :: (&self, value: T) -> bool => {
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            if elem == value {
+                ret true
+            }
+        }
+        false
+    }
+
+    index_of :: (&self, value: T) -> u64 => {
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            if elem == value {
+                ret i
+            }
+        }
+        ret self.len
+    }
+
+    swap :: (&mut self, i: u64, j: u64) => {
+        if i >= self.len || j >= self.len {
+            ret
+        }
+
+        tmp := unsafe { *(self.data + i) }
+        unsafe { *(self.data + i) = *(self.data + j) }
+        unsafe { *(self.data + j) = tmp }
+    }
+
+    clone :: (&self) -> ParVec<T> => {
+        mut cloned := ParVec::with_capacity(self.capacity)
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            cloned.push(elem)
+        }
+
+        cloned
+    }
+}
+
+impl ParVec<i64> {
+    # TRUE parallel reduction using Rayon - computes sum across multiple threads
+    parallel_sum :: (&self, num_threads: u64) -> i64 => {
+        if self.len == 0 {
+            ret 0
+        }
+        
+        if num_threads <= 1 {
+            ret self.sum()
+        }
+
+        unsafe { par_sum_i64(self.data, self.len, num_threads) }
+    }
+
+    # TRUE parallel reduction using Rayon - computes product across multiple threads
+    parallel_product :: (&self, num_threads: u64) -> i64 => {
+        if self.len == 0 {
+            ret 1
+        }
+        
+        if num_threads <= 1 {
+            ret self.product()
+        }
+
+        unsafe { par_product_i64(self.data, self.len, num_threads) }
+    }
+
+    # TRUE parallel reduction using Rayon - finds minimum across multiple threads
+    parallel_min :: (&self, num_threads: u64) -> ?i64 => {
+        if self.len == 0 {
+            ret none
+        }
+        
+        if num_threads <= 1 {
+            ret self.min()
+        }
+
+        mut has_value: u8 = 0
+        result := unsafe { par_min_i64(self.data, self.len, num_threads, &mut has_value) }
+        
+        if has_value == 1 {
+            some result
+        } else {
+            none
+        }
+    }
+
+    # TRUE parallel reduction using Rayon - finds maximum across multiple threads
+    parallel_max :: (&self, num_threads: u64) -> ?i64 => {
+        if self.len == 0 {
+            ret none
+        }
+        
+        if num_threads <= 1 {
+            ret self.max()
+        }
+
+        mut has_value: u8 = 0
+        result := unsafe { par_max_i64(self.data, self.len, num_threads, &mut has_value) }
+        
+        if has_value == 1 {
+            some result
+        } else {
+            none
+        }
+    }
+
+    # TRUE parallel map using Rayon - adds constant to each element across multiple threads
+    parallel_map_add :: (&self, addend: i64, num_threads: u64) -> ParVec<i64> => {
+        if self.len == 0 {
+            ret ParVec::new()
+        }
+        
+        if num_threads <= 1 {
+            ret self.map(|x| x + addend)
+        }
+        
+        mut result := ParVec::with_capacity(self.len)
+        result.len = self.len
+        
+        unsafe { par_map_add_i64(self.data, result.data, self.len, addend, num_threads) }
+        result
+    }
+
+    # TRUE parallel map using Rayon - multiplies each element by constant across multiple threads
+    parallel_map_mul :: (&self, multiplier: i64, num_threads: u64) -> ParVec<i64> => {
+        if self.len == 0 {
+            ret ParVec::new()
+        }
+        
+        if num_threads <= 1 {
+            ret self.map(|x| x * multiplier)
+        }
+        
+        mut result := ParVec::with_capacity(self.len)
+        result.len = self.len
+        
+        unsafe { par_map_mul_i64(self.data, result.data, self.len, multiplier, num_threads) }
+        result
+    }
+
+    # TRUE parallel map using Rayon - squares each element across multiple threads
+    parallel_map_square :: (&self, num_threads: u64) -> ParVec<i64> => {
+        if self.len == 0 {
+            ret ParVec::new()
+        }
+        
+        if num_threads <= 1 {
+            ret self.map(|x| x * x)
+        }
+        
+        mut result := ParVec::with_capacity(self.len)
+        result.len = self.len
+        
+        unsafe { par_map_square_i64(self.data, result.data, self.len, num_threads) }
+        result
+    }
+
+    # TRUE parallel map using Rayon - negates each element across multiple threads
+    parallel_map_negate :: (&self, num_threads: u64) -> ParVec<i64> => {
+        if self.len == 0 {
+            ret ParVec::new()
+        }
+        
+        if num_threads <= 1 {
+            ret self.map(|x| -x)
+        }
+        
+        mut result := ParVec::with_capacity(self.len)
+        result.len = self.len
+        
+        unsafe { par_map_negate_i64(self.data, result.data, self.len, num_threads) }
+        result
+    }
+
+    # TRUE parallel filter using Rayon - filters positive values across multiple threads
+    parallel_filter_positive :: (&self, num_threads: u64) -> ParVec<i64> => {
+        if self.len == 0 {
+            ret ParVec::new()
+        }
+        
+        if num_threads <= 1 {
+            ret self.filter(|x| x > 0)
+        }
+        
+        mut result := ParVec::with_capacity(self.len)
+        mut result_len := 0u64
+        
+        unsafe { par_filter_positive_i64(self.data, result.data, self.len, &mut result_len, num_threads) }
+        result.len = result_len
+        result
+    }
+
+    # TRUE parallel filter using Rayon - filters negative values across multiple threads
+    parallel_filter_negative :: (&self, num_threads: u64) -> ParVec<i64> => {
+        if self.len == 0 {
+            ret ParVec::new()
+        }
+        
+        if num_threads <= 1 {
+            ret self.filter(|x| x < 0)
+        }
+        
+        mut result := ParVec::with_capacity(self.len)
+        mut result_len := 0u64
+        
+        unsafe { par_filter_negative_i64(self.data, result.data, self.len, &mut result_len, num_threads) }
+        result.len = result_len
+        result
+    }
+
+    # TRUE parallel filter using Rayon - filters even values across multiple threads
+    parallel_filter_even :: (&self, num_threads: u64) -> ParVec<i64> => {
+        if self.len == 0 {
+            ret ParVec::new()
+        }
+        
+        if num_threads <= 1 {
+            ret self.filter(|x| x % 2 == 0)
+        }
+        
+        mut result := ParVec::with_capacity(self.len)
+        mut result_len := 0u64
+        
+        unsafe { par_filter_even_i64(self.data, result.data, self.len, &mut result_len, num_threads) }
+        result.len = result_len
+        result
+    }
+
+    # TRUE parallel filter using Rayon - filters odd values across multiple threads
+    parallel_filter_odd :: (&self, num_threads: u64) -> ParVec<i64> => {
+        if self.len == 0 {
+            ret ParVec::new()
+        }
+        
+        if num_threads <= 1 {
+            ret self.filter(|x| x % 2 != 0)
+        }
+        
+        mut result := ParVec::with_capacity(self.len)
+        mut result_len := 0u64
+        
+        unsafe { par_filter_odd_i64(self.data, result.data, self.len, &mut result_len, num_threads) }
+        result.len = result_len
+        result
+    }
+
+    sum :: (&self) -> i64 => {
+        mut sum := 0
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            sum += elem
+        }
+
+        sum
+    }
+
+    product :: (&self) -> i64 => {
+        if self.len == 0 {
+            ret 1
+        }
+
+        mut prod := 1
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            prod *= elem
+        }
+
+        prod
+    }
+
+    min :: (&self) -> ?i64 => {
+        if self.len == 0 {
+            ret none
+        }
+
+        mut min_val := unsafe { *(self.data + 0) }
+        
+        for i in 1:self.len {
+            elem := unsafe { *(self.data + i) }
+            if elem < min_val {
+                min_val = elem
+            }
+        }
+
+        some min_val
+    }
+
+    max :: (&self) -> ?i64 => {
+        if self.len == 0 {
+            ret none
+        }
+
+        mut max_val := unsafe { *(self.data + 0) }
+        
+        for i in 1:self.len {
+            elem := unsafe { *(self.data + i) }
+            if elem > max_val {
+                max_val = elem
+            }
+        }
+
+        some max_val
+    }
+}
+
+impl ParVec<u64> {
+    # TRUE parallel reduction using Rayon - computes sum across multiple threads
+    parallel_sum :: (&self, num_threads: u64) -> u64 => {
+        if self.len == 0 {
+            ret 0
+        }
+        
+        if num_threads <= 1 {
+            ret self.sum()
+        }
+
+        unsafe { par_sum_u64(self.data, self.len, num_threads) }
+    }
+
+    # TRUE parallel reduction using Rayon - computes product across multiple threads
+    parallel_product :: (&self, num_threads: u64) -> u64 => {
+        if self.len == 0 {
+            ret 1
+        }
+        
+        if num_threads <= 1 {
+            ret self.product()
+        }
+
+        unsafe { par_product_u64(self.data, self.len, num_threads) }
+    }
+
+    # TRUE parallel reduction using Rayon - finds minimum across multiple threads
+    parallel_min :: (&self, num_threads: u64) -> ?u64 => {
+        if self.len == 0 {
+            ret none
+        }
+        
+        if num_threads <= 1 {
+            ret self.min()
+        }
+
+        mut has_value: u8 = 0
+        result := unsafe { par_min_u64(self.data, self.len, num_threads, &mut has_value) }
+        
+        if has_value == 1 {
+            some result
+        } else {
+            none
+        }
+    }
+
+    # TRUE parallel reduction using Rayon - finds maximum across multiple threads
+    parallel_max :: (&self, num_threads: u64) -> ?u64 => {
+        if self.len == 0 {
+            ret none
+        }
+        
+        if num_threads <= 1 {
+            ret self.max()
+        }
+
+        mut has_value: u8 = 0
+        result := unsafe { par_max_u64(self.data, self.len, num_threads, &mut has_value) }
+        
+        if has_value == 1 {
+            some result
+        } else {
+            none
+        }
+    }
+
+    sum :: (&self) -> u64 => {
+        mut sum := 0
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            sum += elem
+        }
+
+        sum
+    }
+
+    product :: (&self) -> u64 => {
+        if self.len == 0 {
+            ret 1
+        }
+
+        mut prod := 1
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            prod *= elem
+        }
+
+        prod
+    }
+
+    min :: (&self) -> ?u64 => {
+        if self.len == 0 {
+            ret none
+        }
+
+        mut min_val := unsafe { *(self.data + 0) }
+        
+        for i in 1:self.len {
+            elem := unsafe { *(self.data + i) }
+            if elem < min_val {
+                min_val = elem
+            }
+        }
+
+        some min_val
+    }
+
+    max :: (&self) -> ?u64 => {
+        if self.len == 0 {
+            ret none
+        }
+
+        mut max_val := unsafe { *(self.data + 0) }
+        
+        for i in 1:self.len {
+            elem := unsafe { *(self.data + i) }
+            if elem > max_val {
+                max_val = elem
+            }
+        }
+
+        some max_val
+    }
+}
+
+impl ParVec<f64> {
+    # TRUE parallel reduction using Rayon - computes sum across multiple threads
+    parallel_sum :: (&self, num_threads: u64) -> f64 => {
+        if self.len == 0 {
+            ret 0.0
+        }
+        
+        if num_threads <= 1 {
+            ret self.sum()
+        }
+
+        unsafe { par_sum_f64(self.data, self.len, num_threads) }
+    }
+
+    # TRUE parallel reduction using Rayon - computes product across multiple threads
+    parallel_product :: (&self, num_threads: u64) -> f64 => {
+        if self.len == 0 {
+            ret 1.0
+        }
+        
+        if num_threads <= 1 {
+            ret self.product()
+        }
+
+        unsafe { par_product_f64(self.data, self.len, num_threads) }
+    }
+
+    # TRUE parallel reduction using Rayon - finds minimum across multiple threads
+    parallel_min :: (&self, num_threads: u64) -> ?f64 => {
+        if self.len == 0 {
+            ret none
+        }
+        
+        if num_threads <= 1 {
+            ret self.min()
+        }
+
+        mut has_value: u8 = 0
+        result := unsafe { par_min_f64(self.data, self.len, num_threads, &mut has_value) }
+        
+        if has_value == 1 {
+            some result
+        } else {
+            none
+        }
+    }
+
+    # TRUE parallel reduction using Rayon - finds maximum across multiple threads
+    parallel_max :: (&self, num_threads: u64) -> ?f64 => {
+        if self.len == 0 {
+            ret none
+        }
+        
+        if num_threads <= 1 {
+            ret self.max()
+        }
+
+        mut has_value: u8 = 0
+        result := unsafe { par_max_f64(self.data, self.len, num_threads, &mut has_value) }
+        
+        if has_value == 1 {
+            some result
+        } else {
+            none
+        }
+    }
+
+    sum :: (&self) -> f64 => {
+        mut sum := 0.0
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            sum += elem
+        }
+
+        sum
+    }
+
+    product :: (&self) -> f64 => {
+        if self.len == 0 {
+            ret 1.0
+        }
+
+        mut prod := 1.0
+        
+        for i in 0:self.len {
+            elem := unsafe { *(self.data + i) }
+            prod *= elem
+        }
+
+        prod
+    }
+
+    min :: (&self) -> ?f64 => {
+        if self.len == 0 {
+            ret none
+        }
+
+        mut min_val := unsafe { *(self.data + 0) }
+        
+        for i in 1:self.len {
+            elem := unsafe { *(self.data + i) }
+            if elem < min_val {
+                min_val = elem
+            }
+        }
+
+        some min_val
+    }
+
+    max :: (&self) -> ?f64 => {
+        if self.len == 0 {
+            ret none
+        }
+
+        mut max_val := unsafe { *(self.data + 0) }
+        
+        for i in 1:self.len {
+            elem := unsafe { *(self.data + i) }
+            if elem > max_val {
+                max_val = elem
+            }
+        }
+
+        some max_val
+    }
+}

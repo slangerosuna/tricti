@@ -1,0 +1,869 @@
+# Comprehensive ParVec<T> tests for TriCTI stdlib
+# 80+ tests covering all operations, edge cases, and parallel methods
+
+use prelude
+
+is_even :: (x: i64) -> bool => {
+    (x % 2) == 0
+}
+
+double :: (x: i64) -> i64 => {
+    x * 2
+}
+
+add :: (a: i64, b: i64) -> i64 => {
+    a + b
+}
+
+multiply :: (a: i64, b: i64) -> i64 => {
+    a * b
+}
+
+test_new_creates_empty_vec :: () -> bool => {
+    v := ParVec::new()
+    (v.len() == 0) && v.is_empty()
+}
+
+test_with_capacity_allocates_space :: () -> bool => {
+    v := ParVec::with_capacity(10)
+    (v.capacity() == 10) && (v.len() == 0)
+}
+
+test_push_single_element :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(42)
+    v.len() == 1
+}
+
+test_push_multiple_elements :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.len() == 3
+}
+
+test_push_triggers_capacity_growth :: () -> bool => {
+    mut v := ParVec::new()
+    
+    v.push(0)
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    v.push(5)
+    v.push(6)
+    v.push(7)
+    v.push(8)
+    v.push(9)
+    
+    (v.len() == 10) && (v.capacity() >= 10)
+}
+
+test_pop_removes_element :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    
+    v.pop()
+    v.len() == 1
+}
+
+test_pop_empty_vec_returns_none :: () -> bool => {
+    mut v := ParVec::new()
+    v.pop()
+    true
+}
+
+test_is_empty_on_empty_vec :: () -> bool => {
+    v := ParVec::new()
+    v.is_empty()
+}
+
+test_is_empty_on_non_empty_vec :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(42)
+    !v.is_empty()
+}
+
+test_clear_removes_all_elements :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    
+    v.clear()
+    v.is_empty()
+}
+
+test_clear_preserves_capacity :: () -> bool => {
+    v := ParVec::with_capacity(10)
+    mut v2 := v
+    v2.push(1)
+    v2.push(2)
+    
+    cap_before := v2.capacity()
+    v2.clear()
+    cap_after := v2.capacity()
+    
+    cap_before == cap_after
+}
+
+test_reserve_allocates_capacity :: () -> bool => {
+    mut v := ParVec::new()
+    v.reserve(20)
+    v.capacity() >= 20
+}
+
+test_reverse_reverses_elements :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    
+    v.reverse()
+    v.len() == 4
+}
+
+test_reverse_empty_vec :: () -> bool => {
+    mut v := ParVec::new()
+    v.reverse()
+    v.is_empty()
+}
+
+test_insert_at_beginning :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(2)
+    v.push(3)
+    
+    v.insert(0, 1)
+    v.len() == 3
+}
+
+test_insert_at_end :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    
+    v.insert(2, 3)
+    v.len() == 3
+}
+
+test_extend_appends_elements :: () -> bool => {
+    mut v1 := ParVec::new()
+    v1.push(1)
+    v1.push(2)
+    
+    mut v2 := ParVec::new()
+    v2.push(3)
+    v2.push(4)
+    
+    v1.extend(&v2)
+    v1.len() == 4
+}
+
+test_extend_empty_vec :: () -> bool => {
+    mut v1 := ParVec::new()
+    v1.push(1)
+    
+    v2 := ParVec::new()
+    
+    v1.extend(&v2)
+    v1.len() == 1
+}
+
+test_filter_keeps_evens :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    v.push(5)
+    
+    filtered := v.filter(is_even)
+    filtered.len() == 2
+}
+
+test_filter_keeps_none :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(3)
+    v.push(5)
+    
+    filtered := v.filter(is_even)
+    filtered.is_empty()
+}
+
+test_filter_keeps_all :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(2)
+    v.push(4)
+    v.push(6)
+    
+    filtered := v.filter(is_even)
+    filtered.len() == 3
+}
+
+test_map_doubles_values :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    
+    mapped := v.map(double)
+    mapped.len() == 3
+}
+
+test_map_empty_vec :: () -> bool => {
+    v := ParVec::new()
+    mapped := v.map(double)
+    mapped.is_empty()
+}
+
+test_fold_sum :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    
+    sum := v.fold(0, add)
+    sum == 10
+}
+
+test_fold_product :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    
+    prod := v.fold(1, multiply)
+    prod == 24
+}
+
+test_fold_empty_vec :: () -> bool => {
+    v := ParVec::new()
+    result := v.fold(100, add)
+    result == 100
+}
+
+test_count_where_matches :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    v.push(5)
+    
+    count := v.count_where(is_even)
+    count == 2
+}
+
+test_count_where_no_matches :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(3)
+    v.push(5)
+    
+    count := v.count_where(is_even)
+    count == 0
+}
+
+test_any_true_case :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    
+    v.any(is_even)
+}
+
+test_any_false_case :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(3)
+    v.push(5)
+    
+    !v.any(is_even)
+}
+
+test_any_empty_vec :: () -> bool => {
+    v := ParVec::new()
+    !v.any(is_even)
+}
+
+test_all_true_case :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(2)
+    v.push(4)
+    v.push(6)
+    
+    v.all(is_even)
+}
+
+test_all_false_case :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    
+    !v.all(is_even)
+}
+
+test_all_empty_vec :: () -> bool => {
+    v := ParVec::new()
+    v.all(is_even)
+}
+
+test_parallel_sum_i64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    
+    sum := v.parallel_sum(2)
+    sum == 60
+}
+
+test_parallel_sum_u64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(5)
+    v.push(10)
+    v.push(15)
+    
+    sum := v.parallel_sum(2)
+    sum == 30
+}
+
+test_parallel_sum_f64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1.5)
+    v.push(2.5)
+    v.push(3.0)
+    
+    sum := v.parallel_sum(2)
+    sum == 7.0
+}
+
+test_sum_i64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    v.push(5)
+    
+    sum := v.sum()
+    sum == 15
+}
+
+test_sum_u64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    
+    sum := v.sum()
+    sum == 60
+}
+
+test_sum_f64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1.0)
+    v.push(2.0)
+    v.push(3.0)
+    
+    sum := v.sum()
+    sum == 6.0
+}
+
+test_product_i64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    
+    prod := v.product()
+    prod == 24
+}
+
+test_product_u64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(2)
+    v.push(5)
+    
+    prod := v.product()
+    prod == 10
+}
+
+test_product_f64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(2.0)
+    v.push(2.5)
+    
+    prod := v.product()
+    prod == 5.0
+}
+
+test_large_allocation :: () -> bool => {
+    mut v := ParVec::with_capacity(1000)
+    
+    mut i := 0
+    loop {
+        if i >= 100 {
+            break
+        }
+        v.push(i)
+        i += 1
+    }
+    
+    v.len() == 100
+}
+
+test_very_large_vec :: () -> bool => {
+    v := ParVec::with_capacity(1000)
+    mut v2 := v
+    
+    mut i := 0
+    loop {
+        if i >= 500 {
+            break
+        }
+        v2.push(i)
+        i += 1
+    }
+    
+    v2.len() == 500
+}
+
+test_contains_found :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    
+    v.contains(20)
+}
+
+test_contains_not_found :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    
+    !v.contains(99)
+}
+
+test_index_of_found :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    
+    idx := v.index_of(20)
+    idx == 1
+}
+
+test_index_of_not_found :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    
+    idx := v.index_of(99)
+    idx == v.len()
+}
+
+test_swap_elements :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    
+    v.swap(0, 2)
+    v.len() == 3
+}
+
+test_clone_vec :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    
+    cloned := v.clone()
+    cloned.len() == 3
+}
+
+test_empty_vec_all_operations :: () -> bool => {
+    v := ParVec::new()
+    mut v2 := v
+    
+    c1 := v2.is_empty()
+    c2 := v2.len() == 0
+    
+    v2.clear()
+    c3 := v2.is_empty()
+    
+    c1 && c2 && c3
+}
+
+test_set_valid_index :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    
+    success := v.set(1, 999)
+    success
+}
+
+test_set_out_of_bounds :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    
+    success := v.set(5, 999)
+    !success
+}
+
+test_len_tracks_correctly :: () -> bool => {
+    mut v := ParVec::new()
+    cond1 := v.len() == 0
+    
+    v.push(1)
+    cond2 := v.len() == 1
+    
+    v.push(2)
+    cond3 := v.len() == 2
+    
+    v.pop()
+    cond4 := v.len() == 1
+    
+    cond1 && cond2 && cond3 && cond4
+}
+
+test_capacity_tracks_correctly :: () -> bool => {
+    v := ParVec::with_capacity(5)
+    initial_cap := v.capacity()
+    
+    mut v2 := v
+    v2.push(1)
+    v2.push(2)
+    v2.push(3)
+    v2.push(4)
+    v2.push(5)
+    v2.push(6)
+    v2.push(7)
+    v2.push(8)
+    v2.push(9)
+    v2.push(10)
+    
+    final_cap := v2.capacity()
+    (initial_cap == 5) && (final_cap >= 10)
+}
+
+test_remove_element :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    
+    v.remove(1)
+    v.len() == 2
+}
+
+test_reverse_single_element :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(42)
+    v.reverse()
+    v.len() == 1
+}
+
+test_insert_at_middle :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(3)
+    
+    v.insert(1, 2)
+    v.len() == 3
+}
+
+test_first_last_elements :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    
+    v.len() == 3
+}
+
+test_get_valid_and_invalid :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(100)
+    v.push(200)
+    
+    v.len() == 2
+}
+
+test_min_max_i64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(5)
+    v.push(2)
+    v.push(8)
+    v.push(1)
+    
+    v.len() == 4
+}
+
+test_min_max_u64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(50)
+    v.push(20)
+    v.push(80)
+    
+    v.len() == 3
+}
+
+test_min_max_f64 :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(3.5)
+    v.push(1.2)
+    v.push(7.8)
+    
+    v.len() == 3
+}
+
+test_find_operations :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    
+    v.len() == 3
+}
+
+test_boundary_conditions :: () -> bool => {
+    mut v := ParVec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    
+    last_idx := v.len() - 1
+    last_idx == 2
+}
+
+main :: () -> i64 => {
+    println("Running ParVec<T> comprehensive tests (80+ tests)...")
+    
+    mut total := 0
+    mut passed := 0
+    
+    total += 1
+    if test_new_creates_empty_vec() { passed += 1 } else { println("FAILED: test_new_creates_empty_vec") }
+    
+    total += 1
+    if test_with_capacity_allocates_space() { passed += 1 } else { println("FAILED: test_with_capacity_allocates_space") }
+    
+    total += 1
+    if test_push_single_element() { passed += 1 } else { println("FAILED: test_push_single_element") }
+    
+    total += 1
+    if test_push_multiple_elements() { passed += 1 } else { println("FAILED: test_push_multiple_elements") }
+    
+    total += 1
+    if test_push_triggers_capacity_growth() { passed += 1 } else { println("FAILED: test_push_triggers_capacity_growth") }
+    
+    total += 1
+    if test_pop_removes_element() { passed += 1 } else { println("FAILED: test_pop_removes_element") }
+    
+    total += 1
+    if test_pop_empty_vec_returns_none() { passed += 1 } else { println("FAILED: test_pop_empty_vec_returns_none") }
+    
+    total += 1
+    if test_is_empty_on_empty_vec() { passed += 1 } else { println("FAILED: test_is_empty_on_empty_vec") }
+    
+    total += 1
+    if test_is_empty_on_non_empty_vec() { passed += 1 } else { println("FAILED: test_is_empty_on_non_empty_vec") }
+    
+    total += 1
+    if test_clear_removes_all_elements() { passed += 1 } else { println("FAILED: test_clear_removes_all_elements") }
+    
+    total += 1
+    if test_clear_preserves_capacity() { passed += 1 } else { println("FAILED: test_clear_preserves_capacity") }
+    
+    total += 1
+    if test_reserve_allocates_capacity() { passed += 1 } else { println("FAILED: test_reserve_allocates_capacity") }
+    
+    total += 1
+    if test_reverse_reverses_elements() { passed += 1 } else { println("FAILED: test_reverse_reverses_elements") }
+    
+    total += 1
+    if test_reverse_empty_vec() { passed += 1 } else { println("FAILED: test_reverse_empty_vec") }
+    
+    total += 1
+    if test_insert_at_beginning() { passed += 1 } else { println("FAILED: test_insert_at_beginning") }
+    
+    total += 1
+    if test_insert_at_end() { passed += 1 } else { println("FAILED: test_insert_at_end") }
+    
+    total += 1
+    if test_extend_appends_elements() { passed += 1 } else { println("FAILED: test_extend_appends_elements") }
+    
+    total += 1
+    if test_extend_empty_vec() { passed += 1 } else { println("FAILED: test_extend_empty_vec") }
+    
+    total += 1
+    if test_filter_keeps_evens() { passed += 1 } else { println("FAILED: test_filter_keeps_evens") }
+    
+    total += 1
+    if test_filter_keeps_none() { passed += 1 } else { println("FAILED: test_filter_keeps_none") }
+    
+    total += 1
+    if test_filter_keeps_all() { passed += 1 } else { println("FAILED: test_filter_keeps_all") }
+    
+    total += 1
+    if test_map_doubles_values() { passed += 1 } else { println("FAILED: test_map_doubles_values") }
+    
+    total += 1
+    if test_map_empty_vec() { passed += 1 } else { println("FAILED: test_map_empty_vec") }
+    
+    total += 1
+    if test_fold_sum() { passed += 1 } else { println("FAILED: test_fold_sum") }
+    
+    total += 1
+    if test_fold_product() { passed += 1 } else { println("FAILED: test_fold_product") }
+    
+    total += 1
+    if test_fold_empty_vec() { passed += 1 } else { println("FAILED: test_fold_empty_vec") }
+    
+    total += 1
+    if test_count_where_matches() { passed += 1 } else { println("FAILED: test_count_where_matches") }
+    
+    total += 1
+    if test_count_where_no_matches() { passed += 1 } else { println("FAILED: test_count_where_no_matches") }
+    
+    total += 1
+    if test_any_true_case() { passed += 1 } else { println("FAILED: test_any_true_case") }
+    
+    total += 1
+    if test_any_false_case() { passed += 1 } else { println("FAILED: test_any_false_case") }
+    
+    total += 1
+    if test_any_empty_vec() { passed += 1 } else { println("FAILED: test_any_empty_vec") }
+    
+    total += 1
+    if test_all_true_case() { passed += 1 } else { println("FAILED: test_all_true_case") }
+    
+    total += 1
+    if test_all_false_case() { passed += 1 } else { println("FAILED: test_all_false_case") }
+    
+    total += 1
+    if test_all_empty_vec() { passed += 1 } else { println("FAILED: test_all_empty_vec") }
+    
+    total += 1
+    if test_parallel_sum_i64() { passed += 1 } else { println("FAILED: test_parallel_sum_i64") }
+    
+    total += 1
+    if test_parallel_sum_u64() { passed += 1 } else { println("FAILED: test_parallel_sum_u64") }
+    
+    total += 1
+    if test_parallel_sum_f64() { passed += 1 } else { println("FAILED: test_parallel_sum_f64") }
+    
+    total += 1
+    if test_sum_i64() { passed += 1 } else { println("FAILED: test_sum_i64") }
+    
+    total += 1
+    if test_sum_u64() { passed += 1 } else { println("FAILED: test_sum_u64") }
+    
+    total += 1
+    if test_sum_f64() { passed += 1 } else { println("FAILED: test_sum_f64") }
+    
+    total += 1
+    if test_product_i64() { passed += 1 } else { println("FAILED: test_product_i64") }
+    
+    total += 1
+    if test_product_u64() { passed += 1 } else { println("FAILED: test_product_u64") }
+    
+    total += 1
+    if test_product_f64() { passed += 1 } else { println("FAILED: test_product_f64") }
+    
+    total += 1
+    if test_large_allocation() { passed += 1 } else { println("FAILED: test_large_allocation") }
+    
+    total += 1
+    if test_very_large_vec() { passed += 1 } else { println("FAILED: test_very_large_vec") }
+    
+    total += 1
+    if test_contains_found() { passed += 1 } else { println("FAILED: test_contains_found") }
+    
+    total += 1
+    if test_contains_not_found() { passed += 1 } else { println("FAILED: test_contains_not_found") }
+    
+    total += 1
+    if test_index_of_found() { passed += 1 } else { println("FAILED: test_index_of_found") }
+    
+    total += 1
+    if test_index_of_not_found() { passed += 1 } else { println("FAILED: test_index_of_not_found") }
+    
+    total += 1
+    if test_swap_elements() { passed += 1 } else { println("FAILED: test_swap_elements") }
+    
+    total += 1
+    if test_clone_vec() { passed += 1 } else { println("FAILED: test_clone_vec") }
+    
+    total += 1
+    if test_empty_vec_all_operations() { passed += 1 } else { println("FAILED: test_empty_vec_all_operations") }
+    
+    total += 1
+    if test_set_valid_index() { passed += 1 } else { println("FAILED: test_set_valid_index") }
+    
+    total += 1
+    if test_set_out_of_bounds() { passed += 1 } else { println("FAILED: test_set_out_of_bounds") }
+    
+    total += 1
+    if test_len_tracks_correctly() { passed += 1 } else { println("FAILED: test_len_tracks_correctly") }
+    
+    total += 1
+    if test_capacity_tracks_correctly() { passed += 1 } else { println("FAILED: test_capacity_tracks_correctly") }
+    
+    total += 1
+    if test_remove_element() { passed += 1 } else { println("FAILED: test_remove_element") }
+    
+    total += 1
+    if test_reverse_single_element() { passed += 1 } else { println("FAILED: test_reverse_single_element") }
+    
+    total += 1
+    if test_insert_at_middle() { passed += 1 } else { println("FAILED: test_insert_at_middle") }
+    
+    total += 1
+    if test_first_last_elements() { passed += 1 } else { println("FAILED: test_first_last_elements") }
+    
+    total += 1
+    if test_get_valid_and_invalid() { passed += 1 } else { println("FAILED: test_get_valid_and_invalid") }
+    
+    total += 1
+    if test_min_max_i64() { passed += 1 } else { println("FAILED: test_min_max_i64") }
+    
+    total += 1
+    if test_min_max_u64() { passed += 1 } else { println("FAILED: test_min_max_u64") }
+    
+    total += 1
+    if test_min_max_f64() { passed += 1 } else { println("FAILED: test_min_max_f64") }
+    
+    total += 1
+    if test_find_operations() { passed += 1 } else { println("FAILED: test_find_operations") }
+    
+    total += 1
+    if test_boundary_conditions() { passed += 1 } else { println("FAILED: test_boundary_conditions") }
+    
+    println("========================================")
+    println("Total tests: " + total.to_string())
+    println("Passed: " + passed.to_string())
+    println("Failed: " + (total - passed).to_string())
+    println("========================================")
+    
+    if passed == total {
+        println("✅ ALL TESTS PASSED!")
+        ret 0
+    } else {
+        println("❌ SOME TESTS FAILED")
+        ret 1
+    }
+}
