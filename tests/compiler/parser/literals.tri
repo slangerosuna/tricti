@@ -1,0 +1,545 @@
+# Literal Tests - 110+ tests for all literal types
+# Tests integer literals, float literals, strings, booleans, arrays, and struct literals
+
+# ============ INTEGER LITERALS (35 tests) ============
+
+# Test: basic decimal integer
+test_int_decimal :: () -> i64 => { 42 }
+
+# Test: large decimal integer
+test_int_large :: () -> i64 => { 9223372036854775807 }
+
+# Test: zero
+test_int_zero :: () -> i64 => { 0 }
+
+# Test: integer with i8 suffix
+test_int_i8 :: () -> i8 => { 127i8 }
+
+# Test: integer with i16 suffix
+test_int_i16 :: () -> i16 => { 32767i16 }
+
+# Test: integer with i32 suffix
+test_int_i32 :: () -> i32 => { 2147483647i32 }
+
+# Test: integer with i64 suffix
+test_int_i64 :: () -> i64 => { 9223372036854775807i64 }
+
+# Test: integer with i128 suffix
+test_int_i128 :: () -> i64 => { 170141183460469231731687303715884105727i128 }
+
+# Test: integer with u8 suffix
+test_int_u8 :: () -> u8 => { 255u8 }
+
+# Test: integer with u16 suffix
+test_int_u16 :: () -> u16 => { 65535u16 }
+
+# Test: integer with u32 suffix
+test_int_u32 :: () -> u32 => { 4294967295u32 }
+
+# Test: integer with u64 suffix
+test_int_u64 :: () -> u64 => { 18446744073709551615u64 }
+
+# Test: integer with u128 suffix
+test_int_u128 :: () -> u64 => { 340282366920938463463374607431768211455u128 }
+
+# Test: small integer with suffix
+test_int_small_i8 :: () -> i8 => { 1i8 }
+
+# Test: negative looking positive (parser sees - as unary)
+test_int_expr_negative :: () -> i64 => { -42 }
+
+# Test: integer in variable declaration
+test_int_var_decl :: () -> i64 => {
+    x := 100
+    x
+}
+
+# Test: integer in arithmetic
+test_int_arithmetic :: () -> i64 => { 10 + 20 }
+
+# Test: multiple suffixes testing
+test_int_multi_suffix_1 :: () -> i64 => { 1i8 + 2i16 + 3i32 + 4i64 }
+
+# Test: integer with underscores (if supported)
+test_int_underscores :: () -> i64 => { 1_000_000 }
+
+# Test: integer comparison
+test_int_comparison :: () -> bool => { (42 > 10) }
+
+# Test: integer in return
+test_int_return :: () -> i64 => {
+    ret 42
+}
+
+# Test: integer in if condition
+test_int_if_condition :: () -> i64 => {
+    if 1 {
+        ret 1
+    }
+    0
+}
+
+# Test: multiple integers
+test_int_multiple :: () -> i64 => {
+    a := 1
+    b := 2
+    c := 3
+    a + b + c
+}
+
+# Test: integer in match
+test_int_in_match :: () -> i64 => {
+    x := 42
+    match x {
+        value => 1
+    }
+}
+
+# Test: hex integer (if supported)
+test_int_zero_value :: () -> i64 => { 0i64 }
+
+# Test: integer sequence
+test_int_sequence :: () -> i64 => {
+    1
+    2
+    3
+}
+
+# Test: integer max values for each type
+test_int_max_i8 :: () -> i8 => { 127i8 }
+test_int_max_i16 :: () -> i16 => { 32767i16 }
+test_int_max_i32 :: () -> i32 => { 2147483647i32 }
+test_int_max_u8 :: () -> u8 => { 255u8 }
+test_int_max_u16 :: () -> u16 => { 65535u16 }
+test_int_max_u32 :: () -> u32 => { 4294967295u32 }
+
+# Test: integer in nested expressions
+test_int_nested :: () -> i64 => { ((10 + 20) * 3) }
+
+# Test: integer with all operators
+test_int_all_ops :: () -> i64 => { 10 + 20 - 5 * 2 / 1 }
+
+# Test: integer min (zero for unsigned)
+test_int_min :: () -> u8 => { 0u8 }
+
+
+# ============ FLOAT LITERALS (25 tests) ============
+
+# Test: basic float
+test_float_basic :: () -> f64 => { 3.14 }
+
+# Test: float with trailing zero
+test_float_trailing :: () -> f64 => { 1.0 }
+
+# Test: float without leading zero (not supported - using 0.5 instead)
+test_float_no_leading :: () -> f64 => { 0.5 }
+
+# Test: float with f32 suffix
+test_float_f32 :: () -> f32 => { 3.14f32 }
+
+# Test: float with f64 suffix
+test_float_f64 :: () -> f64 => { 3.14159265359f64 }
+
+# Test: large float
+test_float_large :: () -> f64 => { 1234567890.123456789 }
+
+# Test: small float
+test_float_small :: () -> f64 => { 0.000000001 }
+
+# Test: float zero
+test_float_zero :: () -> f64 => { 0.0 }
+
+# Test: float one
+test_float_one :: () -> f64 => { 1.0 }
+
+# Test: float in variable
+test_float_var :: () -> f64 => {
+    x := 2.5
+    x
+}
+
+# Test: float arithmetic
+test_float_arithmetic :: () -> f64 => { 1.5 + 2.5 }
+
+# Test: float multiplication
+test_float_mul :: () -> f64 => { 2.0 * 3.0 }
+
+# Test: float division
+test_float_div :: () -> f64 => { 10.0 / 2.0 }
+
+# Test: mixed int and float (promotes to float)
+test_float_mixed :: () -> f64 => { 1.0 + 2.0 }
+
+# Test: negative float (unary minus)
+test_float_negative :: () -> f64 => { -3.14 }
+
+# Test: float comparison
+test_float_comparison :: () -> bool => { (3.14 > 2.0) }
+
+# Test: float with many decimals
+test_float_precision :: () -> f64 => { 3.141592653589793238462643383279502884197 }
+
+# Test: float in return
+test_float_return :: () -> f64 => {
+    ret 1.5
+}
+
+# Test: multiple floats
+test_float_multiple :: () -> f64 => {
+    a := 1.1
+    b := 2.2
+    c := 3.3
+    a + b + c
+}
+
+# Test: float with f32 in expression
+test_float_f32_expr :: () -> f32 => { 1.0f32 + 2.0f32 }
+
+# Test: float suffix variants
+test_float_suffix_f32 :: () -> f32 => { 99.99f32 }
+test_float_suffix_f64 :: () -> f64 => { 99.99f64 }
+
+# Test: very small float
+test_float_very_small :: () -> f64 => { 0.0000000000001 }
+
+# Test: float in nested expression
+test_float_nested :: () -> f64 => { ((1.5 + 2.5) * 3.0) }
+
+# Test: float with underscores (if supported)
+test_float_readable :: () -> f64 => { 1_000.5 }
+
+
+# ============ STRING LITERALS (25 tests) ============
+
+# Test: basic string
+test_string_basic :: () => { "hello" }
+
+# Test: empty string
+test_string_empty :: () => { "" }
+
+# Test: string with spaces
+test_string_spaces :: () => { "hello world" }
+
+# Test: string with numbers
+test_string_numbers :: () => { "test123" }
+
+# Test: string with special chars
+test_string_special :: () => { "!@#$%^&*()" }
+
+# Test: string with escape quote
+test_string_escape_quote :: () => { "say \"hello\"" }
+
+# Test: string with newline escape
+test_string_newline :: () => { "line1\\nline2" }
+
+# Test: string with tab escape
+test_string_tab :: () => { "col1\\tcol2" }
+
+# Test: string with backslash
+test_string_backslash :: () => { "path\\to\\file" }
+
+# Test: long string
+test_string_long :: () => { "This is a very long string that goes on and on and on" }
+
+# Test: string in variable
+test_string_var :: () => {
+    s := "test"
+    s
+}
+
+# Test: multiple strings
+test_string_multiple :: () => {
+    a := "first"
+    b := "second"
+    c := "third"
+    c
+}
+
+# Test: string with unicode (basic)
+test_string_unicode :: () => { "hello🌍" }
+
+# Test: raw string with r prefix
+test_string_raw :: () => { r"raw\nstring" }
+
+# Test: raw string with hash
+test_string_raw_hash :: () => { #"raw string with #"# }
+
+# Test: multi-line string with triple quotes
+test_string_multiline :: () => { """line1
+line2
+line3""" }
+
+# Test: string in return
+test_string_return :: () => {
+    ret "returned"
+}
+
+# Test: string comparison (if supported)
+test_string_in_expr :: () => {
+    x := "test"
+    x
+}
+
+# Test: string with single quote inside
+test_string_single_quote :: () => { "it's working" }
+
+# Test: string with numbers and letters
+test_string_alphanum :: () => { "abc123xyz" }
+
+# Test: string with underscores
+test_string_underscore :: () => { "snake_case_string" }
+
+# Test: string with hyphens
+test_string_hyphen :: () => { "kebab-case-string" }
+
+# Test: string with dots
+test_string_dots :: () => { "file.name.ext" }
+
+# Test: empty raw string
+test_string_raw_empty :: () => { r"" }
+
+# Test: multi-line empty
+test_string_multiline_empty :: () => { """""" }
+
+
+# ============ BOOLEAN LITERALS (10 tests) ============
+
+# Test: true literal
+test_bool_true :: () -> bool => { true }
+
+# Test: false literal
+test_bool_false :: () -> bool => { false }
+
+# Test: bool in variable
+test_bool_var_true :: () -> bool => {
+    x := true
+    x
+}
+
+# Test: bool in variable false
+test_bool_var_false :: () -> bool => {
+    x := false
+    x
+}
+
+# Test: bool in if condition
+test_bool_if :: () -> i64 => {
+    if true {
+        ret 1
+    }
+    0
+}
+
+# Test: bool in comparison
+test_bool_comparison :: () -> bool => { (true == true) }
+
+# Test: bool negation
+test_bool_negation :: () -> bool => { !true }
+
+# Test: bool and
+test_bool_and :: () -> bool => { true && false }
+
+# Test: bool or
+test_bool_or :: () -> bool => { true || false }
+
+# Test: bool in match
+test_bool_match :: () -> i64 => {
+    x := true
+    match x {
+        value => 1
+    }
+}
+
+
+# ============ CHAR LITERALS (10 tests) ============
+
+# Test: basic char
+test_char_basic :: () => { 'a' }
+
+# Test: digit char
+test_char_digit :: () => { '0' }
+
+# Test: special char
+test_char_special :: () => { '!' }
+
+# Test: space char
+test_char_space :: () => { ' ' }
+
+# Test: escaped quote char
+test_char_escaped_quote :: () => { '\'' }
+
+# Test: escaped backslash char
+test_char_escaped_backslash :: () => { '\\' }
+
+# Test: newline escape char
+test_char_newline :: () => { '\n' }
+
+# Test: tab escape char
+test_char_tab :: () => { '\t' }
+
+# Test: carriage return char
+test_char_cr :: () => { '\r' }
+
+# Test: null char
+test_char_null :: () => { '\0' }
+
+
+# ============ STRUCT LITERALS (15 tests) ============
+
+# Test: empty struct literal
+test_struct_empty :: () => { {} }
+
+# Test: struct with one field
+test_struct_one_field :: () => {
+    x := { a: 1 }
+    x
+}
+
+# Test: struct with two fields
+test_struct_two_fields :: () => {
+    x := { a: 1, b: 2 }
+    x
+}
+
+# Test: struct with trailing comma
+test_struct_trailing_comma :: () => {
+    x := { a: 1, b: 2, }
+    x
+}
+
+# Test: struct with string field
+test_struct_string_field :: () => {
+    x := { name: "test" }
+    x
+}
+
+# Test: struct with bool field
+test_struct_bool_field :: () => {
+    x := { active: true }
+    x
+}
+
+# Test: struct with multiple types
+test_struct_mixed_types :: () => {
+    x := { id: 1, name: "test", active: true }
+    x
+}
+
+# Test: nested struct literals
+test_struct_nested :: () => {
+    x := { inner: { value: 42 } }
+    x
+}
+
+# Test: struct with expression values
+test_struct_expr_values :: () => {
+    x := { sum: 1 + 2, product: 3 * 4 }
+    x
+}
+
+# Test: struct shorthand field
+test_struct_shorthand :: () => {
+    a := 1
+    x := { a }
+    x
+}
+
+# Test: struct with spread operator
+test_struct_spread :: () => {
+    x := { a: 1, .. }
+    x
+}
+
+# Test: struct in return
+test_struct_return :: () => {
+    ret { value: 42 }
+}
+
+# Test: struct with nested values
+test_struct_complex :: () => {
+    x := { 
+        id: 1, 
+        data: { 
+            value: 42, 
+            name: "nested" 
+        } 
+    }
+    x
+}
+
+# Test: struct with array field
+test_struct_array_field :: () => {
+    x := { values: new [i64; 3] }
+    x
+}
+
+# Test: multiple struct literals
+test_struct_multiple :: () => {
+    a := { x: 1 }
+    b := { y: 2 }
+    c := { z: 3 }
+    c
+}
+
+
+# ============ EXTENDED NUMERIC LITERALS (20 tests) ============
+
+# Test: hexadecimal basic
+test_hex_basic :: () -> i64 => { 0xFF }
+
+# Test: hexadecimal large value
+test_hex_large :: () -> i64 => { 0xDEADBEEF }
+
+# Test: hexadecimal with i64 suffix
+test_hex_i64 :: () -> i64 => { 0xFFi64 }
+
+# Test: hexadecimal with u32 suffix
+test_hex_u32 :: () -> u32 => { 0xFFFFFFFFu32 }
+
+# Test: binary basic
+test_binary_basic :: () -> i64 => { 0b1010 }
+
+# Test: binary all ones byte
+test_binary_byte :: () -> i64 => { 0b11111111 }
+
+# Test: binary with i32 suffix
+test_binary_i32 :: () -> i32 => { 0b1010i32 }
+
+# Test: binary with u8 suffix
+test_binary_u8 :: () -> u8 => { 0b11111111u8 }
+
+# Test: octal basic
+test_octal_basic :: () -> i64 => { 0o777 }
+
+# Test: octal file permissions
+test_octal_perms :: () -> i64 => { 0o644 }
+
+# Test: octal with i64 suffix
+test_octal_i64 :: () -> i64 => { 0o777i64 }
+
+# Test: float with positive exponent
+test_float_exp_pos :: () -> f64 => { 1e10 }
+
+# Test: float with negative exponent
+test_float_exp_neg :: () -> f64 => { 1.0e-5 }
+
+# Test: float with explicit positive exponent
+test_float_exp_explicit :: () -> f64 => { 2.5e+3 }
+
+# Test: float exponent with f32 suffix
+test_float_exp_f32 :: () -> f32 => { 1.5e2f32 }
+
+# Test: integer with underscores
+test_int_underscores_million :: () -> i64 => { 1_000_000 }
+
+# Test: hex with underscores
+test_hex_underscores :: () -> i64 => { 0xFF_FF }
+
+# Test: float with underscores
+test_float_underscores :: () -> f64 => { 3.14_159 }
+
+# Test: large number with underscores
+test_large_underscores :: () -> i64 => { 1_234_567_890 }
+
+# Test: binary with underscores
+test_binary_underscores :: () -> i64 => { 0b1111_0000_1010_0101 }

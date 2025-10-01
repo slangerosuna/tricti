@@ -1,0 +1,32 @@
+# Invalid Literal Tests
+# These tests contain invalid syntax that should fail to parse
+
+# INVALID: integer with invalid suffix
+# test_invalid_int_suffix :: () => { 42xyz }
+
+# INVALID: float with multiple decimal points
+# test_invalid_float_multi_decimal :: () => { 3.14.159 }
+
+# INVALID: unclosed string
+# test_invalid_string_unclosed :: () => { "hello }
+
+# INVALID: invalid escape sequence
+# test_invalid_escape :: () => { "hello\q" }
+
+# INVALID: char with multiple characters
+# test_invalid_char_multi :: () => { 'ab' }
+
+# INVALID: empty char literal
+# test_invalid_char_empty :: () => { '' }
+
+# INVALID: integer overflow for type
+# test_invalid_int_overflow :: () -> i8 => { 999i8 }
+
+# INVALID: invalid number format
+# test_invalid_number_format :: () => { 12.34.56 }
+
+# INVALID: string with invalid unicode
+# test_invalid_unicode :: () => { "\u{GGGG}" }
+
+# INVALID: raw string without proper delimiter
+# test_invalid_raw_string :: () => { r"unclosed }

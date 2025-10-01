@@ -1,0 +1,67 @@
+# Generic Edge Case Tests - 15 tests for generics vs shift ambiguity
+# Tests deeply nested generics, angle brackets, and complex type arguments
+
+# ============ DEEPLY NESTED GENERICS (5 tests) ============
+
+# Test: double-nested Vec
+test_generic_double_vec :: () => { Vec<Vec<i64>>::new() }
+
+# Test: triple-nested Vec
+test_generic_triple_vec :: () => { Vec<Vec<Vec<i64>>>::new() }
+
+# Test: quadruple-nested Vec
+test_generic_quad_vec :: () => { Vec<Vec<Vec<Vec<i64>>>>::new() }
+
+# Test: double-nested Option
+test_generic_double_option :: () => { Option<Option<i64>>::Some(value) }
+
+# Test: nested generic with Box
+test_generic_nested_box :: () => { Vec<Box<i64>>::new() }
+
+
+# ============ DOUBLE ANGLE BRACKETS (5 tests) ============
+
+# Test: double angle bracket no space
+test_generic_double_angle_no_space :: () => { Vec<Vec<i64>>::new() }
+
+# Test: double angle bracket with space
+test_generic_double_angle_space :: () => { Vec<Vec<i64> >::new() }
+
+# Test: triple angle bracket
+test_generic_triple_angle :: () => { Vec<Vec<Vec<i64>>>::new() }
+
+# Test: Result with nested generic
+test_generic_result_nested :: () => { Result<Vec<i64>, bool>::Ok(v) }
+
+# Test: HashMap with nested values
+test_generic_hashmap_nested :: () => { HashMap<i64, Vec<bool>>::new() }
+
+
+# ============ COMPLEX NESTED GENERICS (5 tests) ============
+
+# Test: HashMap with String key and Vec value
+test_generic_hashmap_string_vec :: () => { 
+    HashMap<String, Vec<i64>>::new() 
+}
+
+# Test: Option with Vec
+test_generic_option_vec :: () => { 
+    Option<Vec<i64>>::Some(v) 
+}
+
+# Test: Result with nested Option
+test_generic_result_option :: () => { 
+    Result<Option<i64>, bool>::Ok(opt) 
+}
+
+# Test: deeply complex nesting
+test_generic_complex :: () => { 
+    HashMap<String, Vec<Option<i64>>>::new() 
+}
+
+# Test: generics with newlines
+test_generic_newlines :: () => { 
+    Vec<
+        i64
+    >::new() 
+}

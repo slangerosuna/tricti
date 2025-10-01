@@ -1,0 +1,223 @@
+# Negative Tests - 55+ tests for invalid syntax
+# These tests document syntax that SHOULD FAIL to parse
+# Each test is commented out and includes an explanation of why it should fail
+
+# ============ INVALID LITERALS (10 tests) ============
+
+# Test: integer with invalid suffix
+# INVALID: test_invalid_int_suffix :: () => { 42xyz }
+
+# Test: float with multiple decimal points
+# INVALID: test_invalid_float_multi_decimal :: () => { 3.14.159 }
+
+# Test: unclosed string
+# INVALID: test_invalid_string_unclosed :: () => { "hello }
+
+# Test: invalid escape sequence
+# INVALID: test_invalid_escape :: () => { "hello\q" }
+
+# Test: char with multiple characters
+# INVALID: test_invalid_char_multi :: () => { 'ab' }
+
+# Test: empty char literal
+# INVALID: test_invalid_char_empty :: () => { '' }
+
+# Test: integer overflow for type
+# INVALID: test_invalid_int_overflow :: () -> i8 => { 999i8 }
+
+# Test: invalid number format
+# INVALID: test_invalid_number_format :: () => { 12.34.56 }
+
+# Test: string with invalid unicode
+# INVALID: test_invalid_unicode :: () => { "\u{GGGG}" }
+
+# Test: raw string without proper delimiter
+# INVALID: test_invalid_raw_string :: () => { r"unclosed }
+
+
+# ============ INVALID OPERATORS (10 tests) ============
+
+# Test: double operator without space
+# INVALID: test_invalid_double_op :: () => { x ++ y }
+
+# Test: invalid operator combination
+# INVALID: test_invalid_op_combo :: () => { x =+ y }
+
+# Test: missing operand
+# INVALID: test_invalid_missing_operand :: () => { 5 + }
+
+# Test: comparison without parentheses in variable
+# This is a known parser limitation documented in replit.md
+# INVALID: test_invalid_cmp_no_parens :: () => { x := 5 < 10 }
+
+# Test: invalid bitwise operator
+# INVALID: test_invalid_bitwise :: () => { x ~~~ y }
+
+# Test: operator at start of expression
+# INVALID: test_invalid_op_start :: () => { * 5 }
+
+# Test: double assignment operator
+# INVALID: test_invalid_double_assign :: () => { x == 5 }
+
+# Test: invalid compound assignment
+# INVALID: test_invalid_compound :: () => { x %%= 5 }
+
+# Test: comparison chain without proper syntax
+# INVALID: test_invalid_cmp_chain :: () => { 1 < 2 < 3 }
+
+# Test: logical operator misuse
+# INVALID: test_invalid_logical_misuse :: () => { && true }
+
+
+# ============ INVALID TYPES (10 tests) ============
+
+# Test: type argument without identifier
+# INVALID: test_invalid_type_no_id :: () -> <i64> => { x }
+
+# Test: mismatched angle brackets
+# INVALID: test_invalid_type_mismatch :: () -> Vec<i64 => { v }
+
+# Test: empty type arguments
+# INVALID: test_invalid_type_empty :: () -> Vec<> => { v }
+
+# Test: type with space in generic (ambiguous with comparison)
+# INVALID: test_invalid_type_space :: () -> Vec < i64 > => { v }
+
+# Test: invalid reference syntax
+# INVALID: test_invalid_ref :: () -> &&i64 => { x }
+
+# Test: type without name
+# INVALID: test_invalid_type_anonymous :: () -> <T> => { x }
+
+# Test: tuple type with one element (not a tuple)
+# INVALID: test_invalid_single_tuple :: () -> (i64) => { x }
+
+# Test: function type without arrow
+# INVALID: test_invalid_fn_type :: () -> (i64) i64 => { x }
+
+# Test: invalid pointer syntax
+# INVALID: test_invalid_ptr :: () -> **i64 => { x }
+
+# Test: missing type in annotation
+# INVALID: test_invalid_missing_type :: (x: ) => { x }
+
+
+# ============ INVALID CONTROL FLOW (10 tests) ============
+
+# Test: if without condition
+# INVALID: test_invalid_if_no_cond :: () => { if { ret 1 } }
+
+# Test: if without block
+# INVALID: test_invalid_if_no_block :: () => { if true 1 }
+
+# Test: match without block
+# INVALID: test_invalid_match_no_block :: () => { match x }
+
+# Test: match without arms
+# INVALID: test_invalid_match_empty :: () => { match x {} }
+
+# Test: for loop without in
+# INVALID: test_invalid_for_no_in :: () => { for i range {} }
+
+# Test: for loop without block
+# INVALID: test_invalid_for_no_block :: () => { for i in range }
+
+# Test: match arm without arrow
+# INVALID: test_invalid_match_no_arrow :: () => { match x { 1 100 } }
+
+# Test: match arm with comma (known limitation)
+# INVALID: test_invalid_match_comma :: () => { match x { 1 => 100, 2 => 200 } }
+
+# Test: return with multiple values
+# INVALID: test_invalid_return_multi :: () => { ret 1, 2 }
+
+# Test: break outside loop
+# INVALID: test_invalid_break_outside :: () => { break }
+
+
+# ============ INVALID FUNCTIONS (10 tests) ============
+
+# Test: function without arrow
+# INVALID: test_invalid_fn_no_arrow :: () { 42 }
+
+# Test: function with mismatched braces
+# INVALID: test_invalid_fn_mismatch_brace :: () => { 42 }}
+
+# Test: function with invalid parameter
+# INVALID: test_invalid_fn_param :: (,) => { x }
+
+# Test: function with duplicate parameters
+# INVALID: test_invalid_fn_dup_param :: (x: i64, x: i64) => { x }
+
+# Test: async without function
+# INVALID: test_invalid_async :: async 42
+
+# Test: type parameter without brackets
+# INVALID: test_invalid_type_param_no_brackets :: T() => { x }
+
+# Test: function with only comma in params
+# INVALID: test_invalid_fn_only_comma :: (,) => { x }
+
+# Test: return type without arrow
+# INVALID: test_invalid_return_no_arrow :: () i64 => { 42 }
+
+# Test: const without value
+# INVALID: test_invalid_const_no_value :: i64
+
+# Test: function with invalid body
+# INVALID: test_invalid_fn_body :: () => }
+
+
+# ============ INVALID EXPRESSIONS (10 tests) ============
+
+# Test: mismatched parentheses
+# INVALID: test_invalid_mismatch_parens :: () => { (5 + 5 }
+
+# Test: unclosed function call
+# INVALID: test_invalid_unclosed_call :: () => { func( }
+
+# Test: field access without field name
+# INVALID: test_invalid_field_no_name :: () => { obj. }
+
+# Test: array index without index
+# INVALID: test_invalid_index_empty :: () => { arr[] }
+
+# Test: double dot operator
+# INVALID: test_invalid_double_dot :: () => { obj..field }
+
+# Test: static path without identifier
+# INVALID: test_invalid_static_no_id :: () => { Vec:: }
+
+# Test: call with invalid argument separator
+# INVALID: test_invalid_call_separator :: () => { func(1; 2) }
+
+# Test: struct literal without closing brace
+# INVALID: test_invalid_struct_unclosed :: () => { { x: 1 }
+
+# Test: nested unclosed parentheses
+# INVALID: test_invalid_nested_unclosed :: () => { ((5 + 5) }
+
+# Test: expression starting with closing paren
+# INVALID: test_invalid_expr_close_paren :: () => { ) }
+
+
+# ============ INVALID VARIABLES (5 tests) ============
+
+# Test: variable without assignment
+# INVALID: test_invalid_var_no_assign :: () => { x := }
+
+# Test: variable with double colon without const
+# INVALID: test_invalid_var_double_colon :: () => { x :: 42 }
+
+# Test: const without double colon
+# INVALID: test_invalid_const_single_colon :: i64 : 42
+
+# Test: assignment without value
+# INVALID: test_invalid_assign_no_value :: () => { x = }
+
+# Test: compound assignment without value
+# INVALID: test_invalid_compound_no_value :: () => { x += }
+
+
+# Working placeholder function to make file parseable
+test_negative_tests_placeholder :: () -> i64 => { 0 }

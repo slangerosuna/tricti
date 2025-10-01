@@ -1,0 +1,212 @@
+# Variable and Declaration Tests - 35+ tests
+# Tests variable declarations, const declarations, and assignment patterns
+
+# ============ VARIABLE DECLARATIONS (15 tests) ============
+
+# Test: simple variable declaration
+test_var_simple :: () -> i64 => {
+    x := 42
+    x
+}
+
+# Test: variable with type annotation
+test_var_typed :: () -> i64 => {
+    x: i64 := 42
+    x
+}
+
+# Test: variable with expression
+test_var_expr :: () -> i64 => {
+    x := 10 + 20
+    x
+}
+
+# Test: multiple variable declarations
+test_var_multiple :: () -> i64 => {
+    a := 1
+    b := 2
+    c := 3
+    a + b + c
+}
+
+# Test: variable with function call
+test_var_fn_call :: () => {
+    result := compute()
+    result
+}
+
+# Test: variable with static path
+test_var_static_path :: () => {
+    v := Vec::new()
+    v
+}
+
+# Test: variable with struct literal
+test_var_struct :: () => {
+    point := { x: 1, y: 2 }
+    point
+}
+
+# Test: variable with comparison (parentheses needed)
+test_var_comparison :: () -> bool => {
+    result := (10 > 5)
+    result
+}
+
+# Test: variable with logical expression
+test_var_logical :: () -> bool => {
+    result := (true && false)
+    result
+}
+
+# Test: variable with nested expression
+test_var_nested_expr :: () -> i64 => {
+    result := ((10 + 20) * 3)
+    result
+}
+
+# Test: variable with match expression
+test_var_match :: () -> i64 => {
+    x := 1
+    result := match x {
+        1 => 100
+        _ => 0
+    }
+    result
+}
+
+# Test: variable with if expression
+test_var_if_expr :: () -> i64 => {
+    x := 10
+    result := if (x > 5) {
+        ret 1
+    } else {
+        ret 0
+    }
+}
+
+# Test: variable shadowing
+test_var_shadowing :: () -> i64 => {
+    x := 10
+    x := 20
+    x
+}
+
+# Test: variable with string
+test_var_string :: () => {
+    name := "test"
+    name
+}
+
+# Test: variable with boolean
+test_var_bool :: () -> bool => {
+    flag := true
+    flag
+}
+
+
+# ============ CONST DECLARATIONS (10 tests) ============
+
+# Test: simple const declaration
+test_const_simple :: i64 = 42
+
+# Test: const with type annotation
+test_const_typed :: i64 = 100
+
+# Test: const with expression
+test_const_expr :: i64 = 10 + 20
+
+# Test: const function
+test_const_function :: () -> i64 = { 42 }
+
+# Test: const with generic type
+test_const_generic :: Vec<i64> = vec
+
+# Test: const with struct literal
+test_const_struct :: Point = { x: 1, y: 2 }
+
+# Test: const with static path
+test_const_static :: Vec<i64> = Vec::new()
+
+# Test: const table definition
+test_const_table :: table {
+    id: i64,
+    name: String
+}
+
+# Test: const with string
+test_const_string :: String = "constant"
+
+# Test: const with boolean
+test_const_bool :: bool = true
+
+
+# ============ ASSIGNMENTS (10 tests) ============
+
+# Test: simple assignment
+test_assign_simple :: () -> i64 => {
+    x := 10
+    x = 20
+    x
+}
+
+# Test: assignment with expression
+test_assign_expr :: () -> i64 => {
+    x := 10
+    x = 20 + 30
+    x
+}
+
+# Test: compound addition assignment
+test_assign_add :: () -> i64 => {
+    x := 10
+    x += 5
+    x
+}
+
+# Test: compound subtraction assignment
+test_assign_sub :: () -> i64 => {
+    x := 20
+    x -= 5
+    x
+}
+
+# Test: compound multiplication assignment
+test_assign_mul :: () -> i64 => {
+    x := 10
+    x *= 2
+    x
+}
+
+# Test: compound division assignment
+test_assign_div :: () -> i64 => {
+    x := 20
+    x /= 4
+    x
+}
+
+# Test: element-wise multiplication assignment
+test_assign_elemwise_mul :: () => {
+    x := arr
+    x .*= 2
+}
+
+# Test: element-wise division assignment
+test_assign_elemwise_div :: () => {
+    x := arr
+    x ./= 2
+}
+
+# Test: backslash assignment
+test_assign_backslash :: () => {
+    x := matrix
+    x \= vector
+}
+
+# Test: multiple assignments
+test_assign_multiple :: () -> i64 => {
+    x := 10
+    x = 20
+    x = 30
+    x
+}

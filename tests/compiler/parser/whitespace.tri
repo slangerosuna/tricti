@@ -1,0 +1,97 @@
+# Whitespace and Formatting Tests - 15 tests for edge cases
+# Tests minimal whitespace, extra whitespace, trailing commas, and formatting
+
+# ============ MINIMAL WHITESPACE (5 tests) ============
+
+# Test: minimal whitespace in expression
+test_ws_minimal_expr::()->i64=>{42}
+
+# Test: minimal whitespace with operators
+test_ws_minimal_ops::()->i64=>{10+20*3}
+
+# Test: minimal whitespace in function
+test_ws_minimal_func::(x:i64)->i64=>{x}
+
+# Test: minimal whitespace with parentheses
+test_ws_minimal_parens::()->i64=>{(1+2)*3}
+
+# Test: minimal whitespace in variable
+test_ws_minimal_var::()->i64=>{x:=42 x}
+
+
+# ============ EXTRA WHITESPACE (5 tests) ============
+
+# Test: extra whitespace everywhere
+test_ws_extra   ::   (   )   ->   i64   =>   {   42   }
+
+# Test: extra newlines in function
+test_ws_extra_newlines :: () -> i64 => {
+
+    x := 10
+
+    y := 20
+
+    x + y
+
+}
+
+# Test: extra whitespace in expression
+test_ws_extra_expr :: () -> i64 => {
+    10    +    20    *    3
+}
+
+# Test: extra whitespace in parameters
+test_ws_extra_params :: (  x  :  i64   ,   y  :  i64  ) -> i64 => {
+    x + y
+}
+
+# Test: mixed whitespace and tabs
+test_ws_mixed :: () -> i64 => {
+	x := 10
+    	y := 20
+	x + y
+}
+
+
+# ============ TRAILING COMMAS (5 tests) ============
+
+# Test: trailing comma in function parameters
+test_trailing_comma_params :: (
+    x: i64,
+    y: i64,
+) -> i64 => {
+    x + y
+}
+
+# Test: trailing comma in struct literal (already covered)
+test_trailing_comma_struct :: () => {
+    s := { a: 1, b: 2, }
+    s
+}
+
+# Test: trailing comma in array literal
+test_trailing_comma_array :: () => {
+    arr := new [i64; 3]
+    arr
+}
+
+# Test: trailing comma in function call
+test_trailing_comma_call :: () => {
+    f := test_trailing_comma_params(
+        1,
+        2,
+    )
+    f
+}
+
+# Test: dangling else associativity
+test_dangling_else :: () -> i64 => {
+    if true {
+        if false {
+            ret 1
+        } else {
+            ret 2
+        }
+    }
+    3
+}

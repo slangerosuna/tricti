@@ -1,0 +1,375 @@
+# Type System Tests - 105+ tests for type annotations and type expressions
+# Tests simple types, generic types, nested generics, type arguments, and complex type expressions
+
+# ============ SIMPLE TYPES (20 tests) ============
+
+# Test: i64 type annotation
+test_type_i64 :: () -> i64 => { 42 }
+
+# Test: i32 type annotation
+test_type_i32 :: () -> i32 => { 42i32 }
+
+# Test: i16 type annotation
+test_type_i16 :: () -> i16 => { 42i16 }
+
+# Test: i8 type annotation
+test_type_i8 :: () -> i8 => { 42i8 }
+
+# Test: u64 type annotation
+test_type_u64 :: () -> u64 => { 42u64 }
+
+# Test: u32 type annotation
+test_type_u32 :: () -> u32 => { 42u32 }
+
+# Test: u16 type annotation
+test_type_u16 :: () -> u16 => { 42u16 }
+
+# Test: u8 type annotation
+test_type_u8 :: () -> u8 => { 42u8 }
+
+# Test: f64 type annotation
+test_type_f64 :: () -> f64 => { 3.14 }
+
+# Test: f32 type annotation
+test_type_f32 :: () -> f32 => { 3.14f32 }
+
+# Test: bool type annotation
+test_type_bool :: () -> bool => { true }
+
+# Test: variable with i64 type
+test_type_var_i64 :: () -> i64 => {
+    x: i64 := 42
+    x
+}
+
+# Test: variable with f64 type
+test_type_var_f64 :: () -> f64 => {
+    x: f64 := 3.14
+    x
+}
+
+# Test: variable with bool type
+test_type_var_bool :: () -> bool => {
+    x: bool := true
+    x
+}
+
+# Test: multiple typed variables
+test_type_multi_var :: () -> i64 => {
+    a: i64 := 1
+    b: i64 := 2
+    c: i64 := 3
+    a + b + c
+}
+
+# Test: parameter with type
+test_type_param :: (x: i64) -> i64 => { x }
+
+# Test: multiple parameters with types
+test_type_multi_param :: (x: i64, y: i64) -> i64 => { x + y }
+
+# Test: mixed parameter types
+test_type_mixed_params :: (x: i64, y: f64, z: bool) -> i64 => { x }
+
+# Test: none type
+test_type_none :: () -> none => { }
+
+# Test: identifier type (custom type)
+test_type_custom :: () -> MyType => { value }
+
+
+# ============ GENERIC TYPES (25 tests) ============
+
+# Test: Vec with type argument
+test_type_vec :: () -> Vec<i64> => { v }
+
+# Test: Option with type argument
+test_type_option :: () -> Option<i64> => { opt }
+
+# Test: Result with two type arguments
+test_type_result :: () -> Result<i64, bool> => { res }
+
+# Test: generic type with u64
+test_type_vec_u64 :: () -> Vec<u64> => { v }
+
+# Test: generic type with f64
+test_type_vec_f64 :: () -> Vec<f64> => { v }
+
+# Test: generic type with bool
+test_type_vec_bool :: () -> Vec<bool> => { v }
+
+# Test: Option with custom type
+test_type_option_custom :: () -> Option<MyType> => { opt }
+
+# Test: Result with custom types
+test_type_result_custom :: () -> Result<Value, Error> => { res }
+
+# Test: generic in variable
+test_type_generic_var :: () => {
+    v: Vec<i64> := vec
+    v
+}
+
+# Test: generic in parameter
+test_type_generic_param :: (v: Vec<i64>) => { v }
+
+# Test: multiple generic parameters
+test_type_multi_generic :: (a: Vec<i64>, b: Option<f64>) => { a }
+
+# Test: HashMap with two type args
+test_type_hashmap :: () -> HashMap<i64, bool> => { map }
+
+# Test: generic with string type
+test_type_vec_string :: () -> Vec<String> => { v }
+
+# Test: Box with type argument
+test_type_box :: () -> Box<i64> => { boxed }
+
+# Test: Rc with type argument
+test_type_rc :: () -> Rc<MyType> => { rc }
+
+# Test: Arc with type argument
+test_type_arc :: () -> Arc<Value> => { arc }
+
+# Test: Cell with type argument
+test_type_cell :: () -> Cell<i64> => { cell }
+
+# Test: RefCell with type argument
+test_type_refcell :: () -> RefCell<bool> => { refcell }
+
+# Test: Mutex with type argument
+test_type_mutex :: () -> Mutex<Data> => { mutex }
+
+# Test: RwLock with type argument
+test_type_rwlock :: () -> RwLock<State> => { lock }
+
+# Test: generic type in const
+test_type_generic_const :: Vec<i64> = { value }
+
+# Test: PhantomData with type argument
+test_type_phantom :: () -> PhantomData<T> => { phantom }
+
+# Test: generic with long type name
+test_type_long_name :: () -> VeryLongTypeName<i64> => { value }
+
+# Test: generic return in arrow function
+test_type_generic_arrow :: () -> Vec<i64> => { vec }
+
+# Test: generic with parentheses
+test_type_generic_parens :: () => {
+    v: (Vec<i64>) := vec
+    v
+}
+
+
+# ============ NESTED GENERICS (20 tests) ============
+
+# Test: Vec of Vec
+test_type_vec_vec :: () -> Vec<Vec<i64>> => { matrix }
+
+# Test: Vec of Option
+test_type_vec_option :: () -> Vec<Option<i64>> => { opts }
+
+# Test: Option of Vec
+test_type_option_vec :: () -> Option<Vec<i64>> => { opt }
+
+# Test: Result with Vec types
+test_type_result_vec :: () -> Result<Vec<i64>, Vec<bool>> => { res }
+
+# Test: HashMap with Vec value
+test_type_map_vec :: () -> HashMap<i64, Vec<bool>> => { map }
+
+# Test: Vec of HashMap
+test_type_vec_map :: () -> Vec<HashMap<i64, bool>> => { v }
+
+# Test: three levels of nesting
+test_type_triple_nested :: () -> Vec<Vec<Vec<i64>>> => { cube }
+
+# Test: Box of Vec
+test_type_box_vec :: () -> Box<Vec<i64>> => { boxed }
+
+# Test: Rc of Vec
+test_type_rc_vec :: () -> Rc<Vec<i64>> => { rc }
+
+# Test: Arc of HashMap
+test_type_arc_map :: () -> Arc<HashMap<i64, bool>> => { arc }
+
+# Test: Option of Result
+test_type_option_result :: () -> Option<Result<i64, bool>> => { opt }
+
+# Test: Result of Option
+test_type_result_option :: () -> Result<Option<i64>, bool> => { res }
+
+# Test: nested generic in variable
+test_type_nested_var :: () => {
+    matrix: Vec<Vec<i64>> := m
+    matrix
+}
+
+# Test: nested generic in parameter
+test_type_nested_param :: (matrix: Vec<Vec<i64>>) => { matrix }
+
+# Test: complex nested generics
+test_type_complex_nested :: () -> HashMap<String, Vec<Option<i64>>> => { map }
+
+# Test: deeply nested generics
+test_type_deep_nested :: () -> Vec<Option<Result<Vec<i64>, bool>>> => { v }
+
+# Test: symmetric nesting
+test_type_symmetric :: () -> Result<Vec<i64>, Vec<bool>> => { res }
+
+# Test: nested with custom types
+test_type_nested_custom :: () -> Vec<Box<MyType>> => { v }
+
+# Test: four levels of nesting
+test_type_quad_nested :: () -> Vec<Vec<Vec<Vec<i64>>>> => { hyper }
+
+# Test: mixed complex nesting
+test_type_mixed_nested :: () -> HashMap<String, Result<Vec<i64>, Error>> => { map }
+
+
+# ============ REFERENCE AND POINTER TYPES (15 tests) ============
+
+# Test: immutable reference
+test_type_ref :: () -> &i64 => { ref_val }
+
+# Test: mutable reference
+test_type_mut_ref :: () -> &mut i64 => { mut_ref }
+
+# Test: raw pointer
+test_type_ptr :: () -> *i64 => { ptr }
+
+# Test: reference to Vec
+test_type_ref_vec :: () -> &Vec<i64> => { ref_vec }
+
+# Test: mutable reference to Vec
+test_type_mut_ref_vec :: () -> &mut Vec<i64> => { mut_vec }
+
+# Test: reference in parameter
+test_type_ref_param :: (x: &i64) => { x }
+
+# Test: mutable reference in parameter
+test_type_mut_ref_param :: (x: &mut i64) => { x }
+
+# Test: reference to nested generic
+test_type_ref_nested :: () -> &Vec<Vec<i64>> => { ref_matrix }
+
+# Test: mutable reference to nested
+test_type_mut_ref_nested :: () -> &mut Vec<Vec<i64>> => { mut_matrix }
+
+# Test: pointer to generic
+test_type_ptr_generic :: () -> *Vec<i64> => { ptr }
+
+# Test: reference to custom type
+test_type_ref_custom :: () -> &MyType => { ref_val }
+
+# Test: reference in variable
+test_type_ref_var :: () => {
+    r: &i64 := ref_val
+    r
+}
+
+# Test: mutable reference in variable
+test_type_mut_ref_var :: () => {
+    r: &mut i64 := mut_ref
+    r
+}
+
+# Test: multiple references
+test_type_multi_ref :: (a: &i64, b: &mut i64) => { a }
+
+# Test: reference to reference
+test_type_ref_ref :: () -> &(&i64) => { double_ref }
+
+
+# ============ OPTIONAL AND RESULT TYPES (10 tests) ============
+
+# Test: optional type with ?
+test_type_optional :: () -> ?i64 => { opt }
+
+# Test: result type with !
+test_type_result_bang :: () -> !i64 => { res }
+
+# Test: optional generic type
+test_type_optional_generic :: () -> ?Vec<i64> => { opt }
+
+# Test: result generic type
+test_type_result_generic :: () -> !Vec<i64> => { res }
+
+# Test: optional in variable
+test_type_optional_var :: () => {
+    opt: ?i64 := value
+    opt
+}
+
+# Test: result in variable
+test_type_result_var :: () => {
+    res: !i64 := value
+    res
+}
+
+# Test: optional in parameter
+test_type_optional_param :: (opt: ?i64) => { opt }
+
+# Test: result in parameter
+test_type_result_param :: (res: !i64) => { res }
+
+# Test: optional of optional
+test_type_optional_optional :: () -> ?(?i64) => { opt }
+
+# Test: result of result
+test_type_result_result :: () -> !(!i64) => { res }
+
+
+# ============ TUPLE TYPES (10 tests) ============
+
+# Test: simple tuple type
+test_type_tuple :: () -> (i64, i64) => { tup }
+
+# Test: three element tuple
+test_type_tuple_three :: () -> (i64, f64, bool) => { tup }
+
+# Test: tuple with trailing comma
+test_type_tuple_trailing :: () -> (i64, i64,) => { tup }
+
+# Test: nested tuple
+test_type_tuple_nested :: () -> ((i64, i64), i64) => { tup }
+
+# Test: tuple with generic types
+test_type_tuple_generic :: () -> (Vec<i64>, Option<bool>) => { tup }
+
+# Test: tuple in variable
+test_type_tuple_var :: () => {
+    t: (i64, i64) := tup
+    t
+}
+
+# Test: tuple in parameter
+test_type_tuple_param :: (t: (i64, i64)) => { t }
+
+# Test: large tuple
+test_type_tuple_large :: () -> (i64, i64, i64, i64, i64) => { tup }
+
+# Test: tuple with references
+test_type_tuple_ref :: () -> (&i64, &mut i64) => { tup }
+
+# Test: tuple with nested generics
+test_type_tuple_nested_generic :: () -> (Vec<Vec<i64>>, HashMap<i64, bool>) => { tup }
+
+
+# ============ FUNCTION TYPES (5 tests) ============
+
+# Test: simple function type
+test_type_fn_simple :: () -> (i64) -> i64 => { fn_val }
+
+# Test: function with multiple params
+test_type_fn_multi :: () -> (i64, i64) -> i64 => { fn_val }
+
+# Test: function with no params
+test_type_fn_no_params :: () -> () -> i64 => { fn_val }
+
+# Test: function returning function
+test_type_fn_fn :: () -> () -> () -> i64 => { fn_val }
+
+# Test: function with generic types
+test_type_fn_generic :: () -> (Vec<i64>) -> Option<i64> => { fn_val }

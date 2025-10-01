@@ -1,0 +1,32 @@
+# Invalid Operator Tests
+# These tests contain invalid operator syntax that should fail to parse
+
+# INVALID: double operator without space
+# test_invalid_double_op :: () => { x ++ y }
+
+# INVALID: invalid operator combination
+# test_invalid_op_combo :: () => { x =+ y }
+
+# INVALID: missing operand
+# test_invalid_missing_operand :: () => { 5 + }
+
+# INVALID: comparison without parentheses in variable (known limitation)
+# test_invalid_cmp_no_parens :: () => { x := 5 < 10 }
+
+# INVALID: invalid bitwise operator
+# test_invalid_bitwise :: () => { x ~~~ y }
+
+# INVALID: operator at start of expression
+# test_invalid_op_start :: () => { * 5 }
+
+# INVALID: double assignment operator
+# test_invalid_double_assign :: () => { x == 5 }
+
+# INVALID: invalid compound assignment
+# test_invalid_compound :: () => { x %%= 5 }
+
+# INVALID: comparison chain without proper syntax
+# test_invalid_cmp_chain :: () => { 1 < 2 < 3 }
+
+# INVALID: logical operator misuse
+# test_invalid_logical_misuse :: () => { && true }

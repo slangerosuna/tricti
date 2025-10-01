@@ -1,0 +1,32 @@
+# Invalid Control Flow Tests
+# These tests contain invalid control flow syntax that should fail to parse
+
+# INVALID: if without condition
+# test_invalid_if_no_cond :: () => { if { ret 1 } }
+
+# INVALID: if without block
+# test_invalid_if_no_block :: () => { if true 1 }
+
+# INVALID: match without block
+# test_invalid_match_no_block :: () => { match x }
+
+# INVALID: match without arms
+# test_invalid_match_empty :: () => { match x {} }
+
+# INVALID: for loop without in
+# test_invalid_for_no_in :: () => { for i range {} }
+
+# INVALID: for loop without block
+# test_invalid_for_no_block :: () => { for i in range }
+
+# INVALID: match arm without arrow
+# test_invalid_match_no_arrow :: () => { match x { 1 100 } }
+
+# INVALID: match arm with comma (known limitation)
+# test_invalid_match_comma :: () => { match x { 1 => 100, 2 => 200 } }
+
+# INVALID: return with multiple values
+# test_invalid_return_multi :: () => { ret 1, 2 }
+
+# INVALID: break outside loop
+# test_invalid_break_outside :: () => { break }

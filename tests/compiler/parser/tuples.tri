@@ -1,0 +1,68 @@
+# Tuple Tests - 15 tests for tuple literals and patterns
+# Tests simple tuples, nested tuples, tuple patterns, and edge cases
+
+# ============ SIMPLE TUPLES (5 tests) ============
+
+# Test: two-element tuple
+test_tuple_two :: () => { (1, 2) }
+
+# Test: three-element tuple with mixed types
+test_tuple_three :: () => { (true, false, 3) }
+
+# Test: four-element tuple
+test_tuple_four :: () => { (1, 2, 3, 4) }
+
+# Test: tuple with different types
+test_tuple_mixed :: () => { (42, "hello", true, 3.14) }
+
+# Test: tuple in variable
+test_tuple_var :: () => {
+    t := (10, 20)
+    t
+}
+
+
+# ============ NESTED TUPLES (5 tests) ============
+
+# Test: tuple containing tuple
+test_tuple_nested :: () => { ((1, 2), (3, 4)) }
+
+# Test: deeply nested tuple
+test_tuple_deep :: () => { ((1, (2, 3)), (4, (5, 6))) }
+
+# Test: tuple with nested triple
+test_tuple_triple_nested :: () => { ((1, 2, 3), (4, 5, 6)) }
+
+# Test: mixed nested tuple
+test_tuple_mixed_nested :: () => { (1, (2, 3), 4) }
+
+# Test: nested tuple in variable
+test_tuple_nested_var :: () => {
+    t := ((10, 20), (30, 40))
+    t
+}
+
+
+# ============ TUPLE PATTERNS AND EDGE CASES (5 tests) ============
+
+# Test: empty tuple
+test_tuple_empty :: () => { () }
+
+# Test: single-element tuple with trailing comma
+test_tuple_single :: () => { (42,) }
+
+# Test: tuple with trailing comma
+test_tuple_trailing_comma :: () => { (1, 2, 3,) }
+
+# Test: tuple in match expression
+test_tuple_match :: () => {
+    t := (1, 2)
+    match t {
+        value => 42
+    }
+}
+
+# Test: tuple in return statement
+test_tuple_return :: () => {
+    ret (100, 200)
+}
