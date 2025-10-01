@@ -8,18 +8,32 @@ use core::errors
 # CORE TRAITS
 # =============================================================================
 
-# Equality comparison
-trait Eq {
+# Partial equality comparison (allows for types that may not have total equality like f64 with NaN)
+trait PartialEq {
     eq :: (&self, other: &Self) -> bool
     ne :: (&self, other: &Self) -> bool => { ~self.eq(other) }
 }
 
-# Ordering comparison
-trait Ord: Eq {
+# Full equality comparison (marker trait indicating reflexive, symmetric, transitive equality)
+trait Eq: PartialEq {
+    # Marker trait - requires PartialEq
+    # Indicates reflexive, symmetric, transitive equality
+}
+
+# Partial ordering comparison (allows for incomparable values like NaN)
+trait PartialOrd: PartialEq {
+    partial_cmp :: (&self, other: &Self) -> ?i64
     lt :: (&self, other: &Self) -> bool
-    le :: (&self, other: &Self) -> bool => { self.lt(other) || self.eq(other) }
-    gt :: (&self, other: &Self) -> bool => { ~self.le(other) }
-    ge :: (&self, other: &Self) -> bool => { ~self.lt(other) }
+    le :: (&self, other: &Self) -> bool
+    gt :: (&self, other: &Self) -> bool
+    ge :: (&self, other: &Self) -> bool
+}
+
+# Total ordering comparison
+trait Ord: PartialOrd + Eq {
+    cmp :: (&self, other: &Self) -> i64
+    max :: (self, other: Self) -> Self
+    min :: (self, other: Self) -> Self
 }
 
 # Hash for HashMap/HashSet
@@ -30,26 +44,29 @@ trait Hash {
 # Clone (deep copy)
 trait Clone {
     clone :: (&self) -> Self
+    clone_from :: (*self, source: &Self) => {
+        *self = source.clone()
+    }
 }
 
-# Copy (bitwise copy)
+# Copy (bitwise copy) - marker trait
 trait Copy: Clone {
     # Automatically implements Clone as bitwise copy
 }
 
 # Drop (destructor)
 trait Drop {
-    drop :: (self) => { }
+    drop :: (*self) => { }
 }
 
 # Display for string representation
 trait Display {
-    to_string :: (&self) -> string
+    to_string :: (&self) -> String
 }
 
 # Debug for debug printing
 trait Debug {
-    debug_string :: (&self) -> string
+    debug_string :: (&self) -> String
 }
 
 # Default value
@@ -205,62 +222,50 @@ trait Default {
 # TRAIT IMPLEMENTATIONS FOR PRIMITIVES
 # =============================================================================
 
-# i64 implementations
-impl Eq for i64 {
-    eq :: (&self, other: &i64) -> bool => { *self == *other }
-}
-
-impl Ord for i64 {
-    lt :: (&self, other: &i64) -> bool => { *self < *other }
-}
-
-impl Hash for i64 {
-    hash :: (&self) -> u64 => { *self as u64 }
-}
-
-impl Display for i64 {
-    to_string :: (&self) -> string => {
-        # TODO: Implement i64 to string conversion
-        "i64"
-    }
-}
-
-impl Default for i64 {
-    default :: () -> i64 => { 0 }
-}
-
-# u64 implementations
-impl Eq for u64 {
-    eq :: (&self, other: &u64) -> bool => { *self == *other }
-}
-
-impl Ord for u64 {
-    lt :: (&self, other: &u64) -> bool => { *self < *other }
-}
-
-impl Hash for u64 {
-    hash :: (&self) -> u64 => { *self }
-}
-
-impl Display for u64 {
-    to_string :: (&self) -> string => {
-        # TODO: Implement u64 to string conversion
-        "u64"
-    }
-}
-
-impl Default for u64 {
-    default :: () -> u64 => { 0 }
-}
-
+# =============================================================================
 # bool implementations
-impl Eq for bool {
+# =============================================================================
+impl PartialEq for bool {
     eq :: (&self, other: &bool) -> bool => { *self == *other }
 }
 
+impl Eq for bool {}
+
+impl PartialOrd for bool {
+    partial_cmp :: (&self, other: &bool) -> ?i64 => {
+        if *self == *other { ret some 0 }
+        if *self { some 1 } else { some -1 }
+    }
+    lt :: (&self, other: &bool) -> bool => { ~*self && *other }
+    le :: (&self, other: &bool) -> bool => { ~*self || *self == *other }
+    gt :: (&self, other: &bool) -> bool => { *self && ~*other }
+    ge :: (&self, other: &bool) -> bool => { *self || *self == *other }
+}
+
+impl Ord for bool {
+    cmp :: (&self, other: &bool) -> i64 => {
+        if *self == *other { ret 0 }
+        if *self { 1 } else { -1 }
+    }
+    max :: (self, other: bool) -> bool => { self || other }
+    min :: (self, other: bool) -> bool => { self && other }
+}
+
+impl Copy for bool {}
+
+impl Clone for bool {
+    clone :: (&self) -> bool => { *self }
+}
+
 impl Display for bool {
-    to_string :: (&self) -> string => {
-        if *self { "true" } else { "false" }
+    to_string :: (&self) -> String => {
+        if *self { String::from_cstr("true" as *u8) } else { String::from_cstr("false" as *u8) }
+    }
+}
+
+impl Debug for bool {
+    debug_string :: (&self) -> String => {
+        if *self { String::from_cstr("true" as *u8) } else { String::from_cstr("false" as *u8) }
     }
 }
 
@@ -274,25 +279,315 @@ impl Hash for bool {
     }
 }
 
-# String implementations (requires String type from core::string)
-# Note: String struct is { data: *u8, len: u64, capacity: u64 }
-impl Eq for String {
+# =============================================================================
+# i64 implementations
+# =============================================================================
+impl PartialEq for i64 {
+    eq :: (&self, other: &i64) -> bool => { *self == *other }
+}
+
+impl Eq for i64 {}
+
+impl PartialOrd for i64 {
+    partial_cmp :: (&self, other: &i64) -> ?i64 => {
+        if *self == *other { ret some 0 }
+        if *self >= *other { some 1 } else { some -1 }
+    }
+    lt :: (&self, other: &i64) -> bool => { *self < *other }
+    le :: (&self, other: &i64) -> bool => { *self <= *other }
+    gt :: (&self, other: &i64) -> bool => { *self > *other }
+    ge :: (&self, other: &i64) -> bool => { *self >= *other }
+}
+
+impl Ord for i64 {
+    cmp :: (&self, other: &i64) -> i64 => {
+        if *self == *other { ret 0 }
+        if *self >= *other { 1 } else { -1 }
+    }
+    max :: (self, other: i64) -> i64 => {
+        if self >= other { self } else { other }
+    }
+    min :: (self, other: i64) -> i64 => {
+        if self <= other { self } else { other }
+    }
+}
+
+impl Copy for i64 {}
+
+impl Clone for i64 {
+    clone :: (&self) -> i64 => { *self }
+}
+
+impl Display for i64 {
+    to_string :: (&self) -> String => {
+        String::from_i64(*self)
+    }
+}
+
+impl Debug for i64 {
+    debug_string :: (&self) -> String => {
+        String::from_i64(*self)
+    }
+}
+
+impl Default for i64 {
+    default :: () -> i64 => { 0 }
+}
+
+impl Hash for i64 {
+    hash :: (&self) -> u64 => { *self as u64 }
+}
+
+# =============================================================================
+# u64 implementations
+# =============================================================================
+impl PartialEq for u64 {
+    eq :: (&self, other: &u64) -> bool => { *self == *other }
+}
+
+impl Eq for u64 {}
+
+impl PartialOrd for u64 {
+    partial_cmp :: (&self, other: &u64) -> ?i64 => {
+        if *self == *other { ret some 0 }
+        if *self >= *other { some 1 } else { some -1 }
+    }
+    lt :: (&self, other: &u64) -> bool => { *self < *other }
+    le :: (&self, other: &u64) -> bool => { *self <= *other }
+    gt :: (&self, other: &u64) -> bool => { *self > *other }
+    ge :: (&self, other: &u64) -> bool => { *self >= *other }
+}
+
+impl Ord for u64 {
+    cmp :: (&self, other: &u64) -> i64 => {
+        if *self == *other { ret 0 }
+        if *self >= *other { 1 } else { -1 }
+    }
+    max :: (self, other: u64) -> u64 => {
+        if self >= other { self } else { other }
+    }
+    min :: (self, other: u64) -> u64 => {
+        if self <= other { self } else { other }
+    }
+}
+
+impl Copy for u64 {}
+
+impl Clone for u64 {
+    clone :: (&self) -> u64 => { *self }
+}
+
+impl Display for u64 {
+    to_string :: (&self) -> String => {
+        String::from_u64(*self)
+    }
+}
+
+impl Debug for u64 {
+    debug_string :: (&self) -> String => {
+        String::from_u64(*self)
+    }
+}
+
+impl Default for u64 {
+    default :: () -> u64 => { 0 }
+}
+
+impl Hash for u64 {
+    hash :: (&self) -> u64 => { *self }
+}
+
+# =============================================================================
+# u8 implementations
+# =============================================================================
+impl PartialEq for u8 {
+    eq :: (&self, other: &u8) -> bool => { *self == *other }
+}
+
+impl Eq for u8 {}
+
+impl PartialOrd for u8 {
+    partial_cmp :: (&self, other: &u8) -> ?i64 => {
+        if *self == *other { ret some 0 }
+        if *self >= *other { some 1 } else { some -1 }
+    }
+    lt :: (&self, other: &u8) -> bool => { *self < *other }
+    le :: (&self, other: &u8) -> bool => { *self <= *other }
+    gt :: (&self, other: &u8) -> bool => { *self > *other }
+    ge :: (&self, other: &u8) -> bool => { *self >= *other }
+}
+
+impl Ord for u8 {
+    cmp :: (&self, other: &u8) -> i64 => {
+        if *self == *other { ret 0 }
+        if *self >= *other { 1 } else { -1 }
+    }
+    max :: (self, other: u8) -> u8 => {
+        if self >= other { self } else { other }
+    }
+    min :: (self, other: u8) -> u8 => {
+        if self <= other { self } else { other }
+    }
+}
+
+impl Copy for u8 {}
+
+impl Clone for u8 {
+    clone :: (&self) -> u8 => { *self }
+}
+
+impl Display for u8 {
+    to_string :: (&self) -> String => {
+        String::from_i64(*self as i64)
+    }
+}
+
+impl Debug for u8 {
+    debug_string :: (&self) -> String => {
+        String::from_i64(*self as i64)
+    }
+}
+
+impl Default for u8 {
+    default :: () -> u8 => { 0 }
+}
+
+impl Hash for u8 {
+    hash :: (&self) -> u64 => { *self as u64 }
+}
+
+# =============================================================================
+# f64 implementations (PartialOrd only, no Ord due to NaN)
+# =============================================================================
+impl PartialEq for f64 {
+    eq :: (&self, other: &f64) -> bool => { *self == *other }
+}
+
+impl PartialOrd for f64 {
+    partial_cmp :: (&self, other: &f64) -> ?i64 => {
+        if *self == *other { ret some 0 }
+        if *self >= *other { ret some 1 }
+        if *self < *other { ret some -1 }
+        none
+    }
+    lt :: (&self, other: &f64) -> bool => { *self < *other }
+    le :: (&self, other: &f64) -> bool => { *self <= *other }
+    gt :: (&self, other: &f64) -> bool => { *self > *other }
+    ge :: (&self, other: &f64) -> bool => { *self >= *other }
+}
+
+impl Copy for f64 {}
+
+impl Clone for f64 {
+    clone :: (&self) -> f64 => { *self }
+}
+
+impl Display for f64 {
+    to_string :: (&self) -> String => {
+        String::from_f64(*self)
+    }
+}
+
+impl Debug for f64 {
+    debug_string :: (&self) -> String => {
+        String::from_f64(*self)
+    }
+}
+
+impl Default for f64 {
+    default :: () -> f64 => { 0.0 }
+}
+
+# =============================================================================
+# char (u8) implementations - using u8 as char
+# =============================================================================
+# Note: char is represented as u8 in TriCTI
+
+# =============================================================================
+# isize (i64) and usize (u64) implementations
+# =============================================================================
+# Note: isize and usize are aliases for i64 and u64 respectively
+
+# =============================================================================
+# String implementations
+# =============================================================================
+use core::string
+
+impl PartialEq for String {
     eq :: (&self, other: &String) -> bool => {
-        if self.len ~= other.len {
-            ret false
-        }
-        for i in 0:self.len {
-            if self.data[i] ~= other.data[i] {
-                ret false
-            }
-        }
-        true
+        String::equals(self, other)
+    }
+}
+
+impl Eq for String {}
+
+impl PartialOrd for String {
+    partial_cmp :: (&self, other: &String) -> ?i64 => {
+        result := String::compare(self, other)
+        some (result as i64)
+    }
+    lt :: (&self, other: &String) -> bool => {
+        String::compare(self, other) < 0
+    }
+    le :: (&self, other: &String) -> bool => {
+        String::compare(self, other) <= 0
+    }
+    gt :: (&self, other: &String) -> bool => {
+        String::compare(self, other) > 0
+    }
+    ge :: (&self, other: &String) -> bool => {
+        String::compare(self, other) >= 0
+    }
+}
+
+impl Ord for String {
+    cmp :: (&self, other: &String) -> i64 => {
+        String::compare(self, other) as i64
+    }
+    max :: (self, other: String) -> String => {
+        if String::compare(&self, &other) >= 0 { self } else { other }
+    }
+    min :: (self, other: String) -> String => {
+        if String::compare(&self, &other) <= 0 { self } else { other }
+    }
+}
+
+impl Clone for String {
+    clone :: (&self) -> String => {
+        String::clone(self)
+    }
+}
+
+impl Display for String {
+    to_string :: (&self) -> String => {
+        String::clone(self)
+    }
+}
+
+impl Debug for String {
+    debug_string :: (&self) -> String => {
+        result := String::with_capacity(self.len + 2)
+        String::push_char(&result, 34)
+        String::push_str(&result, self)
+        String::push_char(&result, 34)
+        result
+    }
+}
+
+impl Default for String {
+    default :: () -> String => {
+        String::new()
+    }
+}
+
+impl Drop for String {
+    drop :: (*self) => {
+        String::destroy(self)
     }
 }
 
 impl Hash for String {
     hash :: (&self) -> u64 => {
-        # FNV-1a hash algorithm
         FNV_OFFSET_BASIS :: 14695981039346656037
         FNV_PRIME :: 1099511628211
         
@@ -303,6 +598,282 @@ impl Hash for String {
             hash = hash * FNV_PRIME
         }
         hash
+    }
+}
+
+# =============================================================================
+# Option<T> implementations (built-in ?T type)
+# =============================================================================
+
+# Note: Option is built-in with ?T syntax, some/none keywords
+# These implementations work with the built-in Option type
+
+# PartialEq for Option<T> where T: PartialEq
+impl<T: PartialEq> PartialEq for ?T {
+    eq :: (&self, other: &?T) -> bool => {
+        match (*self, *other) {
+            (some a, some b) => a.eq(&b),
+            (none, none) => true,
+            _ => false,
+        }
+    }
+}
+
+# Eq for Option<T> where T: Eq
+impl<T: Eq> Eq for ?T {}
+
+# PartialOrd for Option<T> where T: PartialOrd
+# None < Some
+impl<T: PartialOrd> PartialOrd for ?T {
+    partial_cmp :: (&self, other: &?T) -> ?i64 => {
+        match (*self, *other) {
+            (some a, some b) => a.partial_cmp(&b),
+            (none, none) => some 0,
+            (none, some _) => some -1,
+            (some _, none) => some 1,
+        }
+    }
+    lt :: (&self, other: &?T) -> bool => {
+        match (*self, *other) {
+            (none, some _) => true,
+            (some a, some b) => a.lt(&b),
+            _ => false,
+        }
+    }
+    le :: (&self, other: &?T) -> bool => {
+        match (*self, *other) {
+            (none, _) => true,
+            (some a, some b) => a.le(&b),
+            _ => false,
+        }
+    }
+    gt :: (&self, other: &?T) -> bool => {
+        match (*self, *other) {
+            (some _, none) => true,
+            (some a, some b) => a.gt(&b),
+            _ => false,
+        }
+    }
+    ge :: (&self, other: &?T) -> bool => {
+        match (*self, *other) {
+            (some _, none) => true,
+            (some a, some b) => a.ge(&b),
+            (none, none) => true,
+            _ => false,
+        }
+    }
+}
+
+# Ord for Option<T> where T: Ord
+impl<T: Ord> Ord for ?T {
+    cmp :: (&self, other: &?T) -> i64 => {
+        match (*self, *other) {
+            (some a, some b) => a.cmp(&b),
+            (none, none) => 0,
+            (none, some _) => -1,
+            (some _, none) => 1,
+        }
+    }
+    max :: (self, other: ?T) -> ?T => {
+        match (self, other) {
+            (some a, some b) => some a.max(b),
+            (some a, none) => some a,
+            (none, some b) => some b,
+            (none, none) => none,
+        }
+    }
+    min :: (self, other: ?T) -> ?T => {
+        match (self, other) {
+            (some a, some b) => some a.min(b),
+            (none, _) => none,
+            (_, none) => none,
+        }
+    }
+}
+
+# Clone for Option<T> where T: Clone
+impl<T: Clone> Clone for ?T {
+    clone :: (&self) -> ?T => {
+        match *self {
+            some ref val => some val.clone(),
+            none => none,
+        }
+    }
+}
+
+# Display for Option<T> where T: Display
+impl<T: Display> Display for ?T {
+    to_string :: (&self) -> String => {
+        match *self {
+            some ref val => {
+                result := String::from_cstr("Some(" as *u8)
+                String::push_str(&result, &val.to_string())
+                String::push_char(&result, 41)
+                result
+            },
+            none => String::from_cstr("None" as *u8),
+        }
+    }
+}
+
+# Debug for Option<T> where T: Debug
+impl<T: Debug> Debug for ?T {
+    debug_string :: (&self) -> String => {
+        match *self {
+            some ref val => {
+                result := String::from_cstr("Some(" as *u8)
+                String::push_str(&result, &val.debug_string())
+                String::push_char(&result, 41)
+                result
+            },
+            none => String::from_cstr("None" as *u8),
+        }
+    }
+}
+
+# Default for Option<T> - always None
+impl<T> Default for ?T {
+    default :: () -> ?T => { none }
+}
+
+# =============================================================================
+# StdResult<T> implementations
+# =============================================================================
+use core::result
+
+# PartialEq for StdResult<T> where T: PartialEq
+impl<T: PartialEq> PartialEq for StdResult<T> {
+    eq :: (&self, other: &StdResult<T>) -> bool => {
+        match (*self, *other) {
+            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.eq(&b),
+            (StdResult::Err { error: e1 }, StdResult::Err { error: e2 }) => {
+                std_error_message(e1) == std_error_message(e2)
+            },
+            _ => false,
+        }
+    }
+}
+
+# Eq for StdResult<T> where T: Eq
+impl<T: Eq> Eq for StdResult<T> {}
+
+# PartialOrd for StdResult<T> where T: PartialOrd
+# Ok < Err ordering
+impl<T: PartialOrd> PartialOrd for StdResult<T> {
+    partial_cmp :: (&self, other: &StdResult<T>) -> ?i64 => {
+        match (*self, *other) {
+            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.partial_cmp(&b),
+            (StdResult::Err { .. }, StdResult::Err { .. }) => some 0,
+            (StdResult::Ok { .. }, StdResult::Err { .. }) => some -1,
+            (StdResult::Err { .. }, StdResult::Ok { .. }) => some 1,
+        }
+    }
+    lt :: (&self, other: &StdResult<T>) -> bool => {
+        match (*self, *other) {
+            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.lt(&b),
+            (StdResult::Ok { .. }, StdResult::Err { .. }) => true,
+            _ => false,
+        }
+    }
+    le :: (&self, other: &StdResult<T>) -> bool => {
+        match (*self, *other) {
+            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.le(&b),
+            (StdResult::Ok { .. }, StdResult::Err { .. }) => true,
+            (StdResult::Err { .. }, StdResult::Err { .. }) => true,
+            _ => false,
+        }
+    }
+    gt :: (&self, other: &StdResult<T>) -> bool => {
+        match (*self, *other) {
+            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.gt(&b),
+            (StdResult::Err { .. }, StdResult::Ok { .. }) => true,
+            _ => false,
+        }
+    }
+    ge :: (&self, other: &StdResult<T>) -> bool => {
+        match (*self, *other) {
+            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.ge(&b),
+            (StdResult::Err { .. }, StdResult::Ok { .. }) => true,
+            (StdResult::Err { .. }, StdResult::Err { .. }) => true,
+            _ => false,
+        }
+    }
+}
+
+# Ord for StdResult<T> where T: Ord
+impl<T: Ord> Ord for StdResult<T> {
+    cmp :: (&self, other: &StdResult<T>) -> i64 => {
+        match (*self, *other) {
+            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.cmp(&b),
+            (StdResult::Err { .. }, StdResult::Err { .. }) => 0,
+            (StdResult::Ok { .. }, StdResult::Err { .. }) => -1,
+            (StdResult::Err { .. }, StdResult::Ok { .. }) => 1,
+        }
+    }
+    max :: (self, other: StdResult<T>) -> StdResult<T> => {
+        match (self, other) {
+            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => std_ok(a.max(b)),
+            (StdResult::Err { error: e }, _) => std_err(e),
+            (_, StdResult::Err { error: e }) => std_err(e),
+        }
+    }
+    min :: (self, other: StdResult<T>) -> StdResult<T> => {
+        match (self, other) {
+            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => std_ok(a.min(b)),
+            (StdResult::Ok { value: v }, StdResult::Err { .. }) => std_ok(v),
+            (StdResult::Err { .. }, StdResult::Ok { value: v }) => std_ok(v),
+            (StdResult::Err { error: e }, _) => std_err(e),
+        }
+    }
+}
+
+# Clone for StdResult<T> where T: Clone
+impl<T: Clone> Clone for StdResult<T> {
+    clone :: (&self) -> StdResult<T> => {
+        match *self {
+            StdResult::Ok { value: ref val } => std_ok(val.clone()),
+            StdResult::Err { error: ref e } => std_err(*e),
+        }
+    }
+}
+
+# Display for StdResult<T> where T: Display
+impl<T: Display> Display for StdResult<T> {
+    to_string :: (&self) -> String => {
+        match *self {
+            StdResult::Ok { value: ref val } => {
+                result := String::from_cstr("Ok(" as *u8)
+                String::push_str(&result, &val.to_string())
+                String::push_char(&result, 41)
+                result
+            },
+            StdResult::Err { error: ref e } => {
+                result := String::from_cstr("Err(" as *u8)
+                String::push_cstr(&result, std_error_message(*e) as *u8)
+                String::push_char(&result, 41)
+                result
+            },
+        }
+    }
+}
+
+# Debug for StdResult<T> where T: Debug
+impl<T: Debug> Debug for StdResult<T> {
+    debug_string :: (&self) -> String => {
+        match *self {
+            StdResult::Ok { value: ref val } => {
+                result := String::from_cstr("Ok(" as *u8)
+                String::push_str(&result, &val.debug_string())
+                String::push_char(&result, 41)
+                result
+            },
+            StdResult::Err { error: ref e } => {
+                result := String::from_cstr("Err(" as *u8)
+                String::push_cstr(&result, std_error_message(*e) as *u8)
+                String::push_char(&result, 41)
+                result
+            },
+        }
     }
 }
 

@@ -565,6 +565,40 @@ impl String {
         result
     }
 
+    # Create string from u64 (without i64 cast to avoid overflow)
+    from_u64 :: (value: u64) -> String => {
+        if value == 0 {
+            ret String::from_cstr("0" as *u8)
+        }
+        
+        result := String::new()
+        n := value
+        digits: [u8; 20] = [0 as u8; 20]
+        count := 0
+        
+        loop {
+            if n > 0 {
+                digits[count] = ((n % 10) as u8) + 48
+                n = n / 10
+                count = count + 1
+            } else {
+                break
+            }
+        }
+        
+        i := count
+        loop {
+            if i > 0 {
+                i = i - 1
+                String::push_char(&result, digits[i])
+            } else {
+                break
+            }
+        }
+        
+        result
+    }
+
     # Create string from f64
     from_f64 :: (value: f64) -> String => {
         buffer := malloc(64) as *u8

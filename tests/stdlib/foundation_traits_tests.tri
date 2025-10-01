@@ -1,0 +1,1345 @@
+# Foundation Traits Tests for TriCTI stdlib
+# Comprehensive test suite with 150+ tests for core trait system
+
+use prelude
+use core::traits
+use core::string
+
+# =============================================================================
+# Test Framework Helpers
+# =============================================================================
+
+test_count := 0
+passed_count := 0
+failed_count := 0
+
+test_assert :: (condition: bool, test_name: string) -> none => {
+    test_count = test_count + 1
+    if condition {
+        passed_count = passed_count + 1
+        println("[PASS]", test_name)
+    } else {
+        failed_count = failed_count + 1
+        println("[FAIL]", test_name)
+    }
+}
+
+test_assert_eq_i64 :: (actual: i64, expected: i64, test_name: string) -> none => {
+    test_assert(actual == expected, test_name)
+}
+
+test_assert_eq_bool :: (actual: bool, expected: bool, test_name: string) -> none => {
+    test_assert(actual == expected, test_name)
+}
+
+# =============================================================================
+# PARTIALEQ/EQ TESTS (30+ tests)
+# =============================================================================
+
+# Reflexivity tests (x == x)
+test_partialeq_reflexivity_bool :: () -> none => {
+    a := true
+    b := false
+    test_assert(a.eq(&a), "bool reflexivity true")
+    test_assert(b.eq(&b), "bool reflexivity false")
+}
+
+test_partialeq_reflexivity_i64 :: () -> none => {
+    a := 42
+    b := -100
+    c := 0
+    test_assert(a.eq(&a), "i64 reflexivity positive")
+    test_assert(b.eq(&b), "i64 reflexivity negative")
+    test_assert(c.eq(&c), "i64 reflexivity zero")
+}
+
+test_partialeq_reflexivity_u64 :: () -> none => {
+    a := 100 as u64
+    b := 0 as u64
+    test_assert(a.eq(&a), "u64 reflexivity positive")
+    test_assert(b.eq(&b), "u64 reflexivity zero")
+}
+
+test_partialeq_reflexivity_u8 :: () -> none => {
+    a := 255 as u8
+    b := 0 as u8
+    test_assert(a.eq(&a), "u8 reflexivity max")
+    test_assert(b.eq(&b), "u8 reflexivity zero")
+}
+
+test_partialeq_reflexivity_f64 :: () -> none => {
+    a := 3.14
+    b := -2.5
+    c := 0.0
+    test_assert(a.eq(&a), "f64 reflexivity positive")
+    test_assert(b.eq(&b), "f64 reflexivity negative")
+    test_assert(c.eq(&c), "f64 reflexivity zero")
+}
+
+# Symmetry tests (x == y implies y == x)
+test_partialeq_symmetry_i64 :: () -> none => {
+    a := 42
+    b := 42
+    c := 100
+    test_assert(a.eq(&b) == b.eq(&a), "i64 symmetry equal")
+    test_assert(a.eq(&c) == c.eq(&a), "i64 symmetry not equal")
+}
+
+test_partialeq_symmetry_bool :: () -> none => {
+    t := true
+    f := false
+    test_assert(t.eq(&t) == t.eq(&t), "bool symmetry true-true")
+    test_assert(f.eq(&f) == f.eq(&f), "bool symmetry false-false")
+    test_assert(t.eq(&f) == f.eq(&t), "bool symmetry true-false")
+}
+
+test_partialeq_symmetry_u64 :: () -> none => {
+    a := 100 as u64
+    b := 100 as u64
+    c := 200 as u64
+    test_assert(a.eq(&b) == b.eq(&a), "u64 symmetry equal")
+    test_assert(a.eq(&c) == c.eq(&a), "u64 symmetry not equal")
+}
+
+# Transitivity tests (x == y && y == z implies x == z)
+test_partialeq_transitivity_i64 :: () -> none => {
+    a := 5
+    b := 5
+    c := 5
+    xy := a.eq(&b)
+    yz := b.eq(&c)
+    xz := a.eq(&c)
+    test_assert(~xy || ~yz || xz, "i64 transitivity")
+}
+
+test_partialeq_transitivity_bool :: () -> none => {
+    a := true
+    b := true
+    c := true
+    xy := a.eq(&b)
+    yz := b.eq(&c)
+    xz := a.eq(&c)
+    test_assert(~xy || ~yz || xz, "bool transitivity")
+}
+
+# ne consistency tests (x != y == !(x == y))
+test_partialeq_ne_consistency_i64 :: () -> none => {
+    a := 10
+    b := 20
+    c := 10
+    test_assert(a.ne(&b) == ~a.eq(&b), "i64 ne consistency not equal")
+    test_assert(a.ne(&c) == ~a.eq(&c), "i64 ne consistency equal")
+}
+
+test_partialeq_ne_consistency_bool :: () -> none => {
+    t := true
+    f := false
+    test_assert(t.ne(&f) == ~t.eq(&f), "bool ne consistency different")
+    test_assert(t.ne(&t) == ~t.eq(&t), "bool ne consistency same")
+}
+
+test_partialeq_ne_consistency_u64 :: () -> none => {
+    a := 50 as u64
+    b := 100 as u64
+    test_assert(a.ne(&b) == ~a.eq(&b), "u64 ne consistency")
+}
+
+# String equality tests
+test_string_partialeq_empty :: () -> none => {
+    s1 := String::new()
+    s2 := String::new()
+    test_assert(s1.eq(&s2), "empty strings equal")
+}
+
+test_string_partialeq_equal :: () -> none => {
+    s1 := String::from_cstr("hello" as *u8)
+    s2 := String::from_cstr("hello" as *u8)
+    test_assert(s1.eq(&s2), "equal strings")
+}
+
+test_string_partialeq_different :: () -> none => {
+    s1 := String::from_cstr("hello" as *u8)
+    s2 := String::from_cstr("world" as *u8)
+    test_assert(~s1.eq(&s2), "different strings")
+}
+
+test_string_partialeq_length_mismatch :: () -> none => {
+    s1 := String::from_cstr("hi" as *u8)
+    s2 := String::from_cstr("hello" as *u8)
+    test_assert(~s1.eq(&s2), "different length strings")
+}
+
+# Option equality tests
+test_option_partialeq_none_none :: () -> none => {
+    a := none as ?i64
+    b := none as ?i64
+    test_assert(a.eq(&b), "none equals none")
+}
+
+test_option_partialeq_some_some_equal :: () -> none => {
+    a := some 42
+    b := some 42
+    test_assert(a.eq(&b), "some(42) equals some(42)")
+}
+
+test_option_partialeq_some_some_different :: () -> none => {
+    a := some 10
+    b := some 20
+    test_assert(~a.eq(&b), "some(10) not equals some(20)")
+}
+
+test_option_partialeq_some_none :: () -> none => {
+    a := some 5
+    b := none as ?i64
+    test_assert(~a.eq(&b), "some not equals none")
+    test_assert(~b.eq(&a), "none not equals some")
+}
+
+# Result equality tests
+test_result_partialeq_ok_ok_equal :: () -> none => {
+    a := std_ok(42)
+    b := std_ok(42)
+    test_assert(a.eq(&b), "Ok(42) equals Ok(42)")
+}
+
+test_result_partialeq_ok_ok_different :: () -> none => {
+    a := std_ok(10)
+    b := std_ok(20)
+    test_assert(~a.eq(&b), "Ok(10) not equals Ok(20)")
+}
+
+test_result_partialeq_ok_err :: () -> none => {
+    a := std_ok(42)
+    b := std_err::<i64>(std_error_message_only("error"))
+    test_assert(~a.eq(&b), "Ok not equals Err")
+}
+
+# Eq marker trait tests
+test_eq_marker_i64 :: () -> none => {
+    a := 5
+    b := 5
+    test_assert(a == b, "Eq marker i64")
+}
+
+test_eq_marker_bool :: () -> none => {
+    a := true
+    b := true
+    test_assert(a == b, "Eq marker bool")
+}
+
+test_eq_marker_string :: () -> none => {
+    s1 := String::from_cstr("test" as *u8)
+    s2 := String::from_cstr("test" as *u8)
+    test_assert(s1.eq(&s2), "Eq marker string")
+}
+
+# =============================================================================
+# PARTIALORD/ORD TESTS (40+ tests)
+# =============================================================================
+
+# Totality tests (cmp always returns -1, 0, or 1)
+test_ord_totality_i64 :: () -> none => {
+    a := 5
+    b := 10
+    c := 5
+    r1 := a.cmp(&b)
+    r2 := b.cmp(&a)
+    r3 := a.cmp(&c)
+    test_assert(r1 == -1 || r1 == 0 || r1 == 1, "i64 cmp totality 1")
+    test_assert(r2 == -1 || r2 == 0 || r2 == 1, "i64 cmp totality 2")
+    test_assert(r3 == -1 || r3 == 0 || r3 == 1, "i64 cmp totality 3")
+}
+
+test_ord_totality_bool :: () -> none => {
+    t := true
+    f := false
+    r1 := t.cmp(&f)
+    r2 := f.cmp(&t)
+    r3 := t.cmp(&t)
+    test_assert(r1 == -1 || r1 == 0 || r1 == 1, "bool cmp totality 1")
+    test_assert(r2 == -1 || r2 == 0 || r2 == 1, "bool cmp totality 2")
+    test_assert(r3 == -1 || r3 == 0 || r3 == 1, "bool cmp totality 3")
+}
+
+# Antisymmetry tests (x <= y && y <= x implies x == y)
+test_partialord_antisymmetry_i64 :: () -> none => {
+    a := 7
+    b := 7
+    xy := a.le(&b)
+    yx := b.le(&a)
+    eq := a.eq(&b)
+    test_assert(~xy || ~yx || eq, "i64 antisymmetry")
+}
+
+test_partialord_antisymmetry_u64 :: () -> none => {
+    a := 50 as u64
+    b := 50 as u64
+    xy := a.le(&b)
+    yx := b.le(&a)
+    eq := a.eq(&b)
+    test_assert(~xy || ~yx || eq, "u64 antisymmetry")
+}
+
+# Transitivity tests (x <= y && y <= z implies x <= z)
+test_partialord_transitivity_i64 :: () -> none => {
+    a := 1
+    b := 5
+    c := 10
+    xy := a.le(&b)
+    yz := b.le(&c)
+    xz := a.le(&c)
+    test_assert(~xy || ~yz || xz, "i64 transitivity")
+}
+
+test_partialord_transitivity_u64 :: () -> none => {
+    a := 10 as u64
+    b := 20 as u64
+    c := 30 as u64
+    xy := a.le(&b)
+    yz := b.le(&c)
+    xz := a.le(&c)
+    test_assert(~xy || ~yz || xz, "u64 transitivity")
+}
+
+# cmp/lt/le/gt/ge consistency tests
+test_ord_consistency_lt_i64 :: () -> none => {
+    a := 5
+    b := 10
+    cmp_result := a.cmp(&b)
+    lt_result := a.lt(&b)
+    test_assert((cmp_result < 0) == lt_result, "i64 lt consistency")
+}
+
+test_ord_consistency_le_i64 :: () -> none => {
+    a := 5
+    b := 5
+    c := 10
+    cmp1 := a.cmp(&b)
+    le1 := a.le(&b)
+    cmp2 := a.cmp(&c)
+    le2 := a.le(&c)
+    test_assert((cmp1 <= 0) == le1, "i64 le consistency equal")
+    test_assert((cmp2 <= 0) == le2, "i64 le consistency less")
+}
+
+test_ord_consistency_gt_i64 :: () -> none => {
+    a := 10
+    b := 5
+    cmp_result := a.cmp(&b)
+    gt_result := a.gt(&b)
+    test_assert((cmp_result > 0) == gt_result, "i64 gt consistency")
+}
+
+test_ord_consistency_ge_i64 :: () -> none => {
+    a := 10
+    b := 5
+    c := 10
+    cmp1 := a.cmp(&b)
+    ge1 := a.ge(&b)
+    cmp2 := a.cmp(&c)
+    ge2 := a.ge(&c)
+    test_assert((cmp1 >= 0) == ge1, "i64 ge consistency greater")
+    test_assert((cmp2 >= 0) == ge2, "i64 ge consistency equal")
+}
+
+# max/min correctness tests
+test_ord_max_i64 :: () -> none => {
+    a := 5
+    b := 10
+    m := a.max(b)
+    test_assert_eq_i64(m, 10, "i64 max")
+}
+
+test_ord_max_u64 :: () -> none => {
+    a := 100 as u64
+    b := 50 as u64
+    m := a.max(b)
+    test_assert(m == 100, "u64 max")
+}
+
+test_ord_min_i64 :: () -> none => {
+    a := 5
+    b := 10
+    m := a.min(b)
+    test_assert_eq_i64(m, 5, "i64 min")
+}
+
+test_ord_min_u64 :: () -> none => {
+    a := 100 as u64
+    b := 50 as u64
+    m := a.min(b)
+    test_assert(m == 50, "u64 min")
+}
+
+test_ord_max_bool :: () -> none => {
+    t := true
+    f := false
+    m := t.max(f)
+    test_assert_eq_bool(m, true, "bool max true")
+}
+
+test_ord_min_bool :: () -> none => {
+    t := true
+    f := false
+    m := t.min(f)
+    test_assert_eq_bool(m, false, "bool min false")
+}
+
+# f64 NaN handling (PartialOrd only, returns None)
+test_partialord_f64_nan_partial_cmp :: () -> none => {
+    nan := 0.0 / 0.0
+    a := 5.0
+    result := a.partial_cmp(&nan)
+    match result {
+        none => test_assert(true, "f64 NaN partial_cmp returns none"),
+        some _ => test_assert(false, "f64 NaN partial_cmp should return none"),
+    }
+}
+
+test_partialord_f64_regular :: () -> none => {
+    a := 3.14
+    b := 2.5
+    c := 3.14
+    test_assert(a.gt(&b), "f64 gt")
+    test_assert(b.lt(&a), "f64 lt")
+    test_assert(a.eq(&c), "f64 eq")
+}
+
+test_partialord_f64_partial_cmp_regular :: () -> none => {
+    a := 5.0
+    b := 3.0
+    c := 5.0
+    match a.partial_cmp(&b) {
+        some 1 => test_assert(true, "f64 partial_cmp greater"),
+        _ => test_assert(false, "f64 partial_cmp greater failed"),
+    }
+    match b.partial_cmp(&a) {
+        some -1 => test_assert(true, "f64 partial_cmp less"),
+        _ => test_assert(false, "f64 partial_cmp less failed"),
+    }
+    match a.partial_cmp(&c) {
+        some 0 => test_assert(true, "f64 partial_cmp equal"),
+        _ => test_assert(false, "f64 partial_cmp equal failed"),
+    }
+}
+
+# String ordering (lexicographic)
+test_string_ord_lexicographic :: () -> none => {
+    s1 := String::from_cstr("apple" as *u8)
+    s2 := String::from_cstr("banana" as *u8)
+    test_assert(s1.lt(&s2), "string lt lexicographic")
+    test_assert(s2.gt(&s1), "string gt lexicographic")
+}
+
+test_string_ord_prefix :: () -> none => {
+    s1 := String::from_cstr("test" as *u8)
+    s2 := String::from_cstr("testing" as *u8)
+    test_assert(s1.lt(&s2), "string lt prefix")
+}
+
+test_string_ord_equal :: () -> none => {
+    s1 := String::from_cstr("hello" as *u8)
+    s2 := String::from_cstr("hello" as *u8)
+    r := s1.cmp(&s2)
+    test_assert_eq_i64(r as i64, 0, "string cmp equal")
+}
+
+test_string_max_min :: () -> none => {
+    s1 := String::from_cstr("apple" as *u8)
+    s2 := String::from_cstr("banana" as *u8)
+    max_s := s1.max(s2.clone())
+    min_s := s1.clone().min(s2)
+    test_assert(max_s.eq(&s2), "string max")
+    test_assert(min_s.eq(&s1), "string min")
+}
+
+# Option ordering (None < Some)
+test_option_ord_none_some :: () -> none => {
+    a := none as ?i64
+    b := some 5
+    test_assert(a.lt(&b), "none < some")
+    test_assert(b.gt(&a), "some > none")
+}
+
+test_option_ord_some_some :: () -> none => {
+    a := some 5
+    b := some 10
+    test_assert(a.lt(&b), "some(5) < some(10)")
+}
+
+test_option_ord_none_none :: () -> none => {
+    a := none as ?i64
+    b := none as ?i64
+    r := a.cmp(&b)
+    test_assert_eq_i64(r, 0, "none cmp none")
+}
+
+test_option_max :: () -> none => {
+    a := some 5
+    b := some 10
+    c := none as ?i64
+    m1 := a.max(b)
+    m2 := a.max(c)
+    match m1 {
+        some 10 => test_assert(true, "option max some some"),
+        _ => test_assert(false, "option max some some failed"),
+    }
+    match m2 {
+        some 5 => test_assert(true, "option max some none"),
+        _ => test_assert(false, "option max some none failed"),
+    }
+}
+
+test_option_min :: () -> none => {
+    a := some 5
+    b := some 10
+    c := none as ?i64
+    m1 := a.min(b)
+    m2 := a.min(c)
+    match m1 {
+        some 5 => test_assert(true, "option min some some"),
+        _ => test_assert(false, "option min some some failed"),
+    }
+    match m2 {
+        none => test_assert(true, "option min some none"),
+        _ => test_assert(false, "option min some none failed"),
+    }
+}
+
+# Result ordering (Ok < Err)
+test_result_ord_ok_err :: () -> none => {
+    a := std_ok(5)
+    b := std_err::<i64>(std_error_message_only("error"))
+    test_assert(a.lt(&b), "ok < err")
+    test_assert(b.gt(&a), "err > ok")
+}
+
+test_result_ord_ok_ok :: () -> none => {
+    a := std_ok(5)
+    b := std_ok(10)
+    test_assert(a.lt(&b), "ok(5) < ok(10)")
+}
+
+test_result_max_min :: () -> none => {
+    a := std_ok(5)
+    b := std_ok(10)
+    max_r := a.max(b.clone())
+    min_r := a.clone().min(b)
+    match max_r {
+        StdResult::Ok { value: 10 } => test_assert(true, "result max ok ok"),
+        _ => test_assert(false, "result max ok ok failed"),
+    }
+    match min_r {
+        StdResult::Ok { value: 5 } => test_assert(true, "result min ok ok"),
+        _ => test_assert(false, "result min ok ok failed"),
+    }
+}
+
+# =============================================================================
+# COPY/CLONE TESTS (20+ tests)
+# =============================================================================
+
+# Copy semantics (bitwise copy)
+test_copy_i64 :: () -> none => {
+    a := 42
+    b := a
+    test_assert_eq_i64(a, b, "i64 copy")
+    test_assert_eq_i64(a, 42, "i64 copy original unchanged")
+}
+
+test_copy_bool :: () -> none => {
+    a := true
+    b := a
+    test_assert_eq_bool(a, b, "bool copy")
+}
+
+test_copy_u64 :: () -> none => {
+    a := 100 as u64
+    b := a
+    test_assert(a == b, "u64 copy")
+}
+
+test_copy_u8 :: () -> none => {
+    a := 255 as u8
+    b := a
+    test_assert(a == b, "u8 copy")
+}
+
+test_copy_f64 :: () -> none => {
+    a := 3.14
+    b := a
+    test_assert(a == b, "f64 copy")
+}
+
+# Clone creates independent copy
+test_clone_i64 :: () -> none => {
+    a := 42
+    b := a.clone()
+    test_assert_eq_i64(b, 42, "i64 clone")
+}
+
+test_clone_bool :: () -> none => {
+    a := true
+    b := a.clone()
+    test_assert_eq_bool(b, true, "bool clone")
+}
+
+test_clone_u64 :: () -> none => {
+    a := 100 as u64
+    b := a.clone()
+    test_assert(b == 100, "u64 clone")
+}
+
+test_clone_u8 :: () -> none => {
+    a := 50 as u8
+    b := a.clone()
+    test_assert(b == 50, "u8 clone")
+}
+
+test_clone_f64 :: () -> none => {
+    a := 2.71828
+    b := a.clone()
+    test_assert(b == 2.71828, "f64 clone")
+}
+
+# String clone is deep copy (independent memory)
+test_string_clone_deep_copy :: () -> none => {
+    s1 := String::from_cstr("original" as *u8)
+    s2 := s1.clone()
+    test_assert(s1.eq(&s2), "string clone equal")
+    test_assert(s1.data ~= s2.data, "string clone independent memory")
+}
+
+test_string_clone_modify :: () -> none => {
+    s1 := String::from_cstr("hello" as *u8)
+    s2 := s1.clone()
+    String::push_cstr(&s2, " world" as *u8)
+    test_assert(~s1.eq(&s2), "string clone modify independent")
+    s1_str := String::from_cstr("hello" as *u8)
+    test_assert(s1.eq(&s1_str), "string clone original unchanged")
+}
+
+# Option/Result clone
+test_option_clone_none :: () -> none => {
+    a := none as ?i64
+    b := a.clone()
+    match b {
+        none => test_assert(true, "option clone none"),
+        _ => test_assert(false, "option clone none failed"),
+    }
+}
+
+test_option_clone_some :: () -> none => {
+    a := some 42
+    b := a.clone()
+    match b {
+        some 42 => test_assert(true, "option clone some"),
+        _ => test_assert(false, "option clone some failed"),
+    }
+}
+
+test_result_clone_ok :: () -> none => {
+    a := std_ok(42)
+    b := a.clone()
+    match b {
+        StdResult::Ok { value: 42 } => test_assert(true, "result clone ok"),
+        _ => test_assert(false, "result clone ok failed"),
+    }
+}
+
+test_result_clone_err :: () -> none => {
+    a := std_err::<i64>(std_error_message_only("test error"))
+    b := a.clone()
+    match b {
+        StdResult::Err { .. } => test_assert(true, "result clone err"),
+        _ => test_assert(false, "result clone err failed"),
+    }
+}
+
+# Clone equality
+test_clone_equals_original_i64 :: () -> none => {
+    a := 42
+    b := a.clone()
+    test_assert(a.eq(&b), "i64 clone equals original")
+}
+
+test_clone_equals_original_string :: () -> none => {
+    s := String::from_cstr("test" as *u8)
+    c := s.clone()
+    test_assert(s.eq(&c), "string clone equals original")
+}
+
+# =============================================================================
+# DISPLAY/DEBUG TESTS (30+ tests)
+# =============================================================================
+
+# Primitive Display tests
+test_display_bool_true :: () -> none => {
+    b := true
+    s := b.to_string()
+    expected := String::from_cstr("true" as *u8)
+    test_assert(s.eq(&expected), "bool true display")
+}
+
+test_display_bool_false :: () -> none => {
+    b := false
+    s := b.to_string()
+    expected := String::from_cstr("false" as *u8)
+    test_assert(s.eq(&expected), "bool false display")
+}
+
+test_display_i64_positive :: () -> none => {
+    n := 42
+    s := n.to_string()
+    test_assert(s.len > 0, "i64 positive display")
+}
+
+test_display_i64_negative :: () -> none => {
+    n := -42
+    s := n.to_string()
+    test_assert(s.len > 0, "i64 negative display")
+}
+
+test_display_i64_zero :: () -> none => {
+    n := 0
+    s := n.to_string()
+    test_assert(s.len > 0, "i64 zero display")
+}
+
+test_display_u64 :: () -> none => {
+    n := 100 as u64
+    s := n.to_string()
+    test_assert(s.len > 0, "u64 display")
+}
+
+test_display_u64_large :: () -> none => {
+    n := 9223372036854775808 as u64
+    s := n.to_string()
+    expected := String::from_cstr("9223372036854775808" as *u8)
+    test_assert(s.eq(&expected), "u64 display large value > i64::MAX")
+}
+
+test_display_u64_max :: () -> none => {
+    n := 18446744073709551615 as u64
+    s := n.to_string()
+    expected := String::from_cstr("18446744073709551615" as *u8)
+    test_assert(s.eq(&expected), "u64 display max value")
+}
+
+test_display_u64_near_i64_max :: () -> none => {
+    n := 9223372036854775807 as u64
+    s := n.to_string()
+    expected := String::from_cstr("9223372036854775807" as *u8)
+    test_assert(s.eq(&expected), "u64 display i64::MAX")
+}
+
+test_debug_u64_large :: () -> none => {
+    n := 9223372036854775808 as u64
+    s := n.debug_string()
+    expected := String::from_cstr("9223372036854775808" as *u8)
+    test_assert(s.eq(&expected), "u64 debug large value > i64::MAX")
+}
+
+test_debug_u64_max :: () -> none => {
+    n := 18446744073709551615 as u64
+    s := n.debug_string()
+    expected := String::from_cstr("18446744073709551615" as *u8)
+    test_assert(s.eq(&expected), "u64 debug max value")
+}
+
+test_display_u8 :: () -> none => {
+    n := 255 as u8
+    s := n.to_string()
+    test_assert(s.len > 0, "u8 display")
+}
+
+test_display_f64 :: () -> none => {
+    f := 3.14
+    s := f.to_string()
+    test_assert(s.len > 0, "f64 display")
+}
+
+# String Display tests
+test_display_string :: () -> none => {
+    s := String::from_cstr("hello" as *u8)
+    d := s.to_string()
+    test_assert(s.eq(&d), "string display identity")
+}
+
+test_display_string_empty :: () -> none => {
+    s := String::new()
+    d := s.to_string()
+    test_assert(d.len == 0, "empty string display")
+}
+
+# Debug tests
+test_debug_bool :: () -> none => {
+    b := true
+    s := b.debug_string()
+    expected := String::from_cstr("true" as *u8)
+    test_assert(s.eq(&expected), "bool debug")
+}
+
+test_debug_i64 :: () -> none => {
+    n := 42
+    s := n.debug_string()
+    test_assert(s.len > 0, "i64 debug")
+}
+
+test_debug_u64 :: () -> none => {
+    n := 100 as u64
+    s := n.debug_string()
+    test_assert(s.len > 0, "u64 debug")
+}
+
+test_debug_f64 :: () -> none => {
+    f := 2.71828
+    s := f.debug_string()
+    test_assert(s.len > 0, "f64 debug")
+}
+
+test_debug_string_quoted :: () -> none => {
+    s := String::from_cstr("test" as *u8)
+    d := s.debug_string()
+    first := d.char_at(0)
+    last := d.char_at(d.len - 1)
+    test_assert(first == 34, "string debug starts with quote")
+    test_assert(last == 34, "string debug ends with quote")
+}
+
+# Option Display/Debug tests
+test_display_option_none :: () -> none => {
+    o := none as ?i64
+    s := o.to_string()
+    expected := String::from_cstr("None" as *u8)
+    test_assert(s.eq(&expected), "option none display")
+}
+
+test_display_option_some :: () -> none => {
+    o := some 5
+    s := o.to_string()
+    test_assert(s.contains(&String::from_cstr("Some(" as *u8)), "option some display contains 'Some('")
+    test_assert(s.contains(&String::from_cstr("5" as *u8)), "option some display contains value")
+}
+
+test_debug_option_none :: () -> none => {
+    o := none as ?i64
+    s := o.debug_string()
+    expected := String::from_cstr("None" as *u8)
+    test_assert(s.eq(&expected), "option none debug")
+}
+
+test_debug_option_some :: () -> none => {
+    o := some 42
+    s := o.debug_string()
+    test_assert(s.contains(&String::from_cstr("Some(" as *u8)), "option some debug format")
+}
+
+# Result Display/Debug tests
+test_display_result_ok :: () -> none => {
+    r := std_ok(5)
+    s := r.to_string()
+    test_assert(s.contains(&String::from_cstr("Ok(" as *u8)), "result ok display contains 'Ok('")
+    test_assert(s.contains(&String::from_cstr("5" as *u8)), "result ok display contains value")
+}
+
+test_display_result_err :: () -> none => {
+    r := std_err::<i64>(std_error_message_only("test error"))
+    s := r.to_string()
+    test_assert(s.contains(&String::from_cstr("Err(" as *u8)), "result err display contains 'Err('")
+}
+
+test_debug_result_ok :: () -> none => {
+    r := std_ok(42)
+    s := r.debug_string()
+    test_assert(s.contains(&String::from_cstr("Ok(" as *u8)), "result ok debug format")
+}
+
+test_debug_result_err :: () -> none => {
+    r := std_err::<i64>(std_error_message_only("error message"))
+    s := r.debug_string()
+    test_assert(s.contains(&String::from_cstr("Err(" as *u8)), "result err debug format")
+}
+
+# Special cases
+test_display_f64_special :: () -> none => {
+    zero := 0.0
+    neg_zero := -0.0
+    s1 := zero.to_string()
+    s2 := neg_zero.to_string()
+    test_assert(s1.len > 0, "f64 zero display")
+    test_assert(s2.len > 0, "f64 negative zero display")
+}
+
+# =============================================================================
+# DEFAULT TESTS (20+ tests)
+# =============================================================================
+
+# bool default
+test_default_bool :: () -> none => {
+    b := bool::default()
+    test_assert_eq_bool(b, false, "bool default is false")
+}
+
+# Numeric defaults
+test_default_i64 :: () -> none => {
+    n := i64::default()
+    test_assert_eq_i64(n, 0, "i64 default is 0")
+}
+
+test_default_u64 :: () -> none => {
+    n := u64::default()
+    test_assert(n == 0, "u64 default is 0")
+}
+
+test_default_u8 :: () -> none => {
+    n := u8::default()
+    test_assert(n == 0, "u8 default is 0")
+}
+
+test_default_f64 :: () -> none => {
+    f := f64::default()
+    test_assert(f == 0.0, "f64 default is 0.0")
+}
+
+# String default
+test_default_string :: () -> none => {
+    s := String::default()
+    test_assert(s.is_empty(), "string default is empty")
+    test_assert_eq_i64(s.len as i64, 0, "string default length is 0")
+}
+
+# Option default
+test_default_option :: () -> none => {
+    o := (?i64)::default()
+    match o {
+        none => test_assert(true, "option default is none"),
+        _ => test_assert(false, "option default should be none"),
+    }
+}
+
+test_default_option_bool :: () -> none => {
+    o := (?bool)::default()
+    match o {
+        none => test_assert(true, "option<bool> default is none"),
+        _ => test_assert(false, "option<bool> default should be none"),
+    }
+}
+
+test_default_option_string :: () -> none => {
+    o := (?String)::default()
+    match o {
+        none => test_assert(true, "option<string> default is none"),
+        _ => test_assert(false, "option<string> default should be none"),
+    }
+}
+
+# Default usage tests
+test_default_initialization_i64 :: () -> none => {
+    n := i64::default()
+    test_assert(n.eq(&0), "i64 default usable")
+}
+
+test_default_initialization_bool :: () -> none => {
+    b := bool::default()
+    test_assert(b.eq(&false), "bool default usable")
+}
+
+test_default_initialization_string :: () -> none => {
+    s := String::default()
+    empty := String::new()
+    test_assert(s.eq(&empty), "string default usable")
+}
+
+# Multiple defaults
+test_default_multiple_i64 :: () -> none => {
+    a := i64::default()
+    b := i64::default()
+    test_assert(a.eq(&b), "multiple i64 defaults equal")
+}
+
+test_default_multiple_bool :: () -> none => {
+    a := bool::default()
+    b := bool::default()
+    test_assert(a.eq(&b), "multiple bool defaults equal")
+}
+
+test_default_multiple_string :: () -> none => {
+    s1 := String::default()
+    s2 := String::default()
+    test_assert(s1.eq(&s2), "multiple string defaults equal")
+}
+
+# Default comparisons
+test_default_compare_i64 :: () -> none => {
+    d := i64::default()
+    zero := 0
+    test_assert(d.eq(&zero), "i64 default equals 0")
+}
+
+test_default_compare_bool :: () -> none => {
+    d := bool::default()
+    f := false
+    test_assert(d.eq(&f), "bool default equals false")
+}
+
+# Default with operations
+test_default_with_ops_i64 :: () -> none => {
+    d := i64::default()
+    result := d + 10
+    test_assert_eq_i64(result, 10, "i64 default + 10")
+}
+
+test_default_with_ops_bool :: () -> none => {
+    d := bool::default()
+    result := d || true
+    test_assert_eq_bool(result, true, "bool default || true")
+}
+
+# =============================================================================
+# CROSS-TRAIT LAW TESTS (10+ tests)
+# =============================================================================
+
+# PartialEq + PartialOrd consistency: x == y iff partial_cmp(x,y) == Some(0)
+test_law_eq_partialord_i64 :: () -> none => {
+    a := 42
+    b := 42
+    c := 100
+    
+    eq_ab := a.eq(&b)
+    cmp_ab := a.partial_cmp(&b)
+    match cmp_ab {
+        some 0 => test_assert(eq_ab, "i64 eq-partialord law equal"),
+        _ => test_assert(~eq_ab, "i64 eq-partialord law not zero"),
+    }
+    
+    eq_ac := a.eq(&c)
+    cmp_ac := a.partial_cmp(&c)
+    match cmp_ac {
+        some 0 => test_assert(eq_ac, "i64 eq-partialord law not equal 1"),
+        _ => test_assert(~eq_ac, "i64 eq-partialord law not equal 2"),
+    }
+}
+
+test_law_eq_partialord_bool :: () -> none => {
+    t := true
+    f := false
+    
+    eq := t.eq(&t)
+    cmp := t.partial_cmp(&t)
+    match cmp {
+        some 0 => test_assert(eq, "bool eq-partialord law"),
+        _ => test_assert(~eq, "bool eq-partialord law not zero"),
+    }
+}
+
+test_law_eq_partialord_u64 :: () -> none => {
+    a := 50 as u64
+    b := 50 as u64
+    
+    eq := a.eq(&b)
+    cmp := a.partial_cmp(&b)
+    match cmp {
+        some 0 => test_assert(eq, "u64 eq-partialord law"),
+        _ => test_assert(~eq, "u64 eq-partialord law not zero"),
+    }
+}
+
+# Ord + Eq consistency: x == y iff cmp(x,y) == 0
+test_law_ord_eq_i64 :: () -> none => {
+    a := 7
+    b := 7
+    c := 10
+    
+    eq_ab := a.eq(&b)
+    cmp_ab := a.cmp(&b)
+    test_assert(eq_ab == (cmp_ab == 0), "i64 ord-eq law equal")
+    
+    eq_ac := a.eq(&c)
+    cmp_ac := a.cmp(&c)
+    test_assert(eq_ac == (cmp_ac == 0), "i64 ord-eq law not equal")
+}
+
+test_law_ord_eq_bool :: () -> none => {
+    t := true
+    f := false
+    
+    eq := t.eq(&f)
+    cmp := t.cmp(&f)
+    test_assert(eq == (cmp == 0), "bool ord-eq law")
+}
+
+test_law_ord_eq_u64 :: () -> none => {
+    a := 100 as u64
+    b := 100 as u64
+    
+    eq := a.eq(&b)
+    cmp := a.cmp(&b)
+    test_assert(eq == (cmp == 0), "u64 ord-eq law")
+}
+
+# Ord requires Eq: types implementing Ord must also implement Eq
+test_ord_requires_eq_i64 :: () -> none => {
+    a := 42
+    b := 42
+    c := 100
+    test_assert(a.eq(&b), "i64 Ord type implements Eq - equal")
+    test_assert(~a.eq(&c), "i64 Ord type implements Eq - not equal")
+}
+
+test_ord_requires_eq_bool :: () -> none => {
+    t := true
+    f := false
+    test_assert(t.eq(&t), "bool Ord type implements Eq - true")
+    test_assert(f.eq(&f), "bool Ord type implements Eq - false")
+    test_assert(~t.eq(&f), "bool Ord type implements Eq - different")
+}
+
+test_ord_requires_eq_u64 :: () -> none => {
+    a := 9223372036854775808 as u64
+    b := 9223372036854775808 as u64
+    c := 18446744073709551615 as u64
+    test_assert(a.eq(&b), "u64 Ord type implements Eq - large equal")
+    test_assert(~a.eq(&c), "u64 Ord type implements Eq - large not equal")
+}
+
+test_ord_requires_eq_u8 :: () -> none => {
+    a := 255 as u8
+    b := 255 as u8
+    c := 128 as u8
+    test_assert(a.eq(&b), "u8 Ord type implements Eq - equal")
+    test_assert(~a.eq(&c), "u8 Ord type implements Eq - not equal")
+}
+
+test_ord_requires_eq_string :: () -> none => {
+    s1 := String::from_cstr("hello" as *u8)
+    s2 := String::from_cstr("hello" as *u8)
+    s3 := String::from_cstr("world" as *u8)
+    test_assert(s1.eq(&s2), "String Ord type implements Eq - equal")
+    test_assert(~s1.eq(&s3), "String Ord type implements Eq - not equal")
+}
+
+# Clone + Eq: clone(x) == x
+test_law_clone_eq_i64 :: () -> none => {
+    a := 42
+    b := a.clone()
+    test_assert(a.eq(&b), "i64 clone-eq law")
+}
+
+test_law_clone_eq_bool :: () -> none => {
+    t := true
+    c := t.clone()
+    test_assert(t.eq(&c), "bool clone-eq law")
+}
+
+test_law_clone_eq_u64 :: () -> none => {
+    a := 100 as u64
+    c := a.clone()
+    test_assert(a.eq(&c), "u64 clone-eq law")
+}
+
+test_law_clone_eq_string :: () -> none => {
+    s := String::from_cstr("test" as *u8)
+    c := s.clone()
+    test_assert(s.eq(&c), "string clone-eq law")
+}
+
+test_law_clone_eq_option :: () -> none => {
+    o := some 42
+    c := o.clone()
+    test_assert(o.eq(&c), "option clone-eq law")
+}
+
+test_law_clone_eq_result :: () -> none => {
+    r := std_ok(42)
+    c := r.clone()
+    test_assert(r.eq(&c), "result clone-eq law")
+}
+
+# =============================================================================
+# TEST RUNNER
+# =============================================================================
+
+main :: () -> i64 => {
+    println("=== Foundation Traits Test Suite ===")
+    println("")
+    
+    # PartialEq/Eq Tests
+    println("Running PartialEq/Eq tests...")
+    test_partialeq_reflexivity_bool()
+    test_partialeq_reflexivity_i64()
+    test_partialeq_reflexivity_u64()
+    test_partialeq_reflexivity_u8()
+    test_partialeq_reflexivity_f64()
+    test_partialeq_symmetry_i64()
+    test_partialeq_symmetry_bool()
+    test_partialeq_symmetry_u64()
+    test_partialeq_transitivity_i64()
+    test_partialeq_transitivity_bool()
+    test_partialeq_ne_consistency_i64()
+    test_partialeq_ne_consistency_bool()
+    test_partialeq_ne_consistency_u64()
+    test_string_partialeq_empty()
+    test_string_partialeq_equal()
+    test_string_partialeq_different()
+    test_string_partialeq_length_mismatch()
+    test_option_partialeq_none_none()
+    test_option_partialeq_some_some_equal()
+    test_option_partialeq_some_some_different()
+    test_option_partialeq_some_none()
+    test_result_partialeq_ok_ok_equal()
+    test_result_partialeq_ok_ok_different()
+    test_result_partialeq_ok_err()
+    test_eq_marker_i64()
+    test_eq_marker_bool()
+    test_eq_marker_string()
+    println("")
+    
+    # PartialOrd/Ord Tests
+    println("Running PartialOrd/Ord tests...")
+    test_ord_totality_i64()
+    test_ord_totality_bool()
+    test_partialord_antisymmetry_i64()
+    test_partialord_antisymmetry_u64()
+    test_partialord_transitivity_i64()
+    test_partialord_transitivity_u64()
+    test_ord_consistency_lt_i64()
+    test_ord_consistency_le_i64()
+    test_ord_consistency_gt_i64()
+    test_ord_consistency_ge_i64()
+    test_ord_max_i64()
+    test_ord_max_u64()
+    test_ord_min_i64()
+    test_ord_min_u64()
+    test_ord_max_bool()
+    test_ord_min_bool()
+    test_partialord_f64_nan_partial_cmp()
+    test_partialord_f64_regular()
+    test_partialord_f64_partial_cmp_regular()
+    test_string_ord_lexicographic()
+    test_string_ord_prefix()
+    test_string_ord_equal()
+    test_string_max_min()
+    test_option_ord_none_some()
+    test_option_ord_some_some()
+    test_option_ord_none_none()
+    test_option_max()
+    test_option_min()
+    test_result_ord_ok_err()
+    test_result_ord_ok_ok()
+    test_result_max_min()
+    println("")
+    
+    # Copy/Clone Tests
+    println("Running Copy/Clone tests...")
+    test_copy_i64()
+    test_copy_bool()
+    test_copy_u64()
+    test_copy_u8()
+    test_copy_f64()
+    test_clone_i64()
+    test_clone_bool()
+    test_clone_u64()
+    test_clone_u8()
+    test_clone_f64()
+    test_string_clone_deep_copy()
+    test_string_clone_modify()
+    test_option_clone_none()
+    test_option_clone_some()
+    test_result_clone_ok()
+    test_result_clone_err()
+    test_clone_equals_original_i64()
+    test_clone_equals_original_string()
+    println("")
+    
+    # Display/Debug Tests
+    println("Running Display/Debug tests...")
+    test_display_bool_true()
+    test_display_bool_false()
+    test_display_i64_positive()
+    test_display_i64_negative()
+    test_display_i64_zero()
+    test_display_u64()
+    test_display_u64_large()
+    test_display_u64_max()
+    test_display_u64_near_i64_max()
+    test_debug_u64_large()
+    test_debug_u64_max()
+    test_display_u8()
+    test_display_f64()
+    test_display_string()
+    test_display_string_empty()
+    test_debug_bool()
+    test_debug_i64()
+    test_debug_u64()
+    test_debug_f64()
+    test_debug_string_quoted()
+    test_display_option_none()
+    test_display_option_some()
+    test_debug_option_none()
+    test_debug_option_some()
+    test_display_result_ok()
+    test_display_result_err()
+    test_debug_result_ok()
+    test_debug_result_err()
+    test_display_f64_special()
+    println("")
+    
+    # Default Tests
+    println("Running Default tests...")
+    test_default_bool()
+    test_default_i64()
+    test_default_u64()
+    test_default_u8()
+    test_default_f64()
+    test_default_string()
+    test_default_option()
+    test_default_option_bool()
+    test_default_option_string()
+    test_default_initialization_i64()
+    test_default_initialization_bool()
+    test_default_initialization_string()
+    test_default_multiple_i64()
+    test_default_multiple_bool()
+    test_default_multiple_string()
+    test_default_compare_i64()
+    test_default_compare_bool()
+    test_default_with_ops_i64()
+    test_default_with_ops_bool()
+    println("")
+    
+    # Cross-trait Law Tests
+    println("Running Cross-trait Law tests...")
+    test_law_eq_partialord_i64()
+    test_law_eq_partialord_bool()
+    test_law_eq_partialord_u64()
+    test_law_ord_eq_i64()
+    test_law_ord_eq_bool()
+    test_law_ord_eq_u64()
+    test_ord_requires_eq_i64()
+    test_ord_requires_eq_bool()
+    test_ord_requires_eq_u64()
+    test_ord_requires_eq_u8()
+    test_ord_requires_eq_string()
+    test_law_clone_eq_i64()
+    test_law_clone_eq_bool()
+    test_law_clone_eq_u64()
+    test_law_clone_eq_string()
+    test_law_clone_eq_option()
+    test_law_clone_eq_result()
+    println("")
+    
+    # Summary
+    println("=== Test Summary ===")
+    println("Total tests:", test_count)
+    println("Passed:", passed_count)
+    println("Failed:", failed_count)
+    
+    if failed_count == 0 {
+        println("All tests passed!")
+        ret 0
+    } else {
+        println("Some tests failed!")
+        ret 1
+    }
+}
