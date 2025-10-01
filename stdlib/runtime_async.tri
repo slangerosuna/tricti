@@ -376,7 +376,7 @@ resume_task :: (
             task.state = TaskState::Pending
             runtime.active_tasks = array_set_at(runtime.active_tasks, idx, task)
 
-            if !array_contains(runtime.queued_task_ids, (value) => value == task_id) {
+            if ~array_contains(runtime.queued_task_ids, (value) => value == task_id) {
                 runtime.queued_task_ids = array_append(runtime.queued_task_ids, task_id)
                 runtime.resource_summary.queued_tasks = runtime.resource_summary.queued_tasks + 1
             }
@@ -394,7 +394,7 @@ resume_task :: (
             }
         }
         TaskState::Pending => {
-            if !array_contains(runtime.queued_task_ids, (value) => value == task_id) {
+            if ~array_contains(runtime.queued_task_ids, (value) => value == task_id) {
                 runtime.queued_task_ids = array_append(runtime.queued_task_ids, task_id)
                 runtime.resource_summary.queued_tasks = runtime.resource_summary.queued_tasks + 1
             }
@@ -606,8 +606,8 @@ acquire_resources_for_task :: (
 
     for i in 0:requests.len() {
         request := requests[i]
-        success := try_acquire_resource(runtime, task_id, request.resource_name, request.access_type, request.lease_duration_ms, true)
-        if !success {
+    success := try_acquire_resource(runtime, task_id, request.resource_name, request.access_type, request.lease_duration_ms, true)
+    if ~success {
             for j in 0:acquired_names.len() {
                 release_resource_for_task(runtime, task_id, acquired_names[j])
             }
@@ -686,7 +686,7 @@ try_acquire_resource :: (
     conflict := false
     for i in 0:runtime.resource_leases.len() {
         lease := runtime.resource_leases[i]
-        if lease.resource_name != resource_name {
+        if lease.resource_name ~= resource_name {
             continue
         }
 
@@ -755,7 +755,7 @@ wake_waiters_for_resource :: (
     idx := 0
     while idx < runtime.resource_waiters.len() {
         waiter := runtime.resource_waiters[idx]
-        if waiter.resource_name != resource_name {
+        if waiter.resource_name ~= resource_name {
             idx = idx + 1
             continue
         }

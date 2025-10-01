@@ -1,0 +1,1 @@
+assert :: (cond: bool) -> none => {}

@@ -15,8 +15,13 @@ fn type_name_str(ty: &Type) -> String {
 }
 
 pub fn parse(file: String) -> Program {
-    let successful_parse =
-        PnParser::parse(Rule::program, &file).unwrap_or_else(|e| panic!("Parse error: {}", e));
+    let successful_parse = match PnParser::parse(Rule::program, &file) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Pest parse error: {}", e);
+            panic!("Pest parse error (debug): {:?}", e);
+        }
+    };
 
     let program_pair = successful_parse.into_iter().next().unwrap();
     parse_program(program_pair)
@@ -202,6 +207,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
                 let const_value = match body_pair.as_rule() {
                     Rule::r#type => ConstValue::Type(parse_type(body_pair)),
                     Rule::expression => ConstValue::Expression(parse_expression(body_pair)),
+                    Rule::function => ConstValue::Expression(parse_function(body_pair)),
                     Rule::table_def => ConstValue::TableDef(parse_table_def(body_pair, &name)),
                     Rule::sys_def => ConstValue::SystemDef(parse_sys_def(body_pair, &name)),
                     Rule::compose_def => ConstValue::ComposeDef(parse_compose_def(body_pair)),
@@ -524,6 +530,31 @@ fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::matrix => parse_matrix(inner_pair),
         Rule::tuple_expr => parse_tuple_expression(inner_pair),
         Rule::path_struct => parse_path_struct_expression(inner_pair),
+        Rule::primary_struct => {
+            let mut it = inner_pair.into_inner();
+            let id = it.next().unwrap().as_str().to_string();
+            // optional type_args consumed here but ignored for now
+            let mut maybe_type_args = None;
+            if let Some(next) = it.next() {
+                if next.as_rule() == Rule::type_args {
+                    maybe_type_args = Some(next);
+                } else {
+                    // it's the struct_literal
+                    let fields = parse_struct_literal_fields(next);
+                    return Expression::StructLiteral {
+                        type_name: Some(id),
+                        fields,
+                    };
+                }
+            }
+            // if we got here, last inner is struct_literal
+            let struct_pair = it.next().unwrap();
+            let fields = parse_struct_literal_fields(struct_pair);
+            Expression::StructLiteral {
+                type_name: Some(id),
+                fields,
+            }
+        }
         _ => parse_expression(inner_pair),
     }
 }
@@ -665,15 +696,13 @@ fn parse_struct_literal_fields(pair: pest::iterators::Pair<Rule>) -> HashMap<Str
             Rule::full_field => {
                 let mut inner = field_pair.into_inner();
                 let name = inner.next().unwrap().as_str().to_string();
-                // Skip the ':'
-                inner.next();
-                let expr = parse_expression(inner.next().unwrap());
+                let expr_pair = inner.next().expect("full_field missing expression");
+                let expr = parse_expression(expr_pair);
                 fields.insert(name, expr);
             }
-            Rule::struct_literal => {
-                // This is the ".." case, skip
+            _ => {
+                // skip unknown tokens such as the ".." wildcard or commas
             }
-            _ => panic!("Unexpected rule in struct_literal: {:?}", field_pair.as_rule()),
         }
     }
     fields

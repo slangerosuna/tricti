@@ -165,7 +165,7 @@ panic :: (msg: string) -> none => {
 
 # Assert a condition holds; otherwise panic with message
 assert :: (cond: bool, msg: string) -> none => {
-	if !cond { panic(msg) }
+	if ~cond { panic(msg) }
 }
 
 # Assert equality for i64 values; otherwise panic
@@ -284,7 +284,7 @@ array_remove_at<T> :: (items: &[T], remove_idx: i64) -> [T] => {
 array_remove_where<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
 	keep_count := 0
 	for i in 0:items.len() {
-		if !predicate(items[i]) {
+		if ~predicate(items[i]) {
 			keep_count = keep_count + 1
 		}
 	}
@@ -362,7 +362,7 @@ array_map<T> :: (items: &[T], transform: (T) -> T) -> [T] => {
 
 array_all<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
 	for i in 0:items.len() {
-		if !predicate(items[i]) {
+		if ~predicate(items[i]) {
 			ret false
 		}
 	}

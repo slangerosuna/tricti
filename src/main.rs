@@ -41,11 +41,15 @@ fn main() {
     println!("Using source file: {}", path);
     let file_content = std::fs::read_to_string(path).expect("Failed to read source file");
 
-    // Load stdlib
-    let stdlib_path = std::env::current_dir().unwrap().join("std.tri");
-    let stdlib_content = std::fs::read_to_string(&stdlib_path).expect("Failed to read stdlib file");
-    let stdlib_program = parser::parse(stdlib_content);
-    let stdlib_program = expand_modules(stdlib_program, &std::env::current_dir().unwrap());
+    let stdlib_program = if std::env::var("SKIP_STDLIB").unwrap_or_default() == "1" {
+        // allow tests to skip loading the stdlib
+        parser::parse("".to_string())
+    } else {
+        let stdlib_path = std::env::current_dir().unwrap().join("std.tri");
+        let stdlib_content = std::fs::read_to_string(&stdlib_path).expect("Failed to read stdlib file");
+        let p = parser::parse(stdlib_content);
+        expand_modules(p, &std::env::current_dir().unwrap())
+    };
 
     // Parse the program
     println!("Parsing...");

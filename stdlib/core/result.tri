@@ -1,5 +1,5 @@
-# Foundational result type for TriCTI stdlib consumers
 # This is a simple tagged union until richer generics/error propagation land in the language.
+# These types are temporary until the !T type with the dynamic Error trait object
 
 use prelude
 use core/errors

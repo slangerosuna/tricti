@@ -1,10 +1,11 @@
 use peano::{
     ast::*, async_runtime::*, async_scheduler_integration::*, async_table_integration::*,
-    error_propagation::*, event_loop_manager::*, resource_lifecycle::*, scheduler::SystemScheduler,
-    semantic::SemanticContext, system_executor::*, table_runtime::*,
+    error_propagation::*, event_loop_manager::*, resource_lifecycle::*, system_executor::*,
+    table_runtime::*,
 };
+use peano::semantic::{FunctionSignature, SemanticContext};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
 
@@ -12,6 +13,65 @@ use tokio::time::timeout;
 #[cfg(test)]
 mod async_execution_tests {
     use super::*;
+
+    fn ty(name: &str) -> Type {
+        Type::Identifier {
+            name: name.to_string(),
+            type_args: Vec::new(),
+        }
+    }
+
+    fn integer_literal(value: u128) -> Literal {
+        Literal::integer_from_parts(value.to_string(), value, None)
+    }
+
+    fn integer_expr(value: u128) -> Expression {
+        Expression::Literal(integer_literal(value))
+    }
+
+    fn argument(expr: Expression) -> Argument {
+        Argument {
+            name: None,
+            value: expr,
+        }
+    }
+
+    fn resource_param(name: &str, access: ResourceAccess) -> SystemParameter {
+        SystemParameter::Resource {
+            param_type: "resource".to_string(),
+            name: name.to_string(),
+            resource_type: ty(&format!("resource::{}", name)),
+            access,
+        }
+    }
+
+    fn value_param(
+        name: &str,
+        value_type: Type,
+        default_value: Option<Expression>,
+    ) -> SystemParameter {
+        SystemParameter::Regular {
+            param_type: "value".to_string(),
+            name: name.to_string(),
+            value_type,
+            default_value,
+        }
+    }
+
+    fn system_def(
+        name: &str,
+        parameters: Vec<SystemParameter>,
+        return_type: Option<Type>,
+        body: Vec<Statement>,
+    ) -> SystemDef {
+        SystemDef {
+            name: name.to_string(),
+            parameters,
+            return_type,
+            body,
+            is_async: true,
+        }
+    }
 
     /// Test Future/Promise abstraction for async system execution
     #[tokio::test]
@@ -33,7 +93,7 @@ mod async_execution_tests {
             )
             .expect("Should submit system successfully");
 
-        let task_id = future.task_id();
+    let task_id = future.task_id();
 
         // Test future properties
         assert_eq!(future.task_id(), task_id);
@@ -81,7 +141,7 @@ mod async_execution_tests {
             ExecutionStepResult::Yield(_) => {
                 // Yield is acceptable for complex systems
             }
-            ExecutionStepResult::Completed => {
+            ExecutionStepResult::Completed(_) => {
                 // Should not complete immediately for complex systems
                 panic!("Complex system should not complete in one step");
             }
@@ -131,16 +191,13 @@ mod async_execution_tests {
         // Start event loop in background
         let event_loop_clone = Arc::new(event_loop);
         let event_loop_handle = event_loop_clone.clone();
-        let _event_loop_task = tokio::spawn(async move {
-            // Run event loop for a limited time
-            timeout(Duration::from_secs(5), event_loop_handle.start()).await
-        });
+        let event_loop_task = tokio::task::spawn_blocking(move || event_loop_handle.start());
 
         // Submit multiple systems
         let system1 = create_test_system_def("concurrent_system1");
         let system2 = create_test_system_def("concurrent_system2");
 
-        let future1 = event_loop_clone
+    let _future1 = event_loop_clone
             .submit_system(
                 system1,
                 HashMap::new(),
@@ -151,7 +208,7 @@ mod async_execution_tests {
             .await
             .expect("Should submit system1");
 
-        let future2 = event_loop_clone
+    let _future2 = event_loop_clone
             .submit_system(
                 system2,
                 HashMap::new(),
@@ -171,6 +228,8 @@ mod async_execution_tests {
 
         // Stop event loop
         event_loop_clone.stop().expect("Should stop event loop");
+
+        let _ = timeout(Duration::from_secs(2), event_loop_task).await;
     }
 
     /// Test resource lifecycle management with borrow safety
@@ -273,7 +332,7 @@ mod async_execution_tests {
         let error_manager = ErrorPropagationManager::new(config);
 
         let task_id = TaskId::new();
-        let context = ErrorContext {
+    let context = ErrorContext {
             task_id,
             system_name: "test_system".to_string(),
             error_count: 1,
@@ -310,7 +369,7 @@ mod async_execution_tests {
             duration: Duration::from_secs(30),
         };
 
-        let timeout_result = error_manager
+    let _timeout_result = error_manager
             .handle_error(task_id, timeout_error, context.clone())
             .await
             .expect("Should handle timeout error");
@@ -321,7 +380,7 @@ mod async_execution_tests {
             message: "Internal system error".to_string(),
         };
 
-        let system_result = error_manager
+    let _system_result = error_manager
             .handle_error(task_id, system_error, context)
             .await
             .expect("Should handle system error");
@@ -347,14 +406,14 @@ mod async_execution_tests {
         let task_id = TaskId::new();
 
         // Test simple query execution
-        let query_spec = create_test_query_spec("test_table");
+    let query_spec = create_test_query_spec("users");
         let query_future = async_table
             .execute_query(task_id, query_spec)
             .await
             .expect("Should create query future");
 
-        let query_id = query_future.query_id();
-        assert!(query_id.0 > 0, "Should have valid query ID");
+    let query_id = query_future.query_id();
+    assert!(query_id.as_u64() > 0, "Should have valid query ID");
 
         // Test batch query execution
         let queries = vec![
@@ -380,7 +439,10 @@ mod async_execution_tests {
             .expect("Should begin transaction");
 
         assert_eq!(transaction.task_id, task_id);
-        assert_eq!(transaction.isolation_level, IsolationLevel::ReadCommitted);
+        assert!(matches!(
+            transaction.isolation_level,
+            IsolationLevel::ReadCommitted
+        ));
 
         // Commit transaction
         async_table
@@ -581,8 +643,8 @@ mod async_execution_tests {
         let event_loop = EventLoopManager::new(runtime_config, semantic_context, event_loop_config);
 
         // Register a test table
-        let table_runtime = create_test_table_runtime();
-        event_loop.register_table("test_table".to_string(), table_runtime);
+    let table_runtime = create_test_table_runtime();
+    event_loop.register_table("users".to_string(), table_runtime);
 
         // Create a complex system that performs multiple operations
         let complex_system = create_complex_end_to_end_system();
@@ -601,14 +663,12 @@ mod async_execution_tests {
             .await
             .expect("Should submit complex system");
 
-        let task_id = future.task_id();
+    let _task_id = future.task_id();
 
         // Start event loop in background
         let event_loop_arc = Arc::new(event_loop);
         let event_loop_handle = event_loop_arc.clone();
-        let event_loop_task = tokio::spawn(async move {
-            timeout(Duration::from_secs(10), event_loop_handle.start()).await
-        });
+        let event_loop_task = tokio::task::spawn_blocking(move || event_loop_handle.start());
 
         // Wait for system completion or timeout
         let execution_result = timeout(Duration::from_secs(5), future).await;
@@ -619,7 +679,7 @@ mod async_execution_tests {
             .expect("Should stop event loop gracefully");
 
         // Wait for event loop to shut down
-        let _event_loop_result = event_loop_task.await;
+    let _event_loop_result = timeout(Duration::from_secs(5), event_loop_task).await;
 
         // Verify execution completed or handled appropriately
         match execution_result {
@@ -650,132 +710,98 @@ mod async_execution_tests {
 
     // Helper functions for creating test data
 
-    fn create_test_system_def(name: &str) -> SystemDef {
-        SystemDef {
-            name: name.to_string(),
-            parameters: vec![SystemParameter::Value {
-                name: "input".to_string(),
-                param_type: Type::I32,
-                default_value: None,
-            }],
-            return_type: Some(Type::I32),
-            body: vec![Statement::Expression(Expression::Literal(
-                Literal::Integer(IntegerLiteral {
-                    value: 42,
-                    suffix: None,
-                }),
-            ))],
-        }
+    pub(super) fn create_test_system_def(name: &str) -> SystemDef {
+        system_def(
+            name,
+            vec![value_param("input", ty("i32"), None)],
+            Some(ty("i32")),
+            vec![Statement::Expression(integer_expr(42))],
+        )
     }
 
-    fn create_complex_system_def() -> SystemDef {
-        SystemDef {
-            name: "complex_system".to_string(),
-            parameters: vec![
-                SystemParameter::Resource {
-                    name: "database".to_string(),
-                    access: ResourceAccess::Mutable,
-                },
-                SystemParameter::Value {
-                    name: "iterations".to_string(),
-                    param_type: Type::I32,
-                    default_value: Some(Expression::Literal(Literal::Integer(IntegerLiteral {
-                        value: 10,
-                        suffix: None,
-                    }))),
-                },
+    pub(super) fn create_complex_system_def() -> SystemDef {
+        system_def(
+            "complex_system",
+            vec![
+                resource_param("database", ResourceAccess::Mutable),
+                value_param("iterations", ty("i32"), Some(integer_expr(10))),
             ],
-            return_type: Some(Type::I32),
-            body: vec![Statement::ForLoop {
+            Some(ty("i32")),
+            vec![Statement::ForLoop {
                 variable: "i".to_string(),
+                type_annotation: None,
                 iterable: Expression::Identifier("iterations".to_string()),
                 body: vec![Statement::Expression(Expression::Query(QuerySpec {
                     projections: vec![FieldProjection {
                         name: "count".to_string(),
-                        expression: Expression::Literal(Literal::Integer(IntegerLiteral {
-                            value: 1,
-                            suffix: None,
-                        })),
+                        field_type: Some(ty("i32")),
+                        access: None,
                     }],
                     from_table: "database".to_string(),
                     where_clause: None,
                     joins: Vec::new(),
                 }))],
             }],
-        }
+        )
     }
 
-    fn create_resource_dependent_system(name: &str, resources: Vec<&str>) -> SystemDef {
+    pub(super) fn create_resource_dependent_system(name: &str, resources: Vec<&str>) -> SystemDef {
         let parameters: Vec<SystemParameter> = resources
             .into_iter()
-            .map(|resource| SystemParameter::Resource {
-                name: resource.to_string(),
-                access: ResourceAccess::Immutable,
-            })
+            .map(|resource| resource_param(resource, ResourceAccess::Immutable))
             .collect();
 
-        SystemDef {
-            name: name.to_string(),
+        system_def(
+            name,
             parameters,
-            return_type: Some(Type::I32),
-            body: vec![Statement::Expression(Expression::Literal(
-                Literal::Integer(IntegerLiteral {
-                    value: 0,
-                    suffix: None,
-                }),
-            ))],
-        }
+            Some(ty("i32")),
+            vec![Statement::Expression(integer_expr(0))],
+        )
     }
 
-    fn create_resource_system_with_access(
+    pub(super) fn create_resource_system_with_access(
         name: &str,
         resources: Vec<(&str, ResourceAccess)>,
     ) -> SystemDef {
         let parameters: Vec<SystemParameter> = resources
             .into_iter()
-            .map(|(resource, access)| SystemParameter::Resource {
-                name: resource.to_string(),
-                access,
-            })
+            .map(|(resource, access)| resource_param(resource, access))
             .collect();
 
-        SystemDef {
-            name: name.to_string(),
+        system_def(
+            name,
             parameters,
-            return_type: Some(Type::I32),
-            body: vec![Statement::Expression(Expression::Literal(
-                Literal::Integer(IntegerLiteral {
-                    value: 0,
-                    suffix: None,
-                }),
-            ))],
-        }
+            Some(ty("i32")),
+            vec![Statement::Expression(integer_expr(0))],
+        )
     }
 
-    fn create_complex_end_to_end_system() -> SystemDef {
-        SystemDef {
-            name: "end_to_end_system".to_string(),
-            parameters: vec![SystemParameter::Resource {
-                name: "test_table".to_string(),
-                access: ResourceAccess::Mutable,
-            }],
-            return_type: Some(Type::I32),
-            body: vec![
+    pub(super) fn create_complex_end_to_end_system() -> SystemDef {
+        system_def(
+            "end_to_end_system",
+            vec![
+                resource_param("users", ResourceAccess::Mutable),
+                value_param(
+                    "batch_size",
+                    ty("i32"),
+                    Some(integer_expr(100)),
+                ),
+            ],
+            Some(ty("i32")),
+            vec![
                 Statement::VariableDecl {
                     name: "result".to_string(),
-                    var_type: Type::I32,
-                    value: Expression::Literal(Literal::Integer(IntegerLiteral {
-                        value: 0,
-                        suffix: None,
-                    })),
+                    type_annotation: Some(ty("i32")),
+                    value: integer_expr(0),
                 },
                 Statement::Expression(Expression::Query(QuerySpec {
                     projections: vec![FieldProjection {
                         name: "id".to_string(),
-                        expression: Expression::Identifier("id".to_string()),
+                        field_type: Some(ty("u64")),
+                        access: None,
                     }],
-                    from_table: "test_table".to_string(),
-                    where_clause: Some(Box::new(Expression::Binary {
+                    from_table: "users".to_string(),
+                    where_clause: Some(Box::new(Expression::BinaryOp {
                         left: Box::new(Expression::Identifier("active".to_string())),
                         operator: BinaryOperator::Equal,
                         right: Box::new(Expression::Literal(Literal::Boolean(true))),
@@ -783,10 +809,10 @@ mod async_execution_tests {
                     joins: Vec::new(),
                 })),
             ],
-        }
+        )
     }
 
-    fn create_execution_request(
+    pub(super) fn create_execution_request(
         system_def: SystemDef,
         priority: TaskPriority,
     ) -> SystemExecutionRequest {
@@ -799,27 +825,60 @@ mod async_execution_tests {
         }
     }
 
-    fn create_test_semantic_context() -> SemanticContext {
+    pub(super) fn create_test_semantic_context() -> SemanticContext {
         let mut context = SemanticContext::new();
 
-        // Add some test function signatures
         context.functions.insert(
             "test_function".to_string(),
-            crate::semantic::FunctionSignature {
-                name: "test_function".to_string(),
+            FunctionSignature {
                 parameters: Vec::new(),
-                return_type: Type::I32,
+                return_type: ty("i32"),
                 is_async: true,
             },
         );
+        
+        let user_schema = sample_table_schema("users");
+        context.tables.insert("users".to_string(), user_schema.clone());
 
         context
     }
 
-    fn create_test_table_runtime() -> TableRuntime {
-        let mut table = TableRuntime::new();
+    fn sample_table_schema(name: &str) -> TableDef {
+        TableDef {
+            name: name.to_string(),
+            columns: vec![
+                TableColumn {
+                    name: "id".to_string(),
+                    column_type: ty("u64"),
+                    annotations: Vec::new(),
+                    default_value: None,
+                    is_computed: false,
+                    computed_expression: None,
+                },
+                TableColumn {
+                    name: "name".to_string(),
+                    column_type: ty("string"),
+                    annotations: Vec::new(),
+                    default_value: None,
+                    is_computed: false,
+                    computed_expression: None,
+                },
+                TableColumn {
+                    name: "active".to_string(),
+                    column_type: ty("bool"),
+                    annotations: Vec::new(),
+                    default_value: None,
+                    is_computed: false,
+                    computed_expression: None,
+                },
+            ],
+        }
+    }
 
-        // Add some test data
+    pub(super) fn create_test_table_runtime() -> TableRuntime {
+        let schema = sample_table_schema("users");
+        let mut table = TableRuntime::new(schema).expect("Should create table runtime");
+
         let mut row_data = HashMap::new();
         row_data.insert("id".to_string(), ColumnValue::U64(1));
         row_data.insert("name".to_string(), ColumnValue::String("test".to_string()));
@@ -831,11 +890,12 @@ mod async_execution_tests {
         table
     }
 
-    fn create_test_query_spec(table_name: &str) -> QuerySpec {
+    pub(super) fn create_test_query_spec(table_name: &str) -> QuerySpec {
         QuerySpec {
             projections: vec![FieldProjection {
                 name: "*".to_string(),
-                expression: Expression::Identifier("*".to_string()),
+                field_type: None,
+                access: None,
             }],
             from_table: table_name.to_string(),
             where_clause: None,
@@ -843,7 +903,7 @@ mod async_execution_tests {
         }
     }
 
-    fn create_test_parameters() -> HashMap<String, ColumnValue> {
+    pub(super) fn create_test_parameters() -> HashMap<String, ColumnValue> {
         let mut params = HashMap::new();
         params.insert(
             "test_param".to_string(),
@@ -857,6 +917,10 @@ mod async_execution_tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use crate::async_execution_tests::{
+        create_complex_end_to_end_system, create_execution_request,
+    create_resource_dependent_system, create_test_semantic_context, create_test_table_runtime,
+    };
 
     /// Test full integration of all async execution components
     #[tokio::test]
@@ -865,10 +929,11 @@ mod integration_tests {
 
         // 1. Create the complete execution environment
         let runtime_config = RuntimeConfig {
-            max_concurrent_tasks: 10,
-            task_timeout: Duration::from_secs(30),
-            enable_resource_tracking: true,
-            resource_timeout: Duration::from_secs(10),
+            max_concurrent_systems: 10,
+            default_task_timeout: Duration::from_secs(30),
+            resource_lease_timeout: Duration::from_secs(10),
+            scheduling_quantum: Duration::from_millis(5),
+            enable_preemption: true,
         };
 
         let semantic_context = create_test_semantic_context();
@@ -881,71 +946,7 @@ mod integration_tests {
         event_loop.register_table("users".to_string(), table_runtime);
 
         // 3. Create a realistic system that uses multiple async features
-        let user_processing_system = SystemDef {
-            name: "user_processing_system".to_string(),
-            parameters: vec![
-                SystemParameter::Resource {
-                    name: "users".to_string(),
-                    access: ResourceAccess::Mutable,
-                },
-                SystemParameter::Value {
-                    name: "batch_size".to_string(),
-                    param_type: Type::I32,
-                    default_value: Some(Expression::Literal(Literal::Integer(IntegerLiteral {
-                        value: 100,
-                        suffix: None,
-                    }))),
-                },
-            ],
-            return_type: Some(Type::I32),
-            body: vec![
-                // Query users
-                Statement::VariableDecl {
-                    name: "active_users".to_string(),
-                    var_type: Type::I32,
-                    value: Expression::Query(QuerySpec {
-                        projections: vec![FieldProjection {
-                            name: "count".to_string(),
-                            expression: Expression::Call {
-                                function: Box::new(Expression::Identifier("count".to_string())),
-                                arguments: vec![Expression::Identifier("*".to_string())],
-                                return_type: Some(Type::I32),
-                            },
-                        }],
-                        from_table: "users".to_string(),
-                        where_clause: Some(Box::new(Expression::Binary {
-                            left: Box::new(Expression::Identifier("active".to_string())),
-                            operator: BinaryOperator::Equal,
-                            right: Box::new(Expression::Literal(Literal::Boolean(true))),
-                        })),
-                        joins: Vec::new(),
-                    }),
-                },
-                // Process users in batches
-                Statement::ForLoop {
-                    variable: "batch".to_string(),
-                    iterable: Expression::Call {
-                        function: Box::new(Expression::Identifier("range".to_string())),
-                        arguments: vec![
-                            Expression::Literal(Literal::Integer(IntegerLiteral {
-                                value: 0,
-                                suffix: None,
-                            })),
-                            Expression::Identifier("active_users".to_string()),
-                            Expression::Identifier("batch_size".to_string()),
-                        ],
-                        return_type: Some(Type::I32),
-                    },
-                    body: vec![Statement::Expression(Expression::Call {
-                        function: Box::new(Expression::Identifier(
-                            "process_user_batch".to_string(),
-                        )),
-                        arguments: vec![Expression::Identifier("batch".to_string())],
-                        return_type: Some(Type::I32),
-                    })],
-                },
-            ],
-        };
+        let user_processing_system = create_complex_end_to_end_system();
 
         // 4. Submit the system for execution
         let start_time = Instant::now();
@@ -964,7 +965,7 @@ mod integration_tests {
         let event_loop_arc = Arc::new(event_loop);
         let event_loop_handle = event_loop_arc.clone();
 
-        let event_loop_task = tokio::spawn(async move { event_loop_handle.start().await });
+    let event_loop_task = tokio::task::spawn_blocking(move || event_loop_handle.start());
 
         // 6. Wait for execution to complete
         let execution_result = timeout(Duration::from_secs(15), execution_future).await;
@@ -973,7 +974,7 @@ mod integration_tests {
         event_loop_arc.stop().expect("Should stop event loop");
 
         // Wait for event loop to finish
-        let _ = timeout(Duration::from_secs(5), event_loop_task).await;
+    let _ = timeout(Duration::from_secs(5), event_loop_task).await;
 
         let total_time = start_time.elapsed();
         println!("Total execution time: {:?}", total_time);

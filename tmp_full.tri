@@ -1,0 +1,15 @@
+Vec<T> :: {
+    data: *T,
+    len: u64,
+    capacity: u64,
+}
+
+impl<T> Vec<T> {
+    new :: () -> Vec<T> => {
+        Vec<T> {
+            data: unsafe { none as ?*T as *T },
+            len: 0,
+            capacity: 0,
+        }
+    }
+}

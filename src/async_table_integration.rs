@@ -48,6 +48,10 @@ impl QueryId {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         QueryId(COUNTER.fetch_add(1, Ordering::SeqCst))
     }
+
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
 }
 
 /// Future for async query execution
