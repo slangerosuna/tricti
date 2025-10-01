@@ -1,8 +1,8 @@
 // Rust tests for migrated TriCTI logic from stdlib/prelude.tri
 // These tests follow TDD: implement the test first, then the logic.
 
-use peano::stdlib::legacy::*;
-use peano::stdlib::modern::{StdError as AdvancedStdError, StdResult as AdvancedStdResult, std_error_message as advanced_std_error_message, std_ok as advanced_std_ok, std_err as advanced_std_err};
+use tricti::stdlib::legacy::*;
+use tricti::stdlib::modern::{StdError as AdvancedStdError, StdResult as AdvancedStdResult, std_error_message as advanced_std_error_message, std_ok as advanced_std_ok, std_err as advanced_std_err};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StdErrorKind {

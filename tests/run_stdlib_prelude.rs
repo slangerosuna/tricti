@@ -1,7 +1,7 @@
 /// Tests for stdlib/prelude.tri using the tri_test_helpers macros.
 
 #[macro_use]
-extern crate peano;
+extern crate tricti;
 
 #[cfg(test)]
 mod tests {

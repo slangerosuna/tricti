@@ -1,5 +1,5 @@
-use peano::ast::*;
-use peano::parser;
+use tricti::ast::*;
+use tricti::parser;
 
 #[test]
 fn parse_struct_field_and_static_path() {

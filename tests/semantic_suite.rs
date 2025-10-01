@@ -1,4 +1,4 @@
-use peano::{parser, semantic};
+use tricti::{parser, semantic};
 
 #[test]
 fn loop_variable_is_scoped() {

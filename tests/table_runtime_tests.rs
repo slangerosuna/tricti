@@ -1,5 +1,5 @@
-use peano::ast::*;
-use peano::table_runtime::*;
+use tricti::ast::*;
+use tricti::table_runtime::*;
 use std::collections::HashMap;
 
 #[cfg(test)]

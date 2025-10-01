@@ -1,4 +1,4 @@
-use peano::{
+use tricti::{
     ast::*, async_runtime::*, async_scheduler_integration::*, scheduler::*,
     semantic::SemanticContext, system_executor::*, table_runtime::*,
 };

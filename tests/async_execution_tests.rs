@@ -1,4 +1,4 @@
-use peano::{
+use tricti::{
     ast::*, async_runtime::*, async_scheduler_integration::*, async_table_integration::*,
     error_propagation::*, event_loop_manager::*, resource_lifecycle::*, system_executor::*,
     table_runtime::*,

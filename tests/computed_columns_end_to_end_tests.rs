@@ -1,6 +1,6 @@
-use peano::ast::*;
-use peano::parser;
-use peano::table_runtime::*;
+use tricti::ast::*;
+use tricti::parser;
+use tricti::table_runtime::*;
 use std::collections::HashMap;
 
 #[test]

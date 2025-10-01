@@ -1,7 +1,7 @@
-use peano::ast::*;
-use peano::query::*;
-use peano::query_executor::*;
-use peano::table_runtime::*;
+use tricti::ast::*;
+use tricti::query::*;
+use tricti::query_executor::*;
+use tricti::table_runtime::*;
 use std::collections::HashMap;
 
 #[cfg(test)]

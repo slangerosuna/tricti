@@ -1,6 +1,6 @@
-use peano::ast::*;
-use peano::parser;
-use peano::semantic;
+use tricti::ast::*;
+use tricti::parser;
+use tricti::semantic;
 
 /// Test computed columns with function calls to ensure function identifiers
 /// are not treated as column dependencies

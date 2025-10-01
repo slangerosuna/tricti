@@ -1,5 +1,5 @@
-use peano::ast::*;
-use peano::parser;
+use tricti::ast::*;
+use tricti::parser;
 
 #[test]
 fn test_computed_column_basic() {

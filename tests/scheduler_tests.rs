@@ -1,5 +1,5 @@
-use peano::ast::{ResourceAccess, SystemDef, SystemParameter, Type};
-use peano::scheduler::*;
+use tricti::ast::{ResourceAccess, SystemDef, SystemParameter, Type};
+use tricti::scheduler::*;
 
 /// Helper function to create a test system with resource parameters
 fn create_test_system(name: &str, resources: Vec<(&str, ResourceAccess)>) -> SystemDef {

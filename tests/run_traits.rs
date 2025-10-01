@@ -1,7 +1,7 @@
 use inkwell::context::Context;
-use peano::codegen::CodeGenerator;
-use peano::parser;
-use peano::semantic::{analyze_program, SemanticError};
+use tricti::codegen::CodeGenerator;
+use tricti::parser;
+use tricti::semantic::{analyze_program, SemanticError};
 use std::process::Command;
 
 fn clang_available() -> bool {

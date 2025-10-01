@@ -1,7 +1,7 @@
 use inkwell::context::Context;
-use peano::codegen::CodeGenerator;
-use peano::parser;
-use peano::semantic::analyze_program;
+use tricti::codegen::CodeGenerator;
+use tricti::parser;
+use tricti::semantic::analyze_program;
 use std::process::Command;
 
 #[test]

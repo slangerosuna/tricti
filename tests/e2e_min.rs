@@ -1,5 +1,5 @@
 use inkwell::context::Context;
-use peano::{codegen, parser, semantic};
+use tricti::{codegen, parser, semantic};
 use std::fs;
 use std::path::Path;
 
