@@ -91,6 +91,7 @@ div :: (x: i32, y: i32) -> !i32 => { # `!` indicates that the function may retur
     x / y # implicit return, as the scope of the function is an expression
 }
 
+@memoize
 fib :: (n: i32) -> i32 => match n {
     0 => 0,
     1 => 1, 
@@ -119,16 +120,48 @@ MyStruct :: enum {
     },
 }
 
-struct Image :: { }
+Image :: { }
 
 display_apps :: sys (
    query: select (image: &Image, title: &String)
           from Apps where display == true,
    gui: res &mut Gui,
 
-   input_size: f32
+   @sys_input input_size: f32
 ) -> !none => {
-  # code for system
+  query.for_each((row: (image: &Image, title: &string)) => {
+    gui.display(image, title)
+  })
+}
+
+# Example of allowed loops in compose
+Foo :: { }
+Bar :: { }
+Quux :: { }
+
+init_foobar :: sys (
+  query: select (Bar) from Table,
+) -> ?Quux {
+  # code here
+}
+
+foo :: sys (
+  query: select (Foo) from Table,
+  @sys_input quux: Quux
+) -> Baz {
+  # code here
+}
+
+bar :: sys (
+  query: select (Bar) from Table
+  @sys_input baz: Baz
+) -> ?Quux {
+  # code here
+}
+
+compose {
+  init_foobar ?-> (a: foo) -> (b: bar),
+  (b: bar) ?-> (a: foo),
 }
 
 RedrawRequested :: Signal<Spmc, Overwrite, none>
@@ -141,6 +174,8 @@ redraw :: compose {
   
    # can fan out `foo -> (bar, baz)`
    # and merge `(foo, bar) -> baz`
+   # and tags to allow any arbitrary DAG (semantic error on cycles)
+   # foo -> ((a: bar), (b: baz)), (a: bar) -> (b: baz)
    # this composes and decomposes tuples
 }
 
@@ -161,16 +196,16 @@ PluginA :: plugin {
     # plugins work a lot like databases
 }
 
-Foo :: { s: String }
+Qux :: { s: String }
 
 # These are the only way to communicate between Databases
-ExampleSignal :: Signal<Mpsc, Buffer, MyStruct>
+ExampleSignal :: Signal<Mpsc, Buffer, Qux>
 
 emmitter_sys :: sys () => {
-    emit(ExampleSignal, Foo { s: "Frame Finalized" })
+    emit(ExampleSignal, Qux { s: "Frame Finalized" })
 }
 
 RecvDb :: db { }
 
 @trigger ExampleSignal, RecvDb
-receiver_sys ::sys (@trigger_recv foo: Foo) => { }
+receiver_sys ::sys (@trigger_recv qux: Qux) => { }
