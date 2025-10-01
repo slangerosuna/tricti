@@ -1,0 +1,9 @@
+# Simple test to verify core::traits parses correctly
+use core::traits
+
+# Test that we can reference the traits
+main :: () -> i64 => {
+    # Just a simple program that imports traits
+    # If the file parses, this test passes
+    ret 0
+}

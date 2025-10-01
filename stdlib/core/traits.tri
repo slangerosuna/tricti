@@ -10,69 +10,67 @@ use core::result
 # =============================================================================
 
 # Partial equality comparison (allows for types that may not have total equality like f64 with NaN)
-trait PartialEq {
-    eq :: (&self, other: &Self) -> bool
-    ne :: (&self, other: &Self) -> bool => { ~self.eq(other) }
+PartialEq :: trait {
+    eq : (&Self, &Self) -> bool,
+    ne : (&Self, &Self) -> bool,
 }
 
 # Full equality comparison (marker trait indicating reflexive, symmetric, transitive equality)
-trait Eq: PartialEq {
+Eq :: trait {
     # Marker trait - requires PartialEq
     # Indicates reflexive, symmetric, transitive equality
 }
 
 # Partial ordering comparison (allows for incomparable values like NaN)
-trait PartialOrd: PartialEq {
-    partial_cmp :: (&self, other: &Self) -> ?i64
-    lt :: (&self, other: &Self) -> bool
-    le :: (&self, other: &Self) -> bool
-    gt :: (&self, other: &Self) -> bool
-    ge :: (&self, other: &Self) -> bool
+PartialOrd :: trait {
+    partial_cmp : (&Self, &Self) -> ?i64,
+    lt : (&Self, &Self) -> bool,
+    le : (&Self, &Self) -> bool,
+    gt : (&Self, &Self) -> bool,
+    ge : (&Self, &Self) -> bool,
 }
 
 # Total ordering comparison
-trait Ord: PartialOrd + Eq {
-    cmp :: (&self, other: &Self) -> i64
-    max :: (self, other: Self) -> Self
-    min :: (self, other: Self) -> Self
+Ord :: trait {
+    cmp : (&Self, &Self) -> i64,
+    max : (Self, Self) -> Self,
+    min : (Self, Self) -> Self,
 }
 
 # Hash for HashMap/HashSet
-trait Hash {
-    hash :: (&self) -> u64
+Hash :: trait {
+    hash : (&Self) -> u64,
 }
 
 # Clone (deep copy)
-trait Clone {
-    clone :: (&self) -> Self
-    clone_from :: (*self, source: &Self) => {
-        *self = source.clone()
-    }
+Clone :: trait {
+    clone : (&Self) -> Self,
+    clone_from : (*Self, &Self) -> none,
 }
 
 # Copy (bitwise copy) - marker trait
-trait Copy: Clone {
+Copy :: trait {
     # Automatically implements Clone as bitwise copy
 }
 
 # Drop (destructor)
-trait Drop {
-    drop :: (*self) => { }
+Drop :: trait {
+    drop : (*Self) -> none,
 }
 
 # Display for string representation
-trait Display {
-    to_string :: (&self) -> String
+Display :: trait {
+    to_string : (&Self) -> String,
 }
 
 # Debug for debug printing
-trait Debug {
-    debug_string :: (&self) -> String
+Debug :: trait {
+    debug_string : (&Self) -> String,
 }
 
 # Default value
-trait Default {
-    default :: () -> Self
+Default :: trait {
+    default : () -> Self,
 }
 
 # =============================================================================
@@ -81,22 +79,22 @@ trait Default {
 
 # Infallible conversion from T to Self
 From<T> :: trait {
-    from :: (value: T) -> Self
+    from : (T) -> Self,
 }
 
 # Infallible conversion from Self to T
 Into<T> :: trait {
-    into :: (self: Self) -> T
+    into : (Self) -> T,
 }
 
 # Fallible conversion from T to Self
 TryFrom<T> :: trait {
-    try_from :: (value: T) -> StdResult<Self>
+    try_from : (T) -> StdResult<Self>,
 }
 
 # Fallible conversion from Self to T
 TryInto<T> :: trait {
-    try_into :: (self: Self) -> StdResult<T>
+    try_into : (Self) -> StdResult<T>,
 }
 
 # Blanket implementation: Into<U> for any T where U: From<T>
@@ -113,6 +111,110 @@ impl<T, U: TryFrom<T>> TryInto<U> for T {
     try_into :: (self: T) -> StdResult<U> => {
         ret U::try_from(self)
     }
+}
+
+# =============================================================================
+# OPERATOR TRAITS
+# =============================================================================
+
+# Arithmetic Operators
+Add :: trait {
+    add : (Self, Self) -> Self,
+}
+
+Sub :: trait {
+    sub : (Self, Self) -> Self,
+}
+
+Mul :: trait {
+    mul : (Self, Self) -> Self,
+}
+
+Div :: trait {
+    div : (Self, Self) -> Self,
+}
+
+Rem :: trait {
+    rem : (Self, Self) -> Self,
+}
+
+Neg :: trait {
+    neg : (Self) -> Self,
+}
+
+# Bitwise Operators
+BitAnd :: trait {
+    bitand : (Self, Self) -> Self,
+}
+
+BitOr :: trait {
+    bitor : (Self, Self) -> Self,
+}
+
+BitXor :: trait {
+    bitxor : (Self, Self) -> Self,
+}
+
+Shl :: trait {
+    shl : (Self, u64) -> Self,
+}
+
+Shr :: trait {
+    shr : (Self, u64) -> Self,
+}
+
+Not :: trait {
+    not : (Self) -> Self,
+}
+
+# Indexing Operators (definitions only, implementations deferred)
+Index<Idx> :: trait {
+    index : (&Self, Idx) -> u8,
+}
+
+IndexMut<Idx> :: trait {
+    index_mut : (*Self, Idx) -> *u8,
+}
+
+# Assignment Operators
+AddAssign :: trait {
+    add_assign : (*Self, Self) -> none,
+}
+
+SubAssign :: trait {
+    sub_assign : (*Self, Self) -> none,
+}
+
+MulAssign :: trait {
+    mul_assign : (*Self, Self) -> none,
+}
+
+DivAssign :: trait {
+    div_assign : (*Self, Self) -> none,
+}
+
+RemAssign :: trait {
+    rem_assign : (*Self, Self) -> none,
+}
+
+BitAndAssign :: trait {
+    bitand_assign : (*Self, Self) -> none,
+}
+
+BitOrAssign :: trait {
+    bitor_assign : (*Self, Self) -> none,
+}
+
+BitXorAssign :: trait {
+    bitxor_assign : (*Self, Self) -> none,
+}
+
+ShlAssign :: trait {
+    shl_assign : (*Self, u64) -> none,
+}
+
+ShrAssign :: trait {
+    shr_assign : (*Self, u64) -> none,
 }
 
 # =============================================================================
@@ -275,11 +377,11 @@ impl Eq for bool {}
 impl PartialOrd for bool {
     partial_cmp :: (&self, other: &bool) -> ?i64 => {
         if *self == *other { ret some 0 }
-        if *self { some 1 } else { some -1 }
+        if *self { some 1 } else { some (-1) }
     }
-    lt :: (&self, other: &bool) -> bool => { ~*self && *other }
-    le :: (&self, other: &bool) -> bool => { ~*self || *self == *other }
-    gt :: (&self, other: &bool) -> bool => { *self && ~*other }
+    lt :: (&self, other: &bool) -> bool => { ~(*self) && *other }
+    le :: (&self, other: &bool) -> bool => { ~(*self) || *self == *other }
+    gt :: (&self, other: &bool) -> bool => { *self && ~(*other) }
     ge :: (&self, other: &bool) -> bool => { *self || *self == *other }
 }
 
@@ -320,6 +422,31 @@ impl Hash for bool {
     }
 }
 
+# Bitwise operators for bool
+impl BitAnd for bool {
+    bitand :: (self, other: bool) -> bool => {
+        self && other
+    }
+}
+
+impl BitOr for bool {
+    bitor :: (self, other: bool) -> bool => {
+        self || other
+    }
+}
+
+impl BitXor for bool {
+    bitxor :: (self, other: bool) -> bool => {
+        (self || other) && ~(self && other)
+    }
+}
+
+impl Not for bool {
+    not :: (self) -> bool => {
+        ~self
+    }
+}
+
 # =============================================================================
 # i64 implementations
 # =============================================================================
@@ -332,7 +459,7 @@ impl Eq for i64 {}
 impl PartialOrd for i64 {
     partial_cmp :: (&self, other: &i64) -> ?i64 => {
         if *self == *other { ret some 0 }
-        if *self >= *other { some 1 } else { some -1 }
+        if *self >= *other { some 1 } else { some (-1) }
     }
     lt :: (&self, other: &i64) -> bool => { *self < *other }
     le :: (&self, other: &i64) -> bool => { *self <= *other }
@@ -379,6 +506,80 @@ impl Hash for i64 {
     hash :: (&self) -> u64 => { *self as u64 }
 }
 
+# Arithmetic operators for i64
+impl Add for i64 {
+    add :: (self, other: i64) -> i64 => {
+        self + other
+    }
+}
+
+impl Sub for i64 {
+    sub :: (self, other: i64) -> i64 => {
+        self - other
+    }
+}
+
+impl Mul for i64 {
+    mul :: (self, other: i64) -> i64 => {
+        self * other
+    }
+}
+
+impl Div for i64 {
+    div :: (self, other: i64) -> i64 => {
+        self / other
+    }
+}
+
+impl Rem for i64 {
+    rem :: (self, other: i64) -> i64 => {
+        self % other
+    }
+}
+
+impl Neg for i64 {
+    neg :: (self) -> i64 => {
+        -self
+    }
+}
+
+# Bitwise operators for i64
+impl BitAnd for i64 {
+    bitand :: (self, other: i64) -> i64 => {
+        self & other
+    }
+}
+
+impl BitOr for i64 {
+    bitor :: (self, other: i64) -> i64 => {
+        self | other
+    }
+}
+
+impl BitXor for i64 {
+    bitxor :: (self, other: i64) -> i64 => {
+        self ^ other
+    }
+}
+
+impl Shl for i64 {
+    shl :: (self, shift: u64) -> i64 => {
+        self << shift
+    }
+}
+
+impl Shr for i64 {
+    shr :: (self, shift: u64) -> i64 => {
+        self >> shift
+    }
+}
+
+impl Not for i64 {
+    not :: (self) -> i64 => {
+        ~self
+    }
+}
+
 # =============================================================================
 # u64 implementations
 # =============================================================================
@@ -391,7 +592,7 @@ impl Eq for u64 {}
 impl PartialOrd for u64 {
     partial_cmp :: (&self, other: &u64) -> ?i64 => {
         if *self == *other { ret some 0 }
-        if *self >= *other { some 1 } else { some -1 }
+        if *self >= *other { some 1 } else { some (-1) }
     }
     lt :: (&self, other: &u64) -> bool => { *self < *other }
     le :: (&self, other: &u64) -> bool => { *self <= *other }
@@ -438,6 +639,74 @@ impl Hash for u64 {
     hash :: (&self) -> u64 => { *self }
 }
 
+# Arithmetic operators for u64
+impl Add for u64 {
+    add :: (self, other: u64) -> u64 => {
+        self + other
+    }
+}
+
+impl Sub for u64 {
+    sub :: (self, other: u64) -> u64 => {
+        self - other
+    }
+}
+
+impl Mul for u64 {
+    mul :: (self, other: u64) -> u64 => {
+        self * other
+    }
+}
+
+impl Div for u64 {
+    div :: (self, other: u64) -> u64 => {
+        self / other
+    }
+}
+
+impl Rem for u64 {
+    rem :: (self, other: u64) -> u64 => {
+        self % other
+    }
+}
+
+# Bitwise operators for u64
+impl BitAnd for u64 {
+    bitand :: (self, other: u64) -> u64 => {
+        self & other
+    }
+}
+
+impl BitOr for u64 {
+    bitor :: (self, other: u64) -> u64 => {
+        self | other
+    }
+}
+
+impl BitXor for u64 {
+    bitxor :: (self, other: u64) -> u64 => {
+        self ^ other
+    }
+}
+
+impl Shl for u64 {
+    shl :: (self, shift: u64) -> u64 => {
+        self << shift
+    }
+}
+
+impl Shr for u64 {
+    shr :: (self, shift: u64) -> u64 => {
+        self >> shift
+    }
+}
+
+impl Not for u64 {
+    not :: (self) -> u64 => {
+        ~self
+    }
+}
+
 # =============================================================================
 # u8 implementations
 # =============================================================================
@@ -450,7 +719,7 @@ impl Eq for u8 {}
 impl PartialOrd for u8 {
     partial_cmp :: (&self, other: &u8) -> ?i64 => {
         if *self == *other { ret some 0 }
-        if *self >= *other { some 1 } else { some -1 }
+        if *self >= *other { some 1 } else { some (-1) }
     }
     lt :: (&self, other: &u8) -> bool => { *self < *other }
     le :: (&self, other: &u8) -> bool => { *self <= *other }
@@ -497,6 +766,74 @@ impl Hash for u8 {
     hash :: (&self) -> u64 => { *self as u64 }
 }
 
+# Arithmetic operators for u8
+impl Add for u8 {
+    add :: (self, other: u8) -> u8 => {
+        self + other
+    }
+}
+
+impl Sub for u8 {
+    sub :: (self, other: u8) -> u8 => {
+        self - other
+    }
+}
+
+impl Mul for u8 {
+    mul :: (self, other: u8) -> u8 => {
+        self * other
+    }
+}
+
+impl Div for u8 {
+    div :: (self, other: u8) -> u8 => {
+        self / other
+    }
+}
+
+impl Rem for u8 {
+    rem :: (self, other: u8) -> u8 => {
+        self % other
+    }
+}
+
+# Bitwise operators for u8
+impl BitAnd for u8 {
+    bitand :: (self, other: u8) -> u8 => {
+        self & other
+    }
+}
+
+impl BitOr for u8 {
+    bitor :: (self, other: u8) -> u8 => {
+        self | other
+    }
+}
+
+impl BitXor for u8 {
+    bitxor :: (self, other: u8) -> u8 => {
+        self ^ other
+    }
+}
+
+impl Shl for u8 {
+    shl :: (self, shift: u64) -> u8 => {
+        self << shift
+    }
+}
+
+impl Shr for u8 {
+    shr :: (self, shift: u64) -> u8 => {
+        self >> shift
+    }
+}
+
+impl Not for u8 {
+    not :: (self) -> u8 => {
+        ~self
+    }
+}
+
 # =============================================================================
 # f64 implementations (PartialOrd only, no Ord due to NaN)
 # =============================================================================
@@ -508,7 +845,7 @@ impl PartialOrd for f64 {
     partial_cmp :: (&self, other: &f64) -> ?i64 => {
         if *self == *other { ret some 0 }
         if *self >= *other { ret some 1 }
-        if *self < *other { ret some -1 }
+        if *self < *other { ret some (-1) }
         none
     }
     lt :: (&self, other: &f64) -> bool => { *self < *other }
@@ -537,6 +874,37 @@ impl Debug for f64 {
 
 impl Default for f64 {
     default :: () -> f64 => { 0.0 }
+}
+
+# Arithmetic operators for f64 (no Rem for floating point)
+impl Add for f64 {
+    add :: (self, other: f64) -> f64 => {
+        self + other
+    }
+}
+
+impl Sub for f64 {
+    sub :: (self, other: f64) -> f64 => {
+        self - other
+    }
+}
+
+impl Mul for f64 {
+    mul :: (self, other: f64) -> f64 => {
+        self * other
+    }
+}
+
+impl Div for f64 {
+    div :: (self, other: f64) -> f64 => {
+        self / other
+    }
+}
+
+impl Neg for f64 {
+    neg :: (self) -> f64 => {
+        -self
+    }
 }
 
 # =============================================================================
@@ -642,6 +1010,30 @@ impl Hash for String {
     }
 }
 
+# Operators for String
+impl Add for String {
+    add :: (self, other: String) -> String => {
+        result := String::clone(&self)
+        String::push_str(&result, &other)
+        result
+    }
+}
+
+impl Mul for String {
+    mul :: (self, other: String) -> String => {
+        count := String::to_i64(&other)
+        if count <= 0 {
+            ret String::new()
+        }
+        
+        result := String::with_capacity(self.len * (count as u64))
+        for i in 0:(count as u64) {
+            String::push_str(&result, &self)
+        }
+        result
+    }
+}
+
 # =============================================================================
 # Option<T> implementations (built-in ?T type)
 # =============================================================================
@@ -670,7 +1062,7 @@ impl<T: PartialOrd> PartialOrd for ?T {
         match (*self, *other) {
             (some a, some b) => a.partial_cmp(&b),
             (none, none) => some 0,
-            (none, some _) => some -1,
+            (none, some _) => some (-1),
             (some _, none) => some 1,
         }
     }
@@ -805,7 +1197,7 @@ impl<T: PartialOrd> PartialOrd for StdResult<T> {
         match (*self, *other) {
             (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.partial_cmp(&b),
             (StdResult::Err { .. }, StdResult::Err { .. }) => some 0,
-            (StdResult::Ok { .. }, StdResult::Err { .. }) => some -1,
+            (StdResult::Ok { .. }, StdResult::Err { .. }) => some (-1),
             (StdResult::Err { .. }, StdResult::Ok { .. }) => some 1,
         }
     }
