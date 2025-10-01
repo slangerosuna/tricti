@@ -1,0 +1,5 @@
+# Simple hello world program
+main :: () => {
+    hello := "Hello, TriCTI!"
+    println(hello)
+}
