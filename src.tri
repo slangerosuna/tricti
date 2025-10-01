@@ -1,5 +1,3 @@
-@SignalBackend @cfg(Local) { RingBuf } else { QUIC }
-
 use prelude
 use rt
 
