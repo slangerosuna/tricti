@@ -1,5 +1,5 @@
 WHITESPACE   = _{ " " | "\t" | "\n" | "\r" | COMMENT }
-COMMENT      = _{ (("#" | "//") ~ (!"\n" ~ ANY)*) | ("/*" ~ (!"*/" ~ ANY)*) }
+COMMENT      = _{ ("#" ~ (!"\n" ~ ANY)*) | ("/*" ~ (!"*/" ~ ANY)*) }
 
 identifier   = @{ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
 int_body     = { ASCII_DIGIT+ ~ ("_" ~ ASCII_DIGIT+)* }
