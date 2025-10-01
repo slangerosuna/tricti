@@ -3,6 +3,7 @@
 
 use prelude
 use core::errors
+use core::result
 
 # =============================================================================
 # CORE TRAITS
@@ -73,6 +74,47 @@ trait Debug {
 trait Default {
     default :: () -> Self
 }
+
+# =============================================================================
+# CONVERSION TRAITS
+# =============================================================================
+
+# Infallible conversion from T to Self
+From<T> :: trait {
+    from :: (value: T) -> Self
+}
+
+# Infallible conversion from Self to T
+Into<T> :: trait {
+    into :: (self: Self) -> T
+}
+
+# Fallible conversion from T to Self
+TryFrom<T> :: trait {
+    try_from :: (value: T) -> StdResult<Self>
+}
+
+# Fallible conversion from Self to T
+TryInto<T> :: trait {
+    try_into :: (self: Self) -> StdResult<T>
+}
+
+# BLANKET IMPLEMENTATIONS TEMPORARILY DISABLED DUE TO PARSER LIMITATIONS
+# Blanket implementation: Into<U> for any T where U: From<T>
+# This means if you implement From<T> for U, you automatically get Into<U> for T
+# impl<T, U: From<T>> Into<U> for T {
+#     into :: (self: T) -> U => {
+#         U::from(self)
+#     }
+# }
+
+# Blanket implementation: TryInto<U> for any T where U: TryFrom<T>
+# This means if you implement TryFrom<T> for U, you automatically get TryInto<U> for T
+# impl<T, U: TryFrom<T>> TryInto<U> for T {
+#     try_into :: (self: T) -> StdResult<U> => {
+#         U::try_from(self)
+#     }
+# }
 
 # =============================================================================
 # ITERATOR TRAITS (COMMENTED OUT - Vec, Map, Filter not yet implemented)
@@ -874,6 +916,270 @@ impl<T: Debug> Debug for StdResult<T> {
                 result
             },
         }
+    }
+}
+
+# =============================================================================
+# CONVERSION IMPLEMENTATIONS FOR PRIMITIVES
+# =============================================================================
+
+# Lossless widening conversions: u8 -> u64
+impl From<u8> for u64 {
+    from :: (value: u8) -> u64 => {
+        value as u64
+    }
+}
+
+# Lossless widening conversions: u8 -> i64
+impl From<u8> for i64 {
+    from :: (value: u8) -> i64 => {
+        value as i64
+    }
+}
+
+# Boolean to i64 conversion
+impl From<bool> for i64 {
+    from :: (value: bool) -> i64 => {
+        if value { 1 } else { 0 }
+    }
+}
+
+# Boolean to u64 conversion
+impl From<bool> for u64 {
+    from :: (value: bool) -> u64 => {
+        if value { 1 } else { 0 }
+    }
+}
+
+# i64 to String conversion
+impl From<i64> for String {
+    from :: (value: i64) -> String => {
+        String::from_i64(value)
+    }
+}
+
+# u64 to String conversion
+impl From<u64> for String {
+    from :: (value: u64) -> String => {
+        String::from_u64(value)
+    }
+}
+
+# bool to String conversion
+impl From<bool> for String {
+    from :: (value: bool) -> String => {
+        if value {
+            String::from_cstr("true" as *u8)
+        } else {
+            String::from_cstr("false" as *u8)
+        }
+    }
+}
+
+# u8 (char) to String conversion
+impl From<u8> for String {
+    from :: (value: u8) -> String => {
+        result := String::with_capacity(2)
+        String::push_char(&result, value)
+        result
+    }
+}
+
+# f64 to String conversion
+impl From<f64> for String {
+    from :: (value: f64) -> String => {
+        String::from_f64(value)
+    }
+}
+
+# Narrowing conversions (fallible): u64 -> u8
+impl TryFrom<u64> for u8 {
+    try_from :: (value: u64) -> StdResult<u8> => {
+        if value > 255 {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("u64 value exceeds u8 maximum (255)" as *u8)
+            })
+        } else {
+            std_ok(value as u8)
+        }
+    }
+}
+
+# Narrowing conversions (fallible): i64 -> u8
+impl TryFrom<i64> for u8 {
+    try_from :: (value: i64) -> StdResult<u8> => {
+        if value < 0 {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("i64 value is negative, cannot convert to u8" as *u8)
+            })
+        } else if value > 255 {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("i64 value exceeds u8 maximum (255)" as *u8)
+            })
+        } else {
+            std_ok(value as u8)
+        }
+    }
+}
+
+# Narrowing conversions (fallible): u64 -> i64
+impl TryFrom<u64> for i64 {
+    try_from :: (value: u64) -> StdResult<i64> => {
+        if value > 9223372036854775807 {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("u64 value exceeds i64 maximum" as *u8)
+            })
+        } else {
+            std_ok(value as i64)
+        }
+    }
+}
+
+# Narrowing conversions (fallible): i64 -> u64
+impl TryFrom<i64> for u64 {
+    try_from :: (value: i64) -> StdResult<u64> => {
+        if value < 0 {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("i64 value is negative, cannot convert to u64" as *u8)
+            })
+        } else {
+            std_ok(value as u64)
+        }
+    }
+}
+
+# Fallible conversions: f64 -> i64
+impl TryFrom<f64> for i64 {
+    try_from :: (value: f64) -> StdResult<i64> => {
+        if value ~= value {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("f64 value is NaN" as *u8)
+            })
+        } else if value > 9223372036854775807.0 {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("f64 value exceeds i64 maximum" as *u8)
+            })
+        } else if value < -9223372036854775808.0 {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("f64 value below i64 minimum" as *u8)
+            })
+        } else {
+            std_ok(value as i64)
+        }
+    }
+}
+
+# Fallible conversions: f64 -> u64
+impl TryFrom<f64> for u64 {
+    try_from :: (value: f64) -> StdResult<u64> => {
+        if value ~= value {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("f64 value is NaN" as *u8)
+            })
+        } else if value < 0.0 {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("f64 value is negative, cannot convert to u64" as *u8)
+            })
+        } else if value > 18446744073709551615.0 {
+            std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("f64 value exceeds u64 maximum" as *u8)
+            })
+        } else {
+            std_ok(value as u64)
+        }
+    }
+}
+
+# String parsing: String -> i64
+impl TryFrom<String> for i64 {
+    try_from :: (value: String) -> StdResult<i64> => {
+        result := String::parse_i64(&value)
+        match result {
+            some val => std_ok(val),
+            none => std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("Invalid i64 string format" as *u8)
+            })
+        }
+    }
+}
+
+# String parsing: String -> u64
+impl TryFrom<String> for u64 {
+    try_from :: (value: String) -> StdResult<u64> => {
+        result := String::parse_u64(&value)
+        match result {
+            some val => std_ok(val),
+            none => std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("Invalid u64 string format" as *u8)
+            })
+        }
+    }
+}
+
+# String parsing: String -> f64
+impl TryFrom<String> for f64 {
+    try_from :: (value: String) -> StdResult<f64> => {
+        result := String::parse_f64(&value)
+        match result {
+            some val => std_ok(val),
+            none => std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("Invalid f64 string format" as *u8)
+            })
+        }
+    }
+}
+
+# String parsing: String -> bool
+impl TryFrom<String> for bool {
+    try_from :: (value: String) -> StdResult<bool> => {
+        result := String::parse_bool(&value)
+        match result {
+            some val => std_ok(val),
+            none => std_err(StdError::InvalidArgument {
+                parameter: String::from_cstr("value" as *u8),
+                message: String::from_cstr("Invalid bool string format (expected 'true' or 'false')" as *u8)
+            })
+        }
+    }
+}
+
+# T -> Option<T> conversion
+impl<T> From<T> for ?T {
+    from :: (value: T) -> ?T => {
+        some value
+    }
+}
+
+# Option<T> -> T fallible conversion
+impl<T> TryFrom<?T> for T {
+    try_from :: (value: ?T) -> StdResult<T> => {
+        match value {
+            some val => std_ok(val),
+            none => std_err(StdError::Message {
+                message: String::from_cstr("Cannot unwrap None value" as *u8)
+            })
+        }
+    }
+}
+
+# T -> Result<T,E> conversion (Ok wrapper)
+impl<T, E> From<T> for StdResult<T> {
+    from :: (value: T) -> StdResult<T> => {
+        std_ok(value)
     }
 }
 

@@ -680,4 +680,163 @@ impl String {
         }
         result
     }
+
+    # Parse string to i64
+    parse_i64 :: (self: *String) -> ?i64 => {
+        if self.len == 0 {
+            ret none
+        }
+        
+        trimmed := String::trim(self)
+        if trimmed.len == 0 {
+            ret none
+        }
+        
+        start_idx := 0
+        is_negative := false
+        
+        first_char := ptr_offset(trimmed.data, 0)[0]
+        if first_char == 45 {
+            is_negative = true
+            start_idx = 1
+        } else if first_char == 43 {
+            start_idx = 1
+        }
+        
+        if start_idx >= trimmed.len {
+            ret none
+        }
+        
+        result: i64 = 0
+        for i in start_idx:trimmed.len {
+            ch := ptr_offset(trimmed.data, i)[0]
+            if ch < 48 || ch > 57 {
+                ret none
+            }
+            digit := (ch - 48) as i64
+            
+            if is_negative {
+                if result < -922337203685477580 {
+                    ret none
+                }
+                if result == -922337203685477580 && digit > 8 {
+                    ret none
+                }
+                result = result * 10 - digit
+            } else {
+                if result > 922337203685477580 {
+                    ret none
+                }
+                if result == 922337203685477580 && digit > 7 {
+                    ret none
+                }
+                result = result * 10 + digit
+            }
+        }
+        
+        some result
+    }
+
+    # Parse string to u64
+    parse_u64 :: (self: *String) -> ?u64 => {
+        if self.len == 0 {
+            ret none
+        }
+        
+        trimmed := String::trim(self)
+        if trimmed.len == 0 {
+            ret none
+        }
+        
+        start_idx := 0
+        first_char := ptr_offset(trimmed.data, 0)[0]
+        if first_char == 43 {
+            start_idx = 1
+        } else if first_char == 45 {
+            ret none
+        }
+        
+        if start_idx >= trimmed.len {
+            ret none
+        }
+        
+        result: u64 = 0
+        for i in start_idx:trimmed.len {
+            ch := ptr_offset(trimmed.data, i)[0]
+            if ch < 48 || ch > 57 {
+                ret none
+            }
+            digit := (ch - 48) as u64
+            
+            if result > 1844674407370955161 {
+                ret none
+            }
+            if result == 1844674407370955161 && digit > 5 {
+                ret none
+            }
+            result = result * 10 + digit
+        }
+        
+        some result
+    }
+
+    # Parse string to f64
+    parse_f64 :: (self: *String) -> ?f64 => {
+        if self.len == 0 {
+            ret none
+        }
+        
+        trimmed := String::trim(self)
+        if trimmed.len == 0 {
+            ret none
+        }
+        
+        has_digit := false
+        has_dot := false
+        start_idx := 0
+        
+        first_char := ptr_offset(trimmed.data, 0)[0]
+        if first_char == 45 || first_char == 43 {
+            start_idx = 1
+        }
+        
+        for i in start_idx:trimmed.len {
+            ch := ptr_offset(trimmed.data, i)[0]
+            if ch >= 48 && ch <= 57 {
+                has_digit = true
+            } else if ch == 46 {
+                if has_dot {
+                    ret none
+                }
+                has_dot = true
+            } else if ch == 101 || ch == 69 {
+                break
+            } else {
+                ret none
+            }
+        }
+        
+        if ~has_digit {
+            ret none
+        }
+        
+        result := atof(trimmed.data)
+        some result
+    }
+
+    # Parse string to bool
+    parse_bool :: (self: *String) -> ?bool => {
+        trimmed := String::trim(self)
+        
+        true_str := String::from_cstr("true" as *u8)
+        false_str := String::from_cstr("false" as *u8)
+        
+        if String::equals(&trimmed, &true_str) {
+            ret some true
+        } else if String::equals(&trimmed, &false_str) {
+            ret some false
+        } else {
+            ret none
+        }
+    }
 }
