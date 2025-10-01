@@ -5,3 +5,5 @@ Cargo.lock
 *.o
 *.out
 .env
+/.cargo
+/std.tri
