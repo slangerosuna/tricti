@@ -6,6 +6,7 @@ pub mod codegen;
 pub mod computed_columns;
 pub mod error_propagation;
 pub mod event_loop_manager;
+pub mod ffi_runtime;
 pub mod parser;
 pub mod query;
 pub mod query_executor;

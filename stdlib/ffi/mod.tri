@@ -1,0 +1,84 @@
+# FFI (Foreign Function Interface) Module
+# Provides C/C++ interoperability for TriCTI
+
+use core
+
+# C-compatible types
+CInt :: type = i32
+CUInt :: type = u32
+CLong :: type = i64
+CULong :: type = u64
+CSize :: type = u64
+CChar :: type = u8
+CVoid :: type = none
+
+# Dynamic library handle
+DynLib :: struct {
+    handle: *u8,
+    path: String,
+    is_open: bool,
+}
+
+impl DynLib {
+    # Load shared library (.so on Linux, .dll on Windows, .dylib on macOS)
+    open :: (path: String) -> ?DynLib => {
+        handle := ffi_dlopen(String::as_ptr(&path))
+        if handle == (0 as *u8) {
+            ret none
+        }
+        ret some DynLib {
+            handle: handle,
+            path: path,
+            is_open: true,
+        }
+    }
+    
+    # Get function symbol from library
+    get_symbol :: (lib: &DynLib, name: String) -> ?*u8 => {
+        if !lib.is_open {
+            ret none
+        }
+        symbol := ffi_dlsym(lib.handle, String::as_ptr(&name))
+        if symbol == (0 as *u8) {
+            ret none
+        }
+        ret some symbol
+    }
+    
+    # Close library
+    close :: (lib: &mut DynLib) -> bool => {
+        if !lib.is_open {
+            ret true
+        }
+        result := ffi_dlclose(lib.handle)
+        lib.is_open = false
+        ret result == 0
+    }
+    
+    # Get last error message
+    error :: () -> String => {
+        err_ptr := ffi_dlerror()
+        if err_ptr == (0 as *u8) {
+            ret String::from("No error")
+        }
+        ret String::from_cstr(err_ptr)
+    }
+}
+
+impl Drop for DynLib {
+    drop :: (&mut self) => {
+        DynLib::close(self)
+    }
+}
+
+# FFI helper functions - implemented in Rust runtime
+extern ffi_dlopen :: (path: *u8) -> *u8
+extern ffi_dlsym :: (handle: *u8, symbol: *u8) -> *u8
+extern ffi_dlclose :: (handle: *u8) -> i32
+extern ffi_dlerror :: () -> *u8
+
+# Memory allocation for FFI (C malloc/free)
+extern ffi_malloc :: (size: u64) -> *u8
+extern ffi_free :: (ptr: *u8) -> none
+extern ffi_memcpy :: (dest: *u8, src: *u8, n: u64) -> *u8
+extern ffi_memset :: (ptr: *u8, value: i32, n: u64) -> *u8

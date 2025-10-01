@@ -6247,7 +6247,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // First pass: declare all functions with mapped param/ret types (skip top-level main; we'll build the real C entry separately)
         for stmt in &program.statements {
             match stmt {
-                Statement::ConstDecl { name, value, .. } => {
+                Statement::ConstDecl { name, value, extern_linkage, .. } => {
                     if let ConstValue::Expression(Expression::Function {
                         parameters,
                         return_type,
@@ -6278,7 +6278,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                         };
                         // In runtime mode, emit user main as `tricti_main` symbol
                         let fname = if name == "main" { "tricti_main" } else { name };
-                        let f = self.module.add_function(fname, fn_type, None);
+                        // If extern_linkage is present, declare as external function
+                        let linkage = if extern_linkage.is_some() {
+                            Some(Linkage::External)
+                        } else {
+                            None
+                        };
+                        let f = self.module.add_function(fname, fn_type, linkage);
                         self.functions.insert(fname.to_string(), f);
                     } else if let ConstValue::SystemDef(system_def) = value {
                         // Handle system function declarations
@@ -6486,7 +6492,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Second pass: define bodies
         for stmt in &program.statements {
             match stmt {
-                Statement::ConstDecl { name, value, .. } => {
+                Statement::ConstDecl { name, value, extern_linkage, .. } => {
+                    // Skip extern functions - they're declared but not defined
+                    if extern_linkage.is_some() {
+                        continue;
+                    }
                     if let ConstValue::Expression(Expression::Function {
                         parameters,
                         body,
