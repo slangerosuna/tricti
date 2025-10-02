@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use tricti::ast::*;
 use tricti::table_runtime::*;
-use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests {

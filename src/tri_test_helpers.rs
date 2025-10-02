@@ -1,9 +1,8 @@
+use crate::{codegen, parser, semantic};
 /// Testing utilities for TriCTI code.
 /// This module provides macros and functions to simplify writing tests that compile and run TriCTI code,
 /// asserting on stdout output. It encapsulates the common pattern from run_stdlib_prelude.rs.
-
 use inkwell::context::Context;
-use crate::{codegen, parser, semantic};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -54,7 +53,8 @@ macro_rules! tri_test {
             }
             let obj_path = format!("tests/tmp_{}.o", stringify!($name));
             let exe_path = format!("tests/tmp_{}.out", stringify!($name));
-            let stdout = tricti::tri_test_helpers::compile_and_run_tri($tri_code, &obj_path, &exe_path);
+            let stdout =
+                tricti::tri_test_helpers::compile_and_run_tri($tri_code, &obj_path, &exe_path);
             assert_eq!(stdout, $expected);
         }
     };
@@ -99,7 +99,10 @@ macro_rules! tri_test_panic {
             assert!(link_status.success(), "link failed");
 
             let run_output = std::process::Command::new(&exe_path).output().expect("run");
-            assert!(!run_output.status.success(), "expected panic but program succeeded");
+            assert!(
+                !run_output.status.success(),
+                "expected panic but program succeeded"
+            );
         }
     };
 }
@@ -120,7 +123,8 @@ macro_rules! tri_test_with_prelude {
             let full_code = format!("{}\n{}", prelude, $user_code);
             let obj_path = format!("tests/tmp_{}.o", stringify!($name));
             let exe_path = format!("tests/tmp_{}.out", stringify!($name));
-            let stdout = tricti::tri_test_helpers::compile_and_run_tri(&full_code, &obj_path, &exe_path);
+            let stdout =
+                tricti::tri_test_helpers::compile_and_run_tri(&full_code, &obj_path, &exe_path);
             assert_eq!(stdout, $expected);
         }
     };

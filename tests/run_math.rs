@@ -1,8 +1,8 @@
 use inkwell::context::Context;
-use tricti::{codegen, parser, semantic};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use tricti::{codegen, parser, semantic};
 
 fn clang_available() -> bool {
     Command::new("clang").arg("--version").output().is_ok()

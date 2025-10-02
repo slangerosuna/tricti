@@ -2,7 +2,10 @@
 // These tests follow TDD: implement the test first, then the logic.
 
 use tricti::stdlib::legacy::*;
-use tricti::stdlib::modern::{StdError as AdvancedStdError, StdResult as AdvancedStdResult, std_error_message as advanced_std_error_message, std_ok as advanced_std_ok, std_err as advanced_std_err};
+use tricti::stdlib::modern::{
+    std_err as advanced_std_err, std_error_message as advanced_std_error_message,
+    std_ok as advanced_std_ok, StdError as AdvancedStdError, StdResult as AdvancedStdResult,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StdErrorKind {
@@ -158,14 +161,22 @@ pub fn array_remove_where<T: Clone, F>(items: &[T], predicate: F) -> Vec<T>
 where
     F: Fn(&T) -> bool,
 {
-    items.iter().filter(|item| !predicate(item)).cloned().collect()
+    items
+        .iter()
+        .filter(|item| !predicate(item))
+        .cloned()
+        .collect()
 }
 
 pub fn array_filter<T: Clone, F>(items: &[T], predicate: F) -> Vec<T>
 where
     F: Fn(&T) -> bool,
 {
-    items.iter().filter(|item| predicate(item)).cloned().collect()
+    items
+        .iter()
+        .filter(|item| predicate(item))
+        .cloned()
+        .collect()
 }
 
 pub fn array_find_index<T, F>(items: &[T], predicate: F) -> Option<usize>
@@ -492,7 +503,7 @@ mod tests {
         let arr = vec![1, 2, 3];
         let result = array_set_at(&arr, 1, 99);
         assert_eq!(result, vec![1, 99, 3]);
-        
+
         // Test out of bounds
         let result = array_set_at(&arr, 10, 99);
         assert_eq!(result, vec![1, 2, 3]);
@@ -503,7 +514,7 @@ mod tests {
         let arr = vec![1, 2, 3, 4];
         let result = array_remove_at(&arr, 1);
         assert_eq!(result, vec![1, 3, 4]);
-        
+
         // Test out of bounds
         let result = array_remove_at(&arr, 10);
         assert_eq!(result, vec![1, 2, 3, 4]);
@@ -548,7 +559,7 @@ mod tests {
     fn test_array_all() {
         let arr = vec![2, 4, 6, 8];
         assert!(array_all(&arr, |&x| x % 2 == 0));
-        
+
         let arr = vec![2, 3, 6, 8];
         assert!(!array_all(&arr, |&x| x % 2 == 0));
     }
@@ -557,7 +568,7 @@ mod tests {
     fn test_array_any() {
         let arr = vec![1, 3, 5, 7];
         assert!(!array_any(&arr, |&x| x % 2 == 0));
-        
+
         let arr = vec![1, 2, 5, 7];
         assert!(array_any(&arr, |&x| x % 2 == 0));
     }
@@ -567,7 +578,7 @@ mod tests {
         let arr = vec![1, 2, 3, 4];
         let result = array_fold(&arr, 0, |acc, &x| acc + x);
         assert_eq!(result, 10);
-        
+
         let result = array_fold(&arr, 1, |acc, &x| acc * x);
         assert_eq!(result, 24);
     }
@@ -637,7 +648,7 @@ mod tests {
     fn test_slice_len() {
         let arr = vec![1, 2, 3];
         assert_eq!(slice_len(&arr), 3);
-        
+
         let empty: Vec<i32> = vec![];
         assert_eq!(slice_len(&empty), 0);
     }
@@ -646,7 +657,7 @@ mod tests {
     fn test_slice_is_empty() {
         let arr = vec![1, 2, 3];
         assert!(!slice_is_empty(&arr));
-        
+
         let empty: Vec<i32> = vec![];
         assert!(slice_is_empty(&empty));
     }
@@ -772,7 +783,9 @@ pub enum YieldPoint {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskState {
     Pending,
-    Running { started_at_ms: i64 },
+    Running {
+        started_at_ms: i64,
+    },
     Suspended {
         yield_point: YieldPoint,
         suspended_at_ms: i64,
@@ -782,8 +795,12 @@ pub enum TaskState {
         completed_at_ms: i64,
         result: SystemExecutionResult,
     },
-    Failed { error: AsyncExecutionError },
-    Cancelled { cancelled_at_ms: i64 },
+    Failed {
+        error: AsyncExecutionError,
+    },
+    Cancelled {
+        cancelled_at_ms: i64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -986,7 +1003,11 @@ pub fn submit_task(
 }
 
 pub fn mark_task_running(runtime: &mut AsyncRuntimeState, task_id: u64) {
-    if let Some(idx) = runtime.active_tasks.iter().position(|task| task.id == task_id) {
+    if let Some(idx) = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
+    {
         let task = &mut runtime.active_tasks[idx];
         task.state = TaskState::Running {
             started_at_ms: now_ms(),
@@ -999,14 +1020,23 @@ pub fn mark_task_running(runtime: &mut AsyncRuntimeState, task_id: u64) {
 pub fn complete_task(runtime: &mut AsyncRuntimeState, task_id: u64, state: TaskState) {
     if let Some(pos) = runtime.queued_task_ids.iter().position(|&id| id == task_id) {
         runtime.queued_task_ids.remove(pos);
-        runtime.resource_summary.queued_tasks = std::cmp::max(runtime.resource_summary.queued_tasks - 1, 0);
+        runtime.resource_summary.queued_tasks =
+            std::cmp::max(runtime.resource_summary.queued_tasks - 1, 0);
     }
 
-    if let Some(pos) = runtime.wakers.iter().position(|waker| waker.task_id == task_id) {
+    if let Some(pos) = runtime
+        .wakers
+        .iter()
+        .position(|waker| waker.task_id == task_id)
+    {
         runtime.wakers.remove(pos);
     }
 
-    if let Some(idx) = runtime.active_tasks.iter().position(|task| task.id == task_id) {
+    if let Some(idx) = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
+    {
         let task = runtime.active_tasks.remove(idx);
         clear_task_intermediate_state(runtime, task_id);
         release_task_resources(runtime, &task);
@@ -1016,7 +1046,8 @@ pub fn complete_task(runtime: &mut AsyncRuntimeState, task_id: u64, state: TaskS
             state: state.clone(),
         });
 
-        runtime.resource_summary.active_tasks = std::cmp::max(runtime.resource_summary.active_tasks - 1, 0);
+        runtime.resource_summary.active_tasks =
+            std::cmp::max(runtime.resource_summary.active_tasks - 1, 0);
         runtime.resource_summary.completed_tasks += 1;
 
         match state {
@@ -1039,7 +1070,11 @@ pub fn suspend_task(
     yield_point: YieldPoint,
     intermediate_state: Option<Vec<ParameterValue>>,
 ) {
-    if let Some(idx) = runtime.active_tasks.iter().position(|task| task.id == task_id) {
+    if let Some(idx) = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
+    {
         let task = &mut runtime.active_tasks[idx];
         task.state = TaskState::Suspended {
             yield_point,
@@ -1052,9 +1087,15 @@ pub fn suspend_task(
 }
 
 pub fn resume_task(runtime: &mut AsyncRuntimeState, task_id: u64) -> TaskResumeResult {
-    if let Some(idx) = runtime.active_tasks.iter().position(|task| task.id == task_id) {
+    if let Some(idx) = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
+    {
         let intermediate_state = match &runtime.active_tasks[idx].state {
-            TaskState::Suspended { intermediate_state, .. } => intermediate_state.clone(),
+            TaskState::Suspended {
+                intermediate_state, ..
+            } => intermediate_state.clone(),
             TaskState::Pending => {
                 if !runtime.queued_task_ids.contains(&task_id) {
                     runtime.queued_task_ids.push(task_id);
@@ -1101,7 +1142,8 @@ pub fn resume_task(runtime: &mut AsyncRuntimeState, task_id: u64) -> TaskResumeR
 pub fn cancel_task(runtime: &mut AsyncRuntimeState, task_id: u64) {
     if let Some(pos) = runtime.queued_task_ids.iter().position(|&id| id == task_id) {
         runtime.queued_task_ids.remove(pos);
-        runtime.resource_summary.queued_tasks = std::cmp::max(runtime.resource_summary.queued_tasks - 1, 0);
+        runtime.resource_summary.queued_tasks =
+            std::cmp::max(runtime.resource_summary.queued_tasks - 1, 0);
     }
 
     let state = TaskState::Cancelled {
@@ -1114,7 +1156,8 @@ pub fn cancel_task(runtime: &mut AsyncRuntimeState, task_id: u64) {
 pub fn fail_task(runtime: &mut AsyncRuntimeState, task_id: u64, error: AsyncExecutionError) {
     if let Some(pos) = runtime.queued_task_ids.iter().position(|&id| id == task_id) {
         runtime.queued_task_ids.remove(pos);
-        runtime.resource_summary.queued_tasks = std::cmp::max(runtime.resource_summary.queued_tasks - 1, 0);
+        runtime.resource_summary.queued_tasks =
+            std::cmp::max(runtime.resource_summary.queued_tasks - 1, 0);
     }
 
     let state = TaskState::Failed { error };
@@ -1122,7 +1165,11 @@ pub fn fail_task(runtime: &mut AsyncRuntimeState, task_id: u64, error: AsyncExec
     complete_task(runtime, task_id, state);
 }
 
-pub fn complete_task_success(runtime: &mut AsyncRuntimeState, task_id: u64, result: SystemExecutionResult) {
+pub fn complete_task_success(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    result: SystemExecutionResult,
+) {
     let state = TaskState::Completed {
         completed_at_ms: now_ms(),
         result,
@@ -1133,7 +1180,10 @@ pub fn complete_task_success(runtime: &mut AsyncRuntimeState, task_id: u64, resu
 
 pub fn yield_task(runtime: &mut AsyncRuntimeState, task_id: u64, partial: SystemExecutionResult) {
     match partial {
-        SystemExecutionResult::Partial { intermediate_state, next_yield_point } => {
+        SystemExecutionResult::Partial {
+            intermediate_state,
+            next_yield_point,
+        } => {
             suspend_task(runtime, task_id, next_yield_point, Some(intermediate_state));
         }
         _ => {
@@ -1142,22 +1192,24 @@ pub fn yield_task(runtime: &mut AsyncRuntimeState, task_id: u64, partial: System
     }
 }
 
-pub fn suspend_task_for_yield_point(runtime: &mut AsyncRuntimeState, task_id: u64, yield_point: YieldPoint) {
+pub fn suspend_task_for_yield_point(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    yield_point: YieldPoint,
+) {
     suspend_task(runtime, task_id, yield_point, None);
 }
 
 pub fn apply_task_outcome(runtime: &mut AsyncRuntimeState, task_id: u64, outcome: TaskOutcome) {
     match outcome {
-        TaskOutcome::Completed { result } => {
-            match result {
-                SystemExecutionResult::Partial { .. } => {
-                    yield_task(runtime, task_id, result);
-                }
-                _ => {
-                    complete_task_success(runtime, task_id, result);
-                }
+        TaskOutcome::Completed { result } => match result {
+            SystemExecutionResult::Partial { .. } => {
+                yield_task(runtime, task_id, result);
             }
-        }
+            _ => {
+                complete_task_success(runtime, task_id, result);
+            }
+        },
         TaskOutcome::Failed { error } => {
             fail_task(runtime, task_id, error);
         }
@@ -1193,8 +1245,15 @@ pub fn take_completed_task(runtime: &mut AsyncRuntimeState) -> Option<CompletedT
     Some(runtime.completed_tasks.remove(0))
 }
 
-pub fn take_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u64) -> Option<Vec<ParameterValue>> {
-    if let Some(idx) = runtime.resume_buffers.iter().position(|state| state.task_id == task_id) {
+pub fn take_task_intermediate_state(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+) -> Option<Vec<ParameterValue>> {
+    if let Some(idx) = runtime
+        .resume_buffers
+        .iter()
+        .position(|state| state.task_id == task_id)
+    {
         let record = runtime.resume_buffers.remove(idx);
         Some(record.values)
     } else {
@@ -1202,13 +1261,18 @@ pub fn take_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u6
     }
 }
 
-pub fn store_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u64, values: Vec<ParameterValue>) {
-    let record = TaskIntermediateState {
-        task_id,
-        values,
-    };
+pub fn store_task_intermediate_state(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    values: Vec<ParameterValue>,
+) {
+    let record = TaskIntermediateState { task_id, values };
 
-    if let Some(idx) = runtime.resume_buffers.iter().position(|state| state.task_id == task_id) {
+    if let Some(idx) = runtime
+        .resume_buffers
+        .iter()
+        .position(|state| state.task_id == task_id)
+    {
         runtime.resume_buffers[idx] = record;
     } else {
         runtime.resume_buffers.push(record);
@@ -1216,16 +1280,35 @@ pub fn store_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u
 }
 
 pub fn clear_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u64) {
-    if let Some(idx) = runtime.resume_buffers.iter().position(|state| state.task_id == task_id) {
+    if let Some(idx) = runtime
+        .resume_buffers
+        .iter()
+        .position(|state| state.task_id == task_id)
+    {
         runtime.resume_buffers.remove(idx);
     }
 }
 
-pub fn acquire_resource_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, request: ResourceRequest) -> bool {
-    try_acquire_resource(runtime, task_id, &request.resource_name, request.access_type, request.lease_duration_ms, true)
+pub fn acquire_resource_for_task(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    request: ResourceRequest,
+) -> bool {
+    try_acquire_resource(
+        runtime,
+        task_id,
+        &request.resource_name,
+        request.access_type,
+        request.lease_duration_ms,
+        true,
+    )
 }
 
-pub fn acquire_resources_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, requests: Vec<ResourceRequest>) -> bool {
+pub fn acquire_resources_for_task(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    requests: Vec<ResourceRequest>,
+) -> bool {
     if requests.is_empty() {
         return true;
     }
@@ -1233,7 +1316,14 @@ pub fn acquire_resources_for_task(runtime: &mut AsyncRuntimeState, task_id: u64,
     let mut acquired_names: Vec<String> = Vec::new();
 
     for request in &requests {
-        let success = try_acquire_resource(runtime, task_id, &request.resource_name, request.access_type.clone(), request.lease_duration_ms, true);
+        let success = try_acquire_resource(
+            runtime,
+            task_id,
+            &request.resource_name,
+            request.access_type.clone(),
+            request.lease_duration_ms,
+            true,
+        );
         if !success {
             for name in &acquired_names {
                 release_resource_for_task(runtime, task_id, name);
@@ -1246,13 +1336,27 @@ pub fn acquire_resources_for_task(runtime: &mut AsyncRuntimeState, task_id: u64,
     true
 }
 
-pub fn release_resource_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, resource_name: &str) {
-    runtime.resource_leases.retain(|lease| !(lease.task_id == task_id && lease.resource_name == resource_name));
+pub fn release_resource_for_task(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    resource_name: &str,
+) {
+    runtime
+        .resource_leases
+        .retain(|lease| !(lease.task_id == task_id && lease.resource_name == resource_name));
     wake_waiters_for_resource(runtime, resource_name);
 
-    if let Some(task_idx) = runtime.active_tasks.iter().position(|task| task.id == task_id) {
+    if let Some(task_idx) = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
+    {
         let task = &mut runtime.active_tasks[task_idx];
-        if let Some(handle_idx) = task.resource_handles.iter().position(|handle| handle.resource_name == resource_name) {
+        if let Some(handle_idx) = task
+            .resource_handles
+            .iter()
+            .position(|handle| handle.resource_name == resource_name)
+        {
             task.resource_handles.remove(handle_idx);
         }
     }
@@ -1260,7 +1364,9 @@ pub fn release_resource_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, 
 
 pub fn release_task_resources(runtime: &mut AsyncRuntimeState, task: &AsyncTask) {
     for handle in &task.resource_handles {
-        runtime.resource_leases.retain(|lease| !(lease.task_id == task.id && lease.resource_name == handle.resource_name));
+        runtime.resource_leases.retain(|lease| {
+            !(lease.task_id == task.id && lease.resource_name == handle.resource_name)
+        });
         wake_waiters_for_resource(runtime, &handle.resource_name);
     }
 }
@@ -1273,7 +1379,11 @@ pub fn try_acquire_resource(
     lease_duration_ms: Option<i64>,
     enqueue_on_conflict: bool,
 ) -> bool {
-    let task_idx = match runtime.active_tasks.iter().position(|task| task.id == task_id) {
+    let task_idx = match runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
+    {
         Some(idx) => idx,
         None => return false,
     };
@@ -1281,7 +1391,11 @@ pub fn try_acquire_resource(
     let task = &runtime.active_tasks[task_idx];
 
     // Check if task already has this resource
-    if task.resource_handles.iter().any(|handle| handle.resource_name == resource_name) {
+    if task
+        .resource_handles
+        .iter()
+        .any(|handle| handle.resource_name == resource_name)
+    {
         return true;
     }
 
@@ -1294,7 +1408,10 @@ pub fn try_acquire_resource(
 
     if conflict {
         if enqueue_on_conflict {
-            let existing_waiter = runtime.resource_waiters.iter().any(|waiter| waiter.task_id == task_id && waiter.resource_name == resource_name);
+            let existing_waiter = runtime
+                .resource_waiters
+                .iter()
+                .any(|waiter| waiter.task_id == task_id && waiter.resource_name == resource_name);
             if !existing_waiter {
                 let waiter = ResourceWaiter {
                     resource_name: resource_name.to_string(),
@@ -1348,7 +1465,14 @@ pub fn wake_waiters_for_resource(runtime: &mut AsyncRuntimeState, resource_name:
             continue;
         }
 
-        let acquired = try_acquire_resource(runtime, waiter_task_id, &waiter_resource_name, waiter_access_type, waiter_lease_duration_ms, false);
+        let acquired = try_acquire_resource(
+            runtime,
+            waiter_task_id,
+            &waiter_resource_name,
+            waiter_access_type,
+            waiter_lease_duration_ms,
+            false,
+        );
         if acquired {
             runtime.resource_waiters.remove(idx);
             let _ = resume_task(runtime, waiter_task_id);
@@ -1361,7 +1485,11 @@ pub fn wake_waiters_for_resource(runtime: &mut AsyncRuntimeState, resource_name:
 pub fn register_task_waker(runtime: &mut AsyncRuntimeState, task_id: u64, token: String) {
     let waker = TaskWaker { task_id, token };
 
-    if let Some(idx) = runtime.wakers.iter().position(|existing| existing.task_id == task_id) {
+    if let Some(idx) = runtime
+        .wakers
+        .iter()
+        .position(|existing| existing.task_id == task_id)
+    {
         runtime.wakers[idx] = waker;
     } else {
         runtime.wakers.push(waker);
@@ -1369,7 +1497,11 @@ pub fn register_task_waker(runtime: &mut AsyncRuntimeState, task_id: u64, token:
 }
 
 pub fn take_task_waker(runtime: &mut AsyncRuntimeState, task_id: u64) -> Option<TaskWaker> {
-    if let Some(idx) = runtime.wakers.iter().position(|waker| waker.task_id == task_id) {
+    if let Some(idx) = runtime
+        .wakers
+        .iter()
+        .position(|waker| waker.task_id == task_id)
+    {
         Some(runtime.wakers.remove(idx))
     } else {
         None
@@ -1401,17 +1533,29 @@ pub fn poll_next_ready_task(runtime: &mut AsyncRuntimeState) -> Option<AsyncTask
 }
 
 pub fn wake_sleeping_tasks(runtime: &mut AsyncRuntimeState, now_ms: i64) {
-    let task_ids_to_resume: Vec<u64> = runtime.active_tasks.iter().filter_map(|task| {
-        if let TaskState::Suspended { yield_point: YieldPoint::Sleeping { duration_ms, started_at_ms }, .. } = &task.state {
-            if now_ms >= started_at_ms + duration_ms {
-                Some(task.id)
+    let task_ids_to_resume: Vec<u64> = runtime
+        .active_tasks
+        .iter()
+        .filter_map(|task| {
+            if let TaskState::Suspended {
+                yield_point:
+                    YieldPoint::Sleeping {
+                        duration_ms,
+                        started_at_ms,
+                    },
+                ..
+            } = &task.state
+            {
+                if now_ms >= started_at_ms + duration_ms {
+                    Some(task.id)
+                } else {
+                    None
+                }
             } else {
                 None
             }
-        } else {
-            None
-        }
-    }).collect();
+        })
+        .collect();
 
     for task_id in task_ids_to_resume {
         let _ = resume_task(runtime, task_id);
@@ -1419,17 +1563,21 @@ pub fn wake_sleeping_tasks(runtime: &mut AsyncRuntimeState, now_ms: i64) {
 }
 
 pub fn expire_resource_leases(runtime: &mut AsyncRuntimeState, now_ms: i64) {
-    let leases_to_expire: Vec<(u64, String)> = runtime.resource_leases.iter().filter_map(|lease| {
-        if let Some(duration_ms) = lease.lease_duration_ms {
-            if now_ms >= lease.acquired_at_ms + duration_ms {
-                Some((lease.task_id, lease.resource_name.clone()))
+    let leases_to_expire: Vec<(u64, String)> = runtime
+        .resource_leases
+        .iter()
+        .filter_map(|lease| {
+            if let Some(duration_ms) = lease.lease_duration_ms {
+                if now_ms >= lease.acquired_at_ms + duration_ms {
+                    Some((lease.task_id, lease.resource_name.clone()))
+                } else {
+                    None
+                }
             } else {
                 None
             }
-        } else {
-            None
-        }
-    }).collect();
+        })
+        .collect();
 
     for (task_id, resource_name) in leases_to_expire {
         release_resource_for_task(runtime, task_id, &resource_name);
@@ -1437,21 +1585,31 @@ pub fn expire_resource_leases(runtime: &mut AsyncRuntimeState, now_ms: i64) {
 }
 
 pub fn check_task_timeouts(runtime: &mut AsyncRuntimeState, now_ms: i64) {
-    let tasks_to_timeout: Vec<(u64, i64)> = runtime.active_tasks.iter().filter_map(|task| {
-        if let Some(timeout_ms) = task.timeout_ms {
-            if now_ms >= task.created_at_ms + timeout_ms {
-                Some((task.id, timeout_ms))
+    let tasks_to_timeout: Vec<(u64, i64)> = runtime
+        .active_tasks
+        .iter()
+        .filter_map(|task| {
+            if let Some(timeout_ms) = task.timeout_ms {
+                if now_ms >= task.created_at_ms + timeout_ms {
+                    Some((task.id, timeout_ms))
+                } else {
+                    None
+                }
             } else {
                 None
             }
-        } else {
-            None
-        }
-    }).collect();
+        })
+        .collect();
 
     for (task_id, timeout_value) in tasks_to_timeout {
         let error = AsyncExecutionError::Timeout {
-            system: runtime.active_tasks.iter().find(|t| t.id == task_id).unwrap().system_name.clone(),
+            system: runtime
+                .active_tasks
+                .iter()
+                .find(|t| t.id == task_id)
+                .unwrap()
+                .system_name
+                .clone(),
             duration_ms: timeout_value,
         };
         fail_task(runtime, task_id, error);
@@ -1467,7 +1625,15 @@ pub fn runtime_next_deadline_ms(runtime: &AsyncRuntimeState) -> Option<i64> {
             deadline = min_option_i64(deadline, candidate);
         }
 
-        if let TaskState::Suspended { yield_point: YieldPoint::Sleeping { duration_ms, started_at_ms }, .. } = &task.state {
+        if let TaskState::Suspended {
+            yield_point:
+                YieldPoint::Sleeping {
+                    duration_ms,
+                    started_at_ms,
+                },
+            ..
+        } = &task.state
+        {
             let candidate = started_at_ms + duration_ms;
             deadline = min_option_i64(deadline, candidate);
         }
@@ -1489,9 +1655,14 @@ pub fn next_ready_task(runtime: &mut AsyncRuntimeState) -> Option<AsyncTask> {
     }
 
     let task_id = runtime.queued_task_ids.remove(0);
-    runtime.resource_summary.queued_tasks = std::cmp::max(runtime.resource_summary.queued_tasks - 1, 0);
+    runtime.resource_summary.queued_tasks =
+        std::cmp::max(runtime.resource_summary.queued_tasks - 1, 0);
 
-    runtime.active_tasks.iter().find(|task| task.id == task_id).cloned()
+    runtime
+        .active_tasks
+        .iter()
+        .find(|task| task.id == task_id)
+        .cloned()
 }
 
 pub fn empty_parameter_bag() -> ParameterBag {
@@ -1539,12 +1710,19 @@ pub fn resource_access_conflict(existing: &ResourceAccess, requested: &ResourceA
 }
 
 pub fn count_running_tasks(tasks: &[AsyncTask]) -> i64 {
-    tasks.iter().filter(|task| matches!(task.state, TaskState::Running { .. })).count() as i64
+    tasks
+        .iter()
+        .filter(|task| matches!(task.state, TaskState::Running { .. }))
+        .count() as i64
 }
 
 pub fn min_option_i64(current: Option<i64>, candidate: i64) -> Option<i64> {
     match current {
-        Some(existing) => Some(if candidate < existing { candidate } else { existing }),
+        Some(existing) => Some(if candidate < existing {
+            candidate
+        } else {
+            existing
+        }),
         None => Some(candidate),
     }
 }
@@ -1590,7 +1768,13 @@ mod async_runtime_tests {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
 
-        let task = submit_task(&mut runtime, "test_system".to_string(), params, TaskPriority::Normal, Some(5000));
+        let task = submit_task(
+            &mut runtime,
+            "test_system".to_string(),
+            params,
+            TaskPriority::Normal,
+            Some(5000),
+        );
 
         assert_eq!(task.id, 1);
         assert_eq!(task.system_name, "test_system");
@@ -1610,7 +1794,13 @@ mod async_runtime_tests {
     fn test_mark_task_running() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         mark_task_running(&mut runtime, task.id);
 
@@ -1622,7 +1812,13 @@ mod async_runtime_tests {
     fn test_complete_task_success() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
         mark_task_running(&mut runtime, task.id);
 
         let result = SystemExecutionResult::Success {
@@ -1636,7 +1832,10 @@ mod async_runtime_tests {
         assert!(runtime.active_tasks.is_empty());
         assert_eq!(runtime.completed_tasks.len(), 1);
         assert_eq!(runtime.completed_tasks[0].id, task.id);
-        assert!(matches!(runtime.completed_tasks[0].state, TaskState::Completed { .. }));
+        assert!(matches!(
+            runtime.completed_tasks[0].state,
+            TaskState::Completed { .. }
+        ));
         assert_eq!(runtime.resource_summary.completed_tasks, 1);
         assert_eq!(runtime.resource_summary.active_tasks, 0);
     }
@@ -1645,7 +1844,13 @@ mod async_runtime_tests {
     fn test_suspend_and_resume_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
         mark_task_running(&mut runtime, task.id);
 
         let yield_point = YieldPoint::Sleeping {
@@ -1671,13 +1876,22 @@ mod async_runtime_tests {
     fn test_cancel_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         cancel_task(&mut runtime, task.id);
 
         assert!(runtime.active_tasks.is_empty());
         assert_eq!(runtime.completed_tasks.len(), 1);
-        assert!(matches!(runtime.completed_tasks[0].state, TaskState::Cancelled { .. }));
+        assert!(matches!(
+            runtime.completed_tasks[0].state,
+            TaskState::Cancelled { .. }
+        ));
         assert_eq!(runtime.resource_summary.cancelled_tasks, 1);
     }
 
@@ -1685,7 +1899,13 @@ mod async_runtime_tests {
     fn test_fail_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         let error = AsyncExecutionError::SystemError {
             system: "test".to_string(),
@@ -1696,7 +1916,10 @@ mod async_runtime_tests {
 
         assert!(runtime.active_tasks.is_empty());
         assert_eq!(runtime.completed_tasks.len(), 1);
-        assert!(matches!(runtime.completed_tasks[0].state, TaskState::Failed { .. }));
+        assert!(matches!(
+            runtime.completed_tasks[0].state,
+            TaskState::Failed { .. }
+        ));
         assert_eq!(runtime.resource_summary.failed_tasks, 1);
     }
 
@@ -1704,7 +1927,13 @@ mod async_runtime_tests {
     fn test_yield_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
         mark_task_running(&mut runtime, task.id);
 
         let intermediate_state = vec![ParameterValue {
@@ -1725,7 +1954,12 @@ mod async_runtime_tests {
         yield_task(&mut runtime, task.id, partial_result);
 
         let active_task = &runtime.active_tasks[0];
-        if let TaskState::Suspended { yield_point: yp, intermediate_state: istate, .. } = &active_task.state {
+        if let TaskState::Suspended {
+            yield_point: yp,
+            intermediate_state: istate,
+            ..
+        } = &active_task.state
+        {
             assert_eq!(yp, &yield_point);
             assert_eq!(istate, &Some(intermediate_state));
         } else {
@@ -1737,7 +1971,13 @@ mod async_runtime_tests {
     fn test_apply_task_outcome() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
         mark_task_running(&mut runtime, task.id);
 
         let result = SystemExecutionResult::Success {
@@ -1746,7 +1986,9 @@ mod async_runtime_tests {
             tables_modified: vec![],
         };
 
-        let outcome = TaskOutcome::Completed { result: result.clone() };
+        let outcome = TaskOutcome::Completed {
+            result: result.clone(),
+        };
         apply_task_outcome(&mut runtime, task.id, outcome);
 
         assert!(runtime.active_tasks.is_empty());
@@ -1757,7 +1999,13 @@ mod async_runtime_tests {
     fn test_begin_next_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         let dispatch_context = begin_next_task(&mut runtime);
 
@@ -1774,7 +2022,13 @@ mod async_runtime_tests {
     fn test_take_completed_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
         mark_task_running(&mut runtime, task.id);
 
         let result = SystemExecutionResult::Success {
@@ -1812,12 +2066,30 @@ mod async_runtime_tests {
 
     #[test]
     fn test_resource_access_conflict() {
-        assert!(!resource_access_conflict(&ResourceAccess::Immutable, &ResourceAccess::Immutable));
-        assert!(resource_access_conflict(&ResourceAccess::Immutable, &ResourceAccess::Mutable));
-        assert!(resource_access_conflict(&ResourceAccess::Immutable, &ResourceAccess::Owned));
-        assert!(resource_access_conflict(&ResourceAccess::Mutable, &ResourceAccess::Immutable));
-        assert!(resource_access_conflict(&ResourceAccess::Mutable, &ResourceAccess::Mutable));
-        assert!(resource_access_conflict(&ResourceAccess::Owned, &ResourceAccess::Immutable));
+        assert!(!resource_access_conflict(
+            &ResourceAccess::Immutable,
+            &ResourceAccess::Immutable
+        ));
+        assert!(resource_access_conflict(
+            &ResourceAccess::Immutable,
+            &ResourceAccess::Mutable
+        ));
+        assert!(resource_access_conflict(
+            &ResourceAccess::Immutable,
+            &ResourceAccess::Owned
+        ));
+        assert!(resource_access_conflict(
+            &ResourceAccess::Mutable,
+            &ResourceAccess::Immutable
+        ));
+        assert!(resource_access_conflict(
+            &ResourceAccess::Mutable,
+            &ResourceAccess::Mutable
+        ));
+        assert!(resource_access_conflict(
+            &ResourceAccess::Owned,
+            &ResourceAccess::Immutable
+        ));
     }
 
     #[test]
@@ -1825,8 +2097,20 @@ mod async_runtime_tests {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
 
-        let task1 = submit_task(&mut runtime, "test".to_string(), params.clone(), TaskPriority::Normal, None);
-        let task2 = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task1 = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params.clone(),
+            TaskPriority::Normal,
+            None,
+        );
+        let task2 = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         mark_task_running(&mut runtime, task1.id);
 
@@ -1868,7 +2152,13 @@ mod async_runtime_tests {
     fn test_acquire_resource_for_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         let request = ResourceRequest {
             resource_name: "resource1".to_string(),
@@ -1889,7 +2179,13 @@ mod async_runtime_tests {
     fn test_acquire_resources_for_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         let requests = vec![
             ResourceRequest {
@@ -1916,7 +2212,13 @@ mod async_runtime_tests {
     fn test_release_resource_for_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         let request = ResourceRequest {
             resource_name: "resource1".to_string(),
@@ -1939,8 +2241,20 @@ mod async_runtime_tests {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
 
-        let task1 = submit_task(&mut runtime, "test1".to_string(), params.clone(), TaskPriority::Normal, None);
-        let task2 = submit_task(&mut runtime, "test2".to_string(), params, TaskPriority::Normal, None);
+        let task1 = submit_task(
+            &mut runtime,
+            "test1".to_string(),
+            params.clone(),
+            TaskPriority::Normal,
+            None,
+        );
+        let task2 = submit_task(
+            &mut runtime,
+            "test2".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         // Task 1 acquires mutable access
         let request1 = ResourceRequest {
@@ -1970,8 +2284,20 @@ mod async_runtime_tests {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
 
-        let task1 = submit_task(&mut runtime, "test1".to_string(), params.clone(), TaskPriority::Normal, None);
-        let task2 = submit_task(&mut runtime, "test2".to_string(), params, TaskPriority::Normal, None);
+        let task1 = submit_task(
+            &mut runtime,
+            "test1".to_string(),
+            params.clone(),
+            TaskPriority::Normal,
+            None,
+        );
+        let task2 = submit_task(
+            &mut runtime,
+            "test2".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         // Task 1 acquires mutable access
         let request1 = ResourceRequest {
@@ -2018,7 +2344,13 @@ mod async_runtime_tests {
     fn test_wake_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         // Suspend the task
         let yield_point = YieldPoint::Sleeping {
@@ -2044,7 +2376,13 @@ mod async_runtime_tests {
     fn test_runtime_housekeeping() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         // Suspend with sleep
         let yield_point = YieldPoint::Sleeping {
@@ -2064,7 +2402,13 @@ mod async_runtime_tests {
     fn test_poll_next_ready_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         let next_task = poll_next_ready_task(&mut runtime);
         assert!(next_task.is_some());
@@ -2075,7 +2419,13 @@ mod async_runtime_tests {
     fn test_expire_resource_leases() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         let request = ResourceRequest {
             resource_name: "resource1".to_string(),
@@ -2098,21 +2448,36 @@ mod async_runtime_tests {
     fn test_check_task_timeouts() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, Some(1000));
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            Some(1000),
+        );
 
         // Check timeouts at time 2000 (past timeout)
         check_task_timeouts(&mut runtime, 2000);
 
         assert_eq!(runtime.active_tasks.len(), 0);
         assert_eq!(runtime.completed_tasks.len(), 1);
-        assert!(matches!(runtime.completed_tasks[0].state, TaskState::Failed { .. }));
+        assert!(matches!(
+            runtime.completed_tasks[0].state,
+            TaskState::Failed { .. }
+        ));
     }
 
     #[test]
     fn test_runtime_next_deadline_ms() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, Some(5000));
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            Some(5000),
+        );
 
         let deadline = runtime_next_deadline_ms(&runtime);
         assert_eq!(deadline, Some(6000)); // created_at_ms (1000) + timeout_ms (5000)
@@ -2122,7 +2487,13 @@ mod async_runtime_tests {
     fn test_next_ready_task() {
         let mut runtime = new_async_runtime(None);
         let params = empty_parameter_bag();
-        let task = submit_task(&mut runtime, "test".to_string(), params, TaskPriority::Normal, None);
+        let task = submit_task(
+            &mut runtime,
+            "test".to_string(),
+            params,
+            TaskPriority::Normal,
+            None,
+        );
 
         let next_task = next_ready_task(&mut runtime);
         assert!(next_task.is_some());
@@ -2154,12 +2525,18 @@ mod advanced_core_tests {
             parameter: "param1".to_string(),
             message: "invalid value".to_string(),
         };
-        assert_eq!(advanced_std_error_message(&invalid_arg_err), "invalid value");
+        assert_eq!(
+            advanced_std_error_message(&invalid_arg_err),
+            "invalid value"
+        );
 
         let unsupported_err = AdvancedStdError::Unsupported {
             feature: "advanced_feature".to_string(),
         };
-        assert_eq!(advanced_std_error_message(&unsupported_err), "advanced_feature");
+        assert_eq!(
+            advanced_std_error_message(&unsupported_err),
+            "advanced_feature"
+        );
     }
 
     #[test]
@@ -2196,14 +2573,20 @@ mod advanced_core_tests {
             message: "panic with source".to_string(),
             source: Some("source_location".to_string()),
         };
-        assert_eq!(advanced_std_error_message(&panic_with_source), "panic with source");
+        assert_eq!(
+            advanced_std_error_message(&panic_with_source),
+            "panic with source"
+        );
 
         // Test Panic variant without source
         let panic_no_source = AdvancedStdError::Panic {
             message: "panic no source".to_string(),
             source: None,
         };
-        assert_eq!(advanced_std_error_message(&panic_no_source), "panic no source");
+        assert_eq!(
+            advanced_std_error_message(&panic_no_source),
+            "panic no source"
+        );
 
         // Test InvalidArgument variant
         let invalid_arg = AdvancedStdError::InvalidArgument {

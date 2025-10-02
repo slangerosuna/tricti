@@ -20,6 +20,6 @@ pub mod semantic;
 pub mod stdlib;
 pub mod system_executor;
 pub mod table_runtime;
-pub mod tri_test_helpers;
 #[cfg(feature = "tri-runtime")]
 pub mod tri_runtime_bridge;
+pub mod tri_test_helpers;

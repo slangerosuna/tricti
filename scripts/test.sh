@@ -19,12 +19,9 @@ RUN_CARGO=false
 TRI_ARGS=()
 CARGO_ARGS=()
 
-NEITHER_PASSED=true
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -t)
-      NEITHER_PASSED=false
       RUN_TRI=true
       shift
       # collect everything until next -c or end
@@ -34,7 +31,6 @@ while [[ $# -gt 0 ]]; do
       done
       ;;
     -c)
-      NEITHER_PASSED=false
       RUN_CARGO=true
       shift
       # collect everything until next -t or end
@@ -52,7 +48,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if $NEITHER_PASSED; then
+if ! ($RUN_TRI || $RUN_CARGO); then
   RUN_TRI=true
   RUN_CARGO=true
 fi
@@ -82,18 +78,12 @@ if $RUN_TRI; then
   # No args → run all
   if [[ ${#TRI_ARGS[@]} -eq 0 ]]; then
     mapfile -t TRI_ARGS < <(find tests -name "*.tri")
-    # also add stdlib tests
-    mapfile -t stdlib_tests < <(find stdlib/test -name "*.tri")
     TRI_ARGS+=("${stdlib_tests[@]}")
   else
     # Expand directories and prepend "tests/" to everything
     expanded=()
     for arg in "${TRI_ARGS[@]}"; do
       path="tests/$arg"
-      # if arg is stdlib, pass in stdlib/test directory
-      if [[ "$arg" == "stdlib" ]]; then
-        path="stdlib/test"
-      fi
       if [[ -d "$path" ]]; then
         mapfile -t files < <(find "$path" -name "*.tri")
         expanded+=("${files[@]}")
@@ -103,6 +93,14 @@ if $RUN_TRI; then
     done
     TRI_ARGS=("${expanded[@]}")
   fi
+
+  for tri_file in "${TRI_ARGS[@]}"; do
+    if [[ ! -f "$tri_file" ]]; then
+      echo "[tools] warning: test file '$tri_file' does not exist, skipping"
+      continue
+    fi
+    echo "[tools] found test file $tri_file"
+  done
 
   for tri_file in "${TRI_ARGS[@]}"; do
     echo "[tools] running $tri_file"

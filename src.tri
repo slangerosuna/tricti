@@ -56,7 +56,7 @@ impl MyStruct {
     foo :: (&self) -> ?i32 => self.a? + *self.b?
 }
 
-MyStruct :: enum {
+MyEnum :: enum {
     A: MyStruct,
     B: { a: ?i32, b: ?i32 },
 }

@@ -1,13 +1,13 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::time::timeout;
+use tricti::semantic::{FunctionSignature, SemanticContext};
 use tricti::{
     ast::*, async_runtime::*, async_scheduler_integration::*, async_table_integration::*,
     error_propagation::*, event_loop_manager::*, resource_lifecycle::*, system_executor::*,
     table_runtime::*,
 };
-use tricti::semantic::{FunctionSignature, SemanticContext};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::time::timeout;
 
 /// Comprehensive test suite for async execution model
 #[cfg(test)]
@@ -94,7 +94,7 @@ mod async_execution_tests {
             )
             .expect("Should submit system successfully");
 
-    let task_id = future.task_id();
+        let task_id = future.task_id();
 
         // Test future properties
         assert_eq!(future.task_id(), task_id);
@@ -200,11 +200,11 @@ mod async_execution_tests {
 
         let mut params1 = HashMap::new();
         params1.insert("input".to_string(), ColumnValue::I32(42));
-        
+
         let mut params2 = HashMap::new();
         params2.insert("input".to_string(), ColumnValue::I32(42));
 
-    let _future1 = event_loop_clone
+        let _future1 = event_loop_clone
             .submit_system(
                 system1,
                 params1,
@@ -215,7 +215,7 @@ mod async_execution_tests {
             .await
             .expect("Should submit system1");
 
-    let _future2 = event_loop_clone
+        let _future2 = event_loop_clone
             .submit_system(
                 system2,
                 params2,
@@ -342,7 +342,7 @@ mod async_execution_tests {
         let error_manager = ErrorPropagationManager::new(config);
 
         let task_id = TaskId::new();
-    let context = ErrorContext {
+        let context = ErrorContext {
             task_id,
             system_name: "test_system".to_string(),
             error_count: 1,
@@ -379,7 +379,7 @@ mod async_execution_tests {
             duration: Duration::from_secs(30),
         };
 
-    let _timeout_result = error_manager
+        let _timeout_result = error_manager
             .handle_error(task_id, timeout_error, context.clone())
             .await
             .expect("Should handle timeout error");
@@ -390,7 +390,7 @@ mod async_execution_tests {
             message: "Internal system error".to_string(),
         };
 
-    let _system_result = error_manager
+        let _system_result = error_manager
             .handle_error(task_id, system_error, context)
             .await
             .expect("Should handle system error");
@@ -416,14 +416,14 @@ mod async_execution_tests {
         let task_id = TaskId::new();
 
         // Test simple query execution
-    let query_spec = create_test_query_spec("users");
+        let query_spec = create_test_query_spec("users");
         let query_future = async_table
             .execute_query(task_id, query_spec)
             .await
             .expect("Should create query future");
 
-    let query_id = query_future.query_id();
-    assert!(query_id.as_u64() > 0, "Should have valid query ID");
+        let query_id = query_future.query_id();
+        assert!(query_id.as_u64() > 0, "Should have valid query ID");
 
         // Test batch query execution
         let queries = vec![
@@ -653,8 +653,8 @@ mod async_execution_tests {
         let event_loop = EventLoopManager::new(runtime_config, semantic_context, event_loop_config);
 
         // Register a test table
-    let table_runtime = create_test_table_runtime();
-    event_loop.register_table("users".to_string(), table_runtime);
+        let table_runtime = create_test_table_runtime();
+        event_loop.register_table("users".to_string(), table_runtime);
 
         // Create a complex system that performs multiple operations
         let complex_system = create_complex_end_to_end_system();
@@ -673,7 +673,7 @@ mod async_execution_tests {
             .await
             .expect("Should submit complex system");
 
-    let _task_id = future.task_id();
+        let _task_id = future.task_id();
 
         // Start event loop in background
         let event_loop_arc = Arc::new(event_loop);
@@ -689,7 +689,7 @@ mod async_execution_tests {
             .expect("Should stop event loop gracefully");
 
         // Wait for event loop to shut down
-    let _event_loop_result = timeout(Duration::from_secs(5), event_loop_task).await;
+        let _event_loop_result = timeout(Duration::from_secs(5), event_loop_task).await;
 
         // Verify execution completed or handled appropriately
         match execution_result {
@@ -791,11 +791,7 @@ mod async_execution_tests {
             "end_to_end_system",
             vec![
                 resource_param("users", ResourceAccess::Mutable),
-                value_param(
-                    "batch_size",
-                    ty("i32"),
-                    Some(integer_expr(100)),
-                ),
+                value_param("batch_size", ty("i32"), Some(integer_expr(100))),
             ],
             Some(ty("i32")),
             vec![
@@ -846,9 +842,11 @@ mod async_execution_tests {
                 is_async: true,
             },
         );
-        
+
         let user_schema = sample_table_schema("users");
-        context.tables.insert("users".to_string(), user_schema.clone());
+        context
+            .tables
+            .insert("users".to_string(), user_schema.clone());
 
         context
     }
@@ -919,70 +917,100 @@ mod async_execution_tests {
             "test_param".to_string(),
             ColumnValue::String("test_value".to_string()),
         );
-        
+
         // Add actual required parameters
         params.insert("batch_size".to_string(), ColumnValue::I32(100));
-        
+
         // Add dummy resource parameters to pass validation
         // The actual resources are provided via table_runtimes
-        params.insert("users".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        params.insert("disk".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        params.insert("cpu".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        params.insert("memory".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        params.insert("network".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        params.insert("shared_resource".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        params.insert("resource_a".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        params.insert("resource_b".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        params.insert("shared_db".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        params.insert("database".to_string(), ColumnValue::String("resource_placeholder".to_string()));
-        
+        params.insert(
+            "users".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+        params.insert(
+            "disk".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+        params.insert(
+            "cpu".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+        params.insert(
+            "memory".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+        params.insert(
+            "network".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+        params.insert(
+            "shared_resource".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+        params.insert(
+            "resource_a".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+        params.insert(
+            "resource_b".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+        params.insert(
+            "shared_db".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+        params.insert(
+            "database".to_string(),
+            ColumnValue::String("resource_placeholder".to_string()),
+        );
+
         params
     }
 
     pub(super) fn create_test_resources() -> HashMap<String, TableRuntime> {
         let mut table_runtimes = HashMap::new();
-        
+
         // Provide common test resources
         let test_schema = sample_table_schema("test_resource");
         if let Ok(test_table) = TableRuntime::new(test_schema) {
             table_runtimes.insert("disk".to_string(), test_table);
         }
-        
+
         let test_schema2 = sample_table_schema("test_resource2");
         if let Ok(test_table2) = TableRuntime::new(test_schema2) {
             table_runtimes.insert("cpu".to_string(), test_table2);
         }
-        
+
         let test_schema3 = sample_table_schema("test_resource3");
         if let Ok(test_table3) = TableRuntime::new(test_schema3) {
             table_runtimes.insert("memory".to_string(), test_table3);
         }
-        
+
         let test_schema4 = sample_table_schema("test_resource4");
         if let Ok(test_table4) = TableRuntime::new(test_schema4) {
             table_runtimes.insert("network".to_string(), test_table4);
         }
-        
+
         let test_schema5 = sample_table_schema("test_resource5");
         if let Ok(test_table5) = TableRuntime::new(test_schema5) {
             table_runtimes.insert("shared_resource".to_string(), test_table5);
         }
-        
+
         let test_schema6 = sample_table_schema("test_resource6");
         if let Ok(test_table6) = TableRuntime::new(test_schema6) {
             table_runtimes.insert("resource_a".to_string(), test_table6);
         }
-        
+
         let test_schema7 = sample_table_schema("test_resource7");
         if let Ok(test_table7) = TableRuntime::new(test_schema7) {
             table_runtimes.insert("resource_b".to_string(), test_table7);
         }
-        
+
         let test_schema8 = sample_table_schema("test_resource8");
         if let Ok(test_table8) = TableRuntime::new(test_schema8) {
             table_runtimes.insert("shared_db".to_string(), test_table8);
         }
-        
+
         let test_schema9 = sample_table_schema("users");
         if let Ok(test_table9) = TableRuntime::new(test_schema9) {
             table_runtimes.insert("users".to_string(), test_table9);
@@ -1003,8 +1031,8 @@ mod integration_tests {
     use super::*;
     use crate::async_execution_tests::{
         create_complex_end_to_end_system, create_execution_request,
-    create_resource_dependent_system, create_test_semantic_context, create_test_table_runtime,
-    create_test_parameters, create_test_resources,
+        create_resource_dependent_system, create_test_parameters, create_test_resources,
+        create_test_semantic_context, create_test_table_runtime,
     };
 
     /// Test full integration of all async execution components
@@ -1050,7 +1078,7 @@ mod integration_tests {
         let event_loop_arc = Arc::new(event_loop);
         let event_loop_handle = event_loop_arc.clone();
 
-    let event_loop_task = tokio::task::spawn_blocking(move || event_loop_handle.start());
+        let event_loop_task = tokio::task::spawn_blocking(move || event_loop_handle.start());
 
         // 6. Wait for execution to complete
         let execution_result = timeout(Duration::from_secs(15), execution_future).await;
@@ -1059,7 +1087,7 @@ mod integration_tests {
         event_loop_arc.stop().expect("Should stop event loop");
 
         // Wait for event loop to finish
-    let _ = timeout(Duration::from_secs(5), event_loop_task).await;
+        let _ = timeout(Duration::from_secs(5), event_loop_task).await;
 
         let total_time = start_time.elapsed();
         println!("Total execution time: {:?}", total_time);

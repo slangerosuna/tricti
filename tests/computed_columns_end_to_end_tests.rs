@@ -1,7 +1,7 @@
+use std::collections::HashMap;
 use tricti::ast::*;
 use tricti::parser;
 use tricti::table_runtime::*;
-use std::collections::HashMap;
 
 #[test]
 fn test_end_to_end_computed_columns() {

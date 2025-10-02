@@ -21,7 +21,7 @@ fn parse_type_params(pair: pest::iterators::Pair<Rule>) -> Vec<TypeParam> {
             let mut inner = tp.into_inner();
             let name = inner.next().unwrap().as_str().to_string();
             let mut bounds = Vec::new();
-            
+
             if let Some(bounds_pair) = inner.next() {
                 if bounds_pair.as_rule() == Rule::trait_bounds {
                     for bound_type in bounds_pair.into_inner() {
@@ -31,7 +31,7 @@ fn parse_type_params(pair: pest::iterators::Pair<Rule>) -> Vec<TypeParam> {
                     }
                 }
             }
-            
+
             type_params.push(TypeParam { name, bounds });
         }
     }
@@ -329,6 +329,7 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::multiplication => parse_binary_expression(pair),
         Rule::with_range => parse_with_range(pair),
         Rule::unary => parse_unary(pair),
+        Rule::cast_expr => parse_cast_expression(pair),
         Rule::post_fix => parse_postfix_expression(pair),
         Rule::primary => parse_primary_expression(pair),
         Rule::array_new => parse_array_new(pair),
@@ -392,11 +393,15 @@ fn parse_unary(pair: pest::iterators::Pair<Rule>) -> Expression {
                 // no unary operator
                 return parse_postfix_expression(p);
             }
+            Rule::cast_expr => {
+                return parse_cast_expression(p);
+            }
             Rule::op_unary => {
                 let op_str = p.as_str();
                 let operand_pair = it.next().expect("unary missing operand");
                 let operand_expr = match operand_pair.as_rule() {
                     Rule::post_fix => parse_postfix_expression(operand_pair),
+                    Rule::cast_expr => parse_cast_expression(operand_pair),
                     _ => parse_expression(operand_pair),
                 };
                 if op_str == "some" {
@@ -505,14 +510,6 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
                     arguments,
                 };
             }
-            Rule::cast_suffix => {
-                let mut inner = suffix_pair.into_inner();
-                let to_type = parse_type(inner.next().unwrap());
-                expr = Expression::Cast {
-                    value: Box::new(expr),
-                    to_type,
-                };
-            }
             Rule::static_path_suffix => {
                 // Type::method → Identifier("Type_method")
                 let mut it2 = suffix_pair.into_inner();
@@ -536,10 +533,7 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
                 } else {
                     None // shouldn't happen
                 };
-                expr = Expression::StructLiteral {
-                    type_name,
-                    fields,
-                };
+                expr = Expression::StructLiteral { type_name, fields };
             }
             _ if suffix_pair.as_str().starts_with("[") => {
                 // Indexing suffix: "[ expr (, expr)* ]" possibly repeated; grammar emits it as part of post_fix
@@ -561,6 +555,28 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     expr
 }
 
+fn parse_cast_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let first = inner.next().expect("cast expression missing base");
+    let mut expr = match first.as_rule() {
+        Rule::post_fix => parse_postfix_expression(first),
+        _ => parse_expression(first),
+    };
+
+    for tail in inner {
+        if tail.as_rule() == Rule::cast_tail {
+            let mut tail_inner = tail.into_inner();
+            let to_type = parse_type(tail_inner.next().unwrap());
+            expr = Expression::Cast {
+                value: Box::new(expr),
+                to_type,
+            };
+        }
+    }
+
+    expr
+}
+
 fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let inner_pair = pair.into_inner().next().unwrap();
     match inner_pair.as_rule() {
@@ -572,6 +588,7 @@ fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         },
         Rule::function => parse_function(inner_pair),
         Rule::conditional => parse_if_expression(inner_pair),
+        Rule::inline_conditional => parse_inline_if_expression(inner_pair),
         Rule::r#match => parse_match_expression(inner_pair),
         Rule::matrix => parse_matrix(inner_pair),
         Rule::tuple_expr => parse_tuple_expression(inner_pair),
@@ -609,7 +626,7 @@ fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 fn parse_path_struct_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut inner = pair.into_inner();
     let mut path_parts = Vec::new();
-    
+
     while let Some(part) = inner.next() {
         match part.as_rule() {
             Rule::identifier => path_parts.push(part.as_str().to_string()),
@@ -631,7 +648,7 @@ fn parse_static_path_expression(pair: pest::iterators::Pair<Rule>) -> Expression
     let mut inner = pair.into_inner();
     let mut segments = Vec::new();
     let mut type_args = Vec::new();
-    
+
     while let Some(part) = inner.next() {
         match part.as_rule() {
             Rule::identifier => segments.push(part.as_str().to_string()),
@@ -643,8 +660,11 @@ fn parse_static_path_expression(pair: pest::iterators::Pair<Rule>) -> Expression
             _ => {}
         }
     }
-    
-    Expression::StaticPath { segments, type_args }
+
+    Expression::StaticPath {
+        segments,
+        type_args,
+    }
 }
 
 fn parse_array_new(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -704,9 +724,7 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         let pattern_pair = arm_inner
             .next()
             .expect("match arm missing pattern expression");
-        let body_pair = arm_inner
-            .next()
-            .expect("match arm missing body expression");
+        let body_pair = arm_inner.next().expect("match arm missing body expression");
         let pattern = parse_pattern(pattern_pair);
         let body = parse_match_arm_body(body_pair);
         arms.push(MatchArm { pattern, body });
@@ -809,7 +827,10 @@ fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Expression {
                 let value_expr = parse_expression(expr_pair);
                 fields.insert(name, value_expr);
             }
-            Expression::StructLiteral { type_name: None, fields }
+            Expression::StructLiteral {
+                type_name: None,
+                fields,
+            }
         }
         _ => parse_expression(inner_pair),
     }
@@ -1185,6 +1206,26 @@ fn parse_if_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     }
 }
 
+fn parse_inline_if_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let condition_pair = inner
+        .next()
+        .expect("inline if expression missing condition");
+    let then_pair = inner
+        .next()
+        .expect("inline if expression missing then branch");
+
+    let condition = parse_expression(condition_pair);
+    let then_expr = parse_expression(then_pair);
+    let else_expr = inner.next().map(parse_expression);
+
+    Expression::IfExpr {
+        condition: Box::new(condition),
+        then_expr: Box::new(then_expr),
+        else_expr: else_expr.map(Box::new),
+    }
+}
+
 fn parse_return_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut expr: Option<Expression> = None;
     for inner in pair.into_inner() {
@@ -1233,16 +1274,16 @@ fn parse_use_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
     // Check if the source string starts with "pub"
     let source = pair.as_str();
     let is_public = source.starts_with("pub ");
-    
+
     let mut path: Vec<String> = Vec::new();
     let mut alias: Option<String> = None;
-    
+
     for inner in pair.into_inner() {
         match inner.as_rule() {
             Rule::identifier => {
                 let identifier = inner.as_str().to_string();
                 if identifier == "pub" {
-                    // Skip the "pub" keyword 
+                    // Skip the "pub" keyword
                 } else if identifier == "use" {
                     // Skip the "use" keyword
                 } else {
@@ -1262,18 +1303,22 @@ fn parse_use_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
             }
         }
     }
-    Statement::Use { is_public, path, alias }
+    Statement::Use {
+        is_public,
+        path,
+        alias,
+    }
 }
 
 fn parse_mod_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     // Check if the source string starts with "pub"
     let source = pair.as_str();
     let is_public = source.trim_start().starts_with("pub");
-    
+
     let mut it = pair.into_inner();
     let mut name = String::new();
     let mut items: Vec<Statement> = Vec::new();
-    
+
     for inner in it {
         match inner.as_rule() {
             Rule::identifier => {
@@ -1287,9 +1332,13 @@ fn parse_mod_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
             _ => {}
         }
     }
-    
+
     if items.is_empty() {
-        Statement::ModuleDecl { is_public, name, items: None }
+        Statement::ModuleDecl {
+            is_public,
+            name,
+            items: None,
+        }
     } else {
         Statement::ModuleDecl {
             is_public,
@@ -1305,14 +1354,14 @@ fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
     // Parse optional type_params first
     let mut type_params: Vec<TypeParam> = Vec::new();
     let first = it.next().expect("impl missing content");
-    
+
     let first_type = if first.as_rule() == Rule::type_params {
         type_params = parse_type_params(first);
         it.next().expect("impl missing type after type_params")
     } else {
         first
     };
-    
+
     let mut trait_name: Option<String> = None;
     let type_name: String;
 
@@ -1596,14 +1645,12 @@ fn parse_system_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter 
                 default_value: param.default_value,
             }
         }
-        _ => {
-            SystemParameter::Regular {
-                param_type: "value".to_string(),
-                name: value_pair.as_str().to_string(),
-                value_type: Type::None,
-                default_value: None,
-            }
-        }
+        _ => SystemParameter::Regular {
+            param_type: "value".to_string(),
+            name: value_pair.as_str().to_string(),
+            value_type: Type::None,
+            default_value: None,
+        },
     };
 
     if !attributes.is_empty() {
@@ -1614,14 +1661,12 @@ fn parse_system_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter 
                 name,
                 value_type,
                 default_value,
-            } => {
-                SystemParameter::Regular {
-                    param_type: attr,
-                    name,
-                    value_type,
-                    default_value,
-                }
-            }
+            } => SystemParameter::Regular {
+                param_type: attr,
+                name,
+                value_type,
+                default_value,
+            },
             other => other,
         };
     }

@@ -131,6 +131,17 @@ impl DependencyGraph {
                     }
                 }
             }
+            Expression::IfExpr {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                Self::extract_dependencies_recursive(condition, dependencies, column_names)?;
+                Self::extract_dependencies_recursive(then_expr, dependencies, column_names)?;
+                if let Some(else_branch) = else_expr {
+                    Self::extract_dependencies_recursive(else_branch, dependencies, column_names)?;
+                }
+            }
             Expression::Block { statements } => {
                 for stmt in statements {
                     Self::extract_statement_dependencies(stmt, dependencies, column_names)?;
@@ -450,6 +461,25 @@ impl LazyEvaluationEngine {
                 arguments,
                 ..
             } => self.evaluate_function_call(function, arguments, row_id, table_data),
+            Expression::IfExpr {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                let condition_value = self.evaluate_expression(condition, row_id, table_data)?;
+                let condition_bool = Self::column_value_to_bool(&condition_value)
+                    .map_err(|msg| EvaluationError::ExpressionEvaluationError(msg))?;
+
+                if condition_bool {
+                    self.evaluate_expression(then_expr, row_id, table_data)
+                } else if let Some(else_branch) = else_expr {
+                    self.evaluate_expression(else_branch, row_id, table_data)
+                } else {
+                    Err(EvaluationError::ExpressionEvaluationError(
+                        "Inline if expression without else branch is unsupported".to_string(),
+                    ))
+                }
+            }
             _ => Err(EvaluationError::ExpressionEvaluationError(
                 "Unsupported expression type in computed column".to_string(),
             )),
@@ -623,6 +653,16 @@ impl LazyEvaluationEngine {
         }
     }
 
+    fn column_value_to_bool(value: &ColumnValue) -> Result<bool, String> {
+        match value {
+            ColumnValue::Bool(b) => Ok(*b),
+            ColumnValue::U64(v) => Ok(*v != 0),
+            ColumnValue::I32(v) => Ok(*v != 0),
+            ColumnValue::F64(bits) => Ok(f64::from_bits(*bits) != 0.0),
+            ColumnValue::String(s) => Ok(!s.is_empty()),
+        }
+    }
+
     /// Evaluate a function call
     fn evaluate_function_call(
         &mut self,
@@ -645,6 +685,21 @@ impl LazyEvaluationEngine {
                         ColumnValue::String(s) => Ok(ColumnValue::U64(s.len() as u64)),
                         _ => Err(EvaluationError::TypeMismatchError(
                             "len() function expects a string argument".to_string(),
+                        )),
+                    }
+                }
+                "trim" => {
+                    if arguments.len() != 1 {
+                        return Err(EvaluationError::ExpressionEvaluationError(
+                            "trim() function expects exactly one argument".to_string(),
+                        ));
+                    }
+                    let arg_val =
+                        self.evaluate_expression(&arguments[0].value, row_id, table_data)?;
+                    match arg_val {
+                        ColumnValue::String(s) => Ok(ColumnValue::String(s.trim().to_string())),
+                        _ => Err(EvaluationError::TypeMismatchError(
+                            "trim() function expects a string argument".to_string(),
                         )),
                     }
                 }

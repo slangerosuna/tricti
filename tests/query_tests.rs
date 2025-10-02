@@ -12,10 +12,10 @@ use tricti::table_runtime::*;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::OptimizationHint;
     use super::QueryFieldProjection as FieldProjection;
     use super::QueryJoinType as JoinType;
-    use super::OptimizationHint;
+    use super::*;
 
     fn create_test_table_schema() -> TableDef {
         TableDef {

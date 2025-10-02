@@ -9,7 +9,10 @@ pub enum StdError {
     /// Simple message error
     Message { message: String },
     /// Panic with optional source information
-    Panic { message: String, source: Option<String> },
+    Panic {
+        message: String,
+        source: Option<String>,
+    },
     /// Invalid argument error
     InvalidArgument { parameter: String, message: String },
     /// Unsupported feature error

@@ -22,12 +22,12 @@ pub struct SemanticContext {
     pub inherent_impls: HashMap<String, ImplInfo>,               // type -> impl
     // Table schemas
     pub tables: HashMap<String, TableDef>,
-    
+
     // Module system - Rust-like namespacing
     pub modules: HashMap<String, ModuleInfo>,
     pub current_module_path: Vec<String>,
     pub use_imports: HashMap<String, String>, // alias -> full_path
-    pub glob_imports: Vec<String>, // modules imported with *
+    pub glob_imports: Vec<String>,            // modules imported with *
 }
 
 #[derive(Debug, Clone)]
@@ -59,7 +59,7 @@ pub struct ModuleInfo {
     pub types: HashMap<String, Type>,
     pub traits: HashMap<String, TraitInfo>,
     pub submodules: HashMap<String, String>, // name -> full_path
-    pub exports: HashMap<String, String>, // name -> full_path for pub use
+    pub exports: HashMap<String, String>,    // name -> full_path for pub use
 }
 
 #[derive(Debug)]
@@ -128,6 +128,21 @@ impl SemanticContext {
                 }],
                 return_type: Type::Identifier {
                     name: "i64".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        // trim: remove leading and trailing ASCII whitespace
+        context.functions.insert(
+            "trim".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier {
+                    name: "string".to_string(),
+                    type_args: vec![],
+                }],
+                return_type: Type::Identifier {
+                    name: "string".to_string(),
                     type_args: vec![],
                 },
                 is_async: false,
@@ -462,19 +477,22 @@ impl SemanticContext {
     pub fn enter_module(&mut self, module_name: String) {
         self.current_module_path.push(module_name.clone());
         let full_path = self.current_module_path.join("::");
-        
+
         if !self.modules.contains_key(&full_path) {
-            self.modules.insert(full_path.clone(), ModuleInfo {
-                name: module_name,
-                path: self.current_module_path.clone(),
-                is_public: true, // Default to public, can be changed later
-                variables: HashMap::new(),
-                functions: HashMap::new(),
-                types: HashMap::new(),
-                traits: HashMap::new(),
-                submodules: HashMap::new(),
-                exports: HashMap::new(),
-            });
+            self.modules.insert(
+                full_path.clone(),
+                ModuleInfo {
+                    name: module_name,
+                    path: self.current_module_path.clone(),
+                    is_public: true, // Default to public, can be changed later
+                    variables: HashMap::new(),
+                    functions: HashMap::new(),
+                    types: HashMap::new(),
+                    traits: HashMap::new(),
+                    submodules: HashMap::new(),
+                    exports: HashMap::new(),
+                },
+            );
         }
     }
 
@@ -491,10 +509,8 @@ impl SemanticContext {
     /// Register a use import
     pub fn add_use_import(&mut self, path: Vec<String>, alias: Option<String>) {
         let full_path = path.join("::");
-        let import_name = alias.unwrap_or_else(|| {
-            path.last().unwrap_or(&"".to_string()).clone()
-        });
-        
+        let import_name = alias.unwrap_or_else(|| path.last().unwrap_or(&"".to_string()).clone());
+
         if full_path.ends_with("*") {
             // Glob import
             let module_path = full_path.trim_end_matches("::*");
@@ -642,24 +658,26 @@ impl SemanticContext {
                 return Some(t);
             }
         }
-        
+
         // Try module-resolved name
         if let Some(resolved_name) = self.resolve_name(name) {
             if let Some(t) = self.variables.get(&resolved_name) {
                 return Some(t);
             }
-            
+
             // Check in modules
             for (module_path, module_info) in &self.modules {
                 if resolved_name.starts_with(module_path) {
-                    let local_name = resolved_name.trim_start_matches(module_path).trim_start_matches("::");
+                    let local_name = resolved_name
+                        .trim_start_matches(module_path)
+                        .trim_start_matches("::");
                     if let Some(t) = module_info.variables.get(local_name) {
                         return Some(t);
                     }
                 }
             }
         }
-        
+
         self.variables.get(name)
     }
 
@@ -670,7 +688,9 @@ impl SemanticContext {
         } else {
             // Store in current module
             if let Some(module_info) = self.modules.get_mut(&current_module) {
-                module_info.functions.insert(name.clone(), signature.clone());
+                module_info
+                    .functions
+                    .insert(name.clone(), signature.clone());
             }
             // Also store globally with module prefix for compatibility
             let full_name = format!("{}::{}", current_module, name);
@@ -683,24 +703,26 @@ impl SemanticContext {
         if let Some(sig) = self.functions.get(name) {
             return Some(sig);
         }
-        
+
         // Try module-resolved name
         if let Some(resolved_name) = self.resolve_name(name) {
             if let Some(sig) = self.functions.get(&resolved_name) {
                 return Some(sig);
             }
-            
+
             // Check in modules
             for (module_path, module_info) in &self.modules {
                 if resolved_name.starts_with(module_path) {
-                    let local_name = resolved_name.trim_start_matches(module_path).trim_start_matches("::");
+                    let local_name = resolved_name
+                        .trim_start_matches(module_path)
+                        .trim_start_matches("::");
                     if let Some(sig) = module_info.functions.get(local_name) {
                         return Some(sig);
                     }
                 }
             }
         }
-        
+
         None
     }
 }
@@ -733,16 +755,20 @@ fn collect_definitions(
     context: &mut SemanticContext,
 ) -> Result<(), SemanticError> {
     match statement {
-        Statement::ModuleDecl { is_public: _, name, items } => {
+        Statement::ModuleDecl {
+            is_public: _,
+            name,
+            items,
+        } => {
             // Enter module namespace for definition collection
             context.enter_module(name.clone());
-            
+
             if let Some(stmts) = items {
                 for s in stmts {
                     collect_definitions(s, context)?;
                 }
             }
-            
+
             // Exit module namespace
             context.exit_module();
         }
@@ -964,16 +990,20 @@ fn analyze_statement(
     context: &mut SemanticContext,
 ) -> Result<(), SemanticError> {
     match statement {
-        Statement::ModuleDecl { is_public: _, name, items } => {
+        Statement::ModuleDecl {
+            is_public: _,
+            name,
+            items,
+        } => {
             // Enter module namespace
             context.enter_module(name.clone());
-            
+
             if let Some(stmts) = items {
                 for s in stmts {
                     analyze_statement(s, context)?;
                 }
             }
-            
+
             // Exit module namespace
             context.exit_module();
         }
@@ -1371,11 +1401,19 @@ fn analyze_statement(
                 context.inherent_impls.insert(type_name.clone(), info);
             }
         }
-        Statement::Use { is_public: _, path, alias } => {
+        Statement::Use {
+            is_public: _,
+            path,
+            alias,
+        } => {
             // Handle use statements for module imports
             context.add_use_import(path.clone(), alias.clone());
         }
-        Statement::IfDef { condition: _, then_branch, else_branch } => {
+        Statement::IfDef {
+            condition: _,
+            then_branch,
+            else_branch,
+        } => {
             // For now, always analyze the then branch
             // TODO: Add proper conditional compilation support
             for stmt in then_branch {
@@ -1752,7 +1790,7 @@ fn infer_expression_type(
                 Expression::StaticPath { segments, .. } => {
                     // Static path call like Vec::new() or Option::Some(x)
                     let mangled_name = segments.join("_");
-                    
+
                     // Check if it's an enum variant constructor
                     if segments.len() >= 2 {
                         let type_name = &segments[0];
@@ -1794,9 +1832,10 @@ fn infer_expression_type(
                             }
                         }
                     }
-                    
+
                     // Otherwise treat as static function call
-                    if let Some(signature) = context.get_function_signature(&mangled_name).cloned() {
+                    if let Some(signature) = context.get_function_signature(&mangled_name).cloned()
+                    {
                         if arguments.len() != signature.parameters.len() {
                             return Err(SemanticError::ArgumentCountMismatch {
                                 expected: signature.parameters.len(),
@@ -1814,7 +1853,7 @@ fn infer_expression_type(
                         }
                         return Ok(signature.return_type.clone());
                     }
-                    
+
                     Err(SemanticError::UndefinedFunction(mangled_name))
                 }
                 _ => {
@@ -1877,6 +1916,12 @@ fn infer_expression_type(
             }
         }
 
+        Expression::Cast { value, to_type } => {
+            // Validate the input expression type even if we don't enforce compatibility yet
+            let _ = infer_expression_type(value, context)?;
+            Ok(to_type.clone())
+        }
+
         Expression::If {
             condition,
             then_branch: _,
@@ -1894,7 +1939,7 @@ fn infer_expression_type(
             let is_num = is_numeric_type(&condition_type);
             let is_str = matches!(condition_type, Type::Identifier { ref name, type_args: _ } if name == "string");
             let is_ptr = matches!(
-                condition_type,
+                &condition_type,
                 Type::Pointer { .. } | Type::RawPointer { .. }
             );
             if !(is_bool || is_num || is_str || is_ptr) {
@@ -1909,6 +1954,57 @@ fn infer_expression_type(
 
             // For now, assume if expressions return none
             Ok(Type::None)
+        }
+
+        Expression::IfExpr {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            let condition_type = infer_expression_type(condition, context)?;
+            let bool_type = Type::Identifier {
+                name: "bool".to_string(),
+                type_args: vec![],
+            };
+            let is_bool = types_compatible(&bool_type, &condition_type);
+            let is_num = is_numeric_type(&condition_type);
+            let is_str = is_string_type(&condition_type);
+            let is_ptr = matches!(
+                condition_type,
+                Type::Pointer { .. } | Type::RawPointer { .. }
+            );
+            if !(is_bool || is_num || is_str || is_ptr) {
+                return Err(SemanticError::TypeMismatch {
+                    expected: bool_type,
+                    found: condition_type,
+                });
+            }
+
+            let then_type = infer_expression_type(then_expr, context)?;
+            match else_expr {
+                Some(branch) => {
+                    let else_type = infer_expression_type(branch, context)?;
+                    let then_is_none = matches!(then_type, Type::None);
+                    let else_is_none = matches!(else_type, Type::None);
+                    if types_compatible(&then_type, &else_type)
+                        || types_compatible(&else_type, &then_type)
+                    {
+                        if then_is_none {
+                            Ok(else_type)
+                        } else if else_is_none {
+                            Ok(then_type)
+                        } else {
+                            Ok(then_type)
+                        }
+                    } else {
+                        Err(SemanticError::TypeMismatch {
+                            expected: then_type,
+                            found: else_type,
+                        })
+                    }
+                }
+                None => Ok(then_type),
+            }
         }
 
         Expression::Block { statements: _ } => {
@@ -2054,7 +2150,7 @@ fn infer_expression_type(
             // Static path like Vec::new or Option::Some
             // Mangle to identifier and look up as function or enum variant
             let mangled_name = segments.join("_");
-            
+
             // Check if it's an enum variant
             if segments.len() >= 2 {
                 let type_name = &segments[0];
@@ -2069,7 +2165,7 @@ fn infer_expression_type(
                     }
                 }
             }
-            
+
             // Otherwise treat as function reference
             if let Some(sig) = context.get_function_signature(&mangled_name) {
                 Ok(Type::Function {
@@ -2107,11 +2203,30 @@ fn infer_binary_op_type(
     right: &Type,
 ) -> Result<Type, SemanticError> {
     match operator {
-        BinaryOperator::Add
-        | BinaryOperator::Sub
-        | BinaryOperator::Mul
-        | BinaryOperator::Div
-        | BinaryOperator::Mod => {
+        BinaryOperator::Add => {
+            if is_string_type(left) && is_string_type(right) {
+                return Ok(Type::Identifier {
+                    name: "string".to_string(),
+                    type_args: vec![],
+                });
+            }
+            if matches!(left, Type::None) {
+                return Ok(right.clone());
+            }
+            if matches!(right, Type::None) {
+                return Ok(left.clone());
+            }
+            if types_compatible(left, right) && is_numeric_type(left) {
+                Ok(left.clone())
+            } else {
+                Err(SemanticError::InvalidOperation {
+                    operator: format!("{:?}", operator),
+                    operand_types: vec![left.clone(), right.clone()],
+                })
+            }
+        }
+
+        BinaryOperator::Sub | BinaryOperator::Mul | BinaryOperator::Div | BinaryOperator::Mod => {
             if matches!(left, Type::None) {
                 return Ok(right.clone());
             }
@@ -2271,6 +2386,9 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             if a == b {
                 return true;
             }
+            if (a == "String" && b == "string") || (a == "string" && b == "String") {
+                return true;
+            }
             // Allow any pair of numeric scalar types to be used together; codegen will unify bit-widths.
             let na = a.as_str();
             let nb = b.as_str();
@@ -2360,10 +2478,8 @@ fn analyze_pattern(
                         match &arg.value {
                             Expression::Identifier(var_name) => {
                                 if var_name != "_" {
-                                    context.define_variable(
-                                        var_name.clone(),
-                                        inner.as_ref().clone(),
-                                    );
+                                    context
+                                        .define_variable(var_name.clone(), inner.as_ref().clone());
                                 }
                                 return Ok(());
                             }
@@ -2447,6 +2563,14 @@ fn is_numeric_type(t: &Type) -> bool {
             )
         }
         _ => false,
+    }
+}
+
+fn is_string_type(t: &Type) -> bool {
+    if let Type::Identifier { name, .. } = t {
+        name == "string" || name == "String"
+    } else {
+        false
     }
 }
 
@@ -2796,11 +2920,9 @@ fn validate_table_definition(
                 // We need to set up a context that includes all column names for type inference
                 let mut column_context = context.clone();
 
-                // Add all table columns as variables in the context for type inference
+                // Add all table columns (regular and computed) as variables so forward references work
                 for col in &table_def.columns {
-                    if !col.is_computed {
-                        column_context.define_variable(col.name.clone(), col.column_type.clone());
-                    }
+                    column_context.define_variable(col.name.clone(), col.column_type.clone());
                 }
 
                 let inferred_type = infer_expression_type(computed_expr, &mut column_context)?;

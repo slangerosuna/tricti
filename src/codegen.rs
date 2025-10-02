@@ -441,7 +441,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Basic allocator hooks via libc malloc/free
         let malloc_ty = i8_ptr_type.fn_type(&[self.context.i64_type().into()], false);
         let malloc_fn = self.module.add_function("malloc", malloc_ty, None);
-    // Expose as `alloc` to tricti source
+        // Expose as `alloc` to tricti source
         self.functions.insert("alloc".to_string(), malloc_fn);
 
         let free_ty = self
@@ -2290,7 +2290,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             Statement::Expression(expr) => {
                 self.generate_expression(expr)?;
             }
-            Statement::ModuleDecl { name: _, items, is_public: _ } => {
+            Statement::ModuleDecl {
+                name: _,
+                items,
+                is_public: _,
+            } => {
                 if let Some(stmts) = items {
                     for s in stmts {
                         let _ = self.generate_statement(s);
@@ -2877,6 +2881,24 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Ok(self.context.i64_type().const_zero().into())
             }
 
+            Expression::IfExpr {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                let mut then_branch = Vec::new();
+                then_branch.push(Statement::Expression((*then_expr.clone())));
+                let else_branch = else_expr
+                    .as_ref()
+                    .map(|expr| vec![Statement::Expression((*expr.clone()))]);
+                let synthetic_if = Expression::If {
+                    condition: condition.clone(),
+                    then_branch,
+                    else_branch,
+                };
+                self.generate_expression(&synthetic_if)
+            }
+
             Expression::If {
                 condition,
                 then_branch,
@@ -3287,52 +3309,47 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 for arg in arguments.iter() {
                                     if let Expression::Identifier(var_name) = &arg.value {
                                         if var_name != "_" {
-                                            let payload_val: BasicValueEnum<'ctx> = if let Some(enum_alloca) = temp_alloca {
-                                                let payload_ptr = self
-                                                    .builder
-                                                    .build_struct_gep(
-                                                        self.enum_struct.unwrap(),
-                                                        enum_alloca,
-                                                        1,
-                                                        "payload_ptr",
-                                                    )
-                                                    .map_err(|e| {
-                                                        CodegenError::CompilationError(
-                                                            e.to_string(),
+                                            let payload_val: BasicValueEnum<'ctx> =
+                                                if let Some(enum_alloca) = temp_alloca {
+                                                    let payload_ptr = self
+                                                        .builder
+                                                        .build_struct_gep(
+                                                            self.enum_struct.unwrap(),
+                                                            enum_alloca,
+                                                            1,
+                                                            "payload_ptr",
                                                         )
-                                                    })?;
-                                                self.builder
-                                                    .build_load(
-                                                        self.context.i64_type(),
-                                                        payload_ptr,
-                                                        "payload",
-                                                    )
-                                                    .map_err(|e| {
-                                                        CodegenError::CompilationError(
-                                                            e.to_string(),
+                                                        .map_err(|e| {
+                                                            CodegenError::CompilationError(
+                                                                e.to_string(),
+                                                            )
+                                                        })?;
+                                                    self.builder
+                                                        .build_load(
+                                                            self.context.i64_type(),
+                                                            payload_ptr,
+                                                            "payload",
                                                         )
-                                                    })?
-                                            } else {
-                                                self.context.i64_type().const_zero().into()
-                                            };
+                                                        .map_err(|e| {
+                                                            CodegenError::CompilationError(
+                                                                e.to_string(),
+                                                            )
+                                                        })?
+                                                } else {
+                                                    self.context.i64_type().const_zero().into()
+                                                };
                                             let payload_ty: BasicTypeEnum<'ctx> =
                                                 self.context.i64_type().into();
                                             let var_alloca = self
-                                                .create_entry_block_alloca(
-                                                    var_name,
-                                                    payload_ty,
-                                                )?;
+                                                .create_entry_block_alloca(var_name, payload_ty)?;
                                             self.builder
                                                 .build_store(var_alloca, payload_val)
                                                 .map_err(|e| {
-                                                    CodegenError::CompilationError(
-                                                        e.to_string(),
-                                                    )
+                                                    CodegenError::CompilationError(e.to_string())
                                                 })?;
-                                            let previous = self.variables.insert(
-                                                var_name.clone(),
-                                                (var_alloca, payload_ty),
-                                            );
+                                            let previous = self
+                                                .variables
+                                                .insert(var_name.clone(), (var_alloca, payload_ty));
                                             saved_bindings.push((var_name.clone(), previous));
                                         }
                                     }
@@ -3347,11 +3364,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             int_val.into()
                         } else {
                             self.builder
-                                .build_int_cast(
-                                    int_val,
-                                    self.context.i64_type(),
-                                    "match_arm_cast",
-                                )
+                                .build_int_cast(int_val, self.context.i64_type(), "match_arm_cast")
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                                 .into()
                         }
@@ -3489,11 +3502,20 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     let with_tag = self
                                         .builder
                                         .build_insert_value(undef_struct, tag_val, 0, "enum_tag")
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        .map_err(|e| {
+                                            CodegenError::CompilationError(e.to_string())
+                                        })?;
                                     let with_payload = self
                                         .builder
-                                        .build_insert_value(with_tag, payload_val, 1, "enum_payload")
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        .build_insert_value(
+                                            with_tag,
+                                            payload_val,
+                                            1,
+                                            "enum_payload",
+                                        )
+                                        .map_err(|e| {
+                                            CodegenError::CompilationError(e.to_string())
+                                        })?;
                                     return Ok(with_payload.as_basic_value_enum());
                                 }
                             }
@@ -3505,37 +3527,50 @@ impl<'ctx> CodeGenerator<'ctx> {
                     if segments.len() >= 2 {
                         let type_name = &segments[0];
                         let variant_name = &segments[1];
-                        if let Some(Type::Enum { variants, order }) = self.semantic.types.get(type_name) {
+                        if let Some(Type::Enum { variants, order }) =
+                            self.semantic.types.get(type_name)
+                        {
                             if variants.contains_key(variant_name) {
                                 if let Some(idx) = order.iter().position(|s| s == variant_name) {
-                                    let tag_val = self.context.i64_type().const_int(idx as u64, false);
-                                    let payload_val = if variants.get(variant_name).unwrap().is_some() {
-                                        if arguments.is_empty() {
-                                            return Err(CodegenError::InvalidOperation(
-                                                "enum constructor missing payload".to_string(),
-                                            ));
-                                        }
-                                        self.generate_expression(&arguments[0].value)?
-                                    } else {
-                                        self.context.i64_type().const_zero().into()
-                                    };
+                                    let tag_val =
+                                        self.context.i64_type().const_int(idx as u64, false);
+                                    let payload_val =
+                                        if variants.get(variant_name).unwrap().is_some() {
+                                            if arguments.is_empty() {
+                                                return Err(CodegenError::InvalidOperation(
+                                                    "enum constructor missing payload".to_string(),
+                                                ));
+                                            }
+                                            self.generate_expression(&arguments[0].value)?
+                                        } else {
+                                            self.context.i64_type().const_zero().into()
+                                        };
                                     // Use builder.insert_value for non-const aggregates
                                     let enum_ty = self.enum_struct.unwrap();
                                     let undef_struct = enum_ty.get_undef();
                                     let with_tag = self
                                         .builder
                                         .build_insert_value(undef_struct, tag_val, 0, "enum_tag")
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        .map_err(|e| {
+                                            CodegenError::CompilationError(e.to_string())
+                                        })?;
                                     let with_payload = self
                                         .builder
-                                        .build_insert_value(with_tag, payload_val, 1, "enum_payload")
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                        .build_insert_value(
+                                            with_tag,
+                                            payload_val,
+                                            1,
+                                            "enum_payload",
+                                        )
+                                        .map_err(|e| {
+                                            CodegenError::CompilationError(e.to_string())
+                                        })?;
                                     return Ok(with_payload.as_basic_value_enum());
                                 }
                             }
                         }
                     }
-                    
+
                     // Static method call (NOT enum constructor): mangle and call directly
                     // This handles cases like Vec<u64>::new()
                     let mangled_name = segments.join("_");
@@ -3546,13 +3581,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                             let val = self.generate_expression(&arg.value)?;
                             arg_values.push(val.into());
                         }
-                        
+
                         // Call the function directly
                         let call_result = self
                             .builder
                             .build_call(callee_fn, &arg_values, "static_method_call")
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                        
+
                         return if let Some(ret_val) = call_result.try_as_basic_value().left() {
                             Ok(ret_val)
                         } else {
@@ -3573,7 +3608,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Static path like Vec::new or Option::Some
                 // Mangle to identifier and look up
                 let mangled_name = segments.join("_");
-                
+
                 // Check if it's an enum variant (no call, just the tag)
                 if segments.len() >= 2 {
                     let type_name = &segments[0];
@@ -3585,7 +3620,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
                     }
                 }
-                
+
                 // Otherwise treat as function reference (return function pointer)
                 // For now, just return zero as placeholder
                 Ok(self.context.i64_type().const_zero().into())
@@ -4308,15 +4343,23 @@ impl<'ctx> CodeGenerator<'ctx> {
                         _ => self.cast_to_int(arg_val, self.context.i64_type())?,
                     };
                     // For now, return a placeholder. In a real implementation, this would use LLVM's ctlz
-                    let clz = self.builder.build_call(
-                        self.module.get_function("__builtin_clzll").unwrap_or_else(|| {
-                            // Declare it if not found
-                            let fn_type = self.context.i32_type().fn_type(&[self.context.i64_type().into()], false);
-                            self.module.add_function("__builtin_clzll", fn_type, None)
-                        }),
-                        &[int_val.into()],
-                        "clz"
-                    ).map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    let clz = self
+                        .builder
+                        .build_call(
+                            self.module
+                                .get_function("__builtin_clzll")
+                                .unwrap_or_else(|| {
+                                    // Declare it if not found
+                                    let fn_type = self
+                                        .context
+                                        .i32_type()
+                                        .fn_type(&[self.context.i64_type().into()], false);
+                                    self.module.add_function("__builtin_clzll", fn_type, None)
+                                }),
+                            &[int_val.into()],
+                            "clz",
+                        )
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     if let Some(value) = clz.try_as_basic_value().left() {
                         return Ok(value);
                     }
@@ -6247,7 +6290,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         // First pass: declare all functions with mapped param/ret types (skip top-level main; we'll build the real C entry separately)
         for stmt in &program.statements {
             match stmt {
-                Statement::ConstDecl { name, value, extern_linkage, .. } => {
+                Statement::ConstDecl {
+                    name,
+                    value,
+                    extern_linkage,
+                    ..
+                } => {
                     if let ConstValue::Expression(Expression::Function {
                         parameters,
                         return_type,
@@ -6354,7 +6402,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                     body,
                 } => {
                     // Generate method function
-                    let mangled = format!("{}_{}", self.current_impl_struct.as_deref().unwrap_or("unknown"), name);
+                    let mangled = format!(
+                        "{}_{}",
+                        self.current_impl_struct.as_deref().unwrap_or("unknown"),
+                        name
+                    );
                     let ret_ty = return_type
                         .as_ref()
                         .and_then(|t| self.map_ast_type(t))
@@ -6392,15 +6444,20 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // Bind parameters to allocas
                     for (i, param) in function.get_param_iter().enumerate() {
                         let param_ty = param_tys_bte[i];
-                        let alloca = self.create_entry_block_alloca(&format!("arg{}", i), param_ty)?;
-                        self.builder.build_store(alloca, param).map_err(|e| {
-                            CodegenError::CompilationError(e.to_string())
-                        })?;
+                        let alloca =
+                            self.create_entry_block_alloca(&format!("arg{}", i), param_ty)?;
+                        self.builder
+                            .build_store(alloca, param)
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                         if i == 0 {
                             // Receiver (self)
-                            self.variables.insert("self".to_string(), (alloca, param_ty));
+                            self.variables
+                                .insert("self".to_string(), (alloca, param_ty));
                         } else {
-                            let param_name = parameters.get(i - 1).map(|p| p.name.clone()).unwrap_or(format!("arg{}", i - 1));
+                            let param_name = parameters
+                                .get(i - 1)
+                                .map(|p| p.name.clone())
+                                .unwrap_or(format!("arg{}", i - 1));
                             self.variables.insert(param_name, (alloca, param_ty));
                         }
                     }
@@ -6409,9 +6466,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     match body {
                         FunctionBody::Expression(expr) => {
                             let val = self.generate_expression(expr)?;
-                            self.builder.build_return(Some(&val)).map_err(|e| {
-                                CodegenError::CompilationError(e.to_string())
-                            })?;
+                            self.builder
+                                .build_return(Some(&val))
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                         }
                         FunctionBody::Block(statements) => {
                             for stmt in statements {
@@ -6419,9 +6476,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }
                             // If no return, add implicit return
                             if !statements.iter().any(|s| matches!(s, Statement::Return(_))) {
-                                self.builder.build_return(None).map_err(|e| {
-                                    CodegenError::CompilationError(e.to_string())
-                                })?;
+                                self.builder
+                                    .build_return(None)
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                             }
                         }
                     }
@@ -6492,7 +6549,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Second pass: define bodies
         for stmt in &program.statements {
             match stmt {
-                Statement::ConstDecl { name, value, extern_linkage, .. } => {
+                Statement::ConstDecl {
+                    name,
+                    value,
+                    extern_linkage,
+                    ..
+                } => {
                     // Skip extern functions - they're declared but not defined
                     if extern_linkage.is_some() {
                         continue;
@@ -6550,7 +6612,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 // If returning a struct and the body is a struct literal or a block whose last expr is a struct literal, build using known struct layout
                                 if let BasicTypeEnum::StructType(st_ret) = ret_ty {
                                     // Direct struct literal
-                                    if let Expression::StructLiteral { type_name, fields } = expr.as_ref() {
+                                    if let Expression::StructLiteral { type_name, fields } =
+                                        expr.as_ref()
+                                    {
                                         if let Some((struct_name, (st_known, order))) = self
                                             .struct_types
                                             .iter()
@@ -6684,7 +6748,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                                         Statement::Expression(expr) => {
                                             // If returning a struct and the last expr is a struct literal, build it using layout
                                             if let BasicTypeEnum::StructType(st_ret) = ret_ty {
-                                                if let Expression::StructLiteral { type_name, fields } = expr {
+                                                if let Expression::StructLiteral {
+                                                    type_name,
+                                                    fields,
+                                                } = expr
+                                                {
                                                     if let Some((struct_name, (st_known, order))) =
                                                         self.struct_types.iter().find(
                                                             |(_, (llvm_st, _))| *llvm_st == st_ret,

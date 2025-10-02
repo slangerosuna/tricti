@@ -1,10 +1,10 @@
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tricti::{
     ast::*, async_runtime::*, async_scheduler_integration::*, scheduler::*,
     semantic::SemanticContext, system_executor::*, table_runtime::*,
 };
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 
 /// Focused integration tests for concurrent systems and resource contention scenarios
 /// These tests verify that the async execution model properly handles:

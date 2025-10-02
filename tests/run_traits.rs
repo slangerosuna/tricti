@@ -1,8 +1,8 @@
 use inkwell::context::Context;
+use std::process::Command;
 use tricti::codegen::CodeGenerator;
 use tricti::parser;
 use tricti::semantic::{analyze_program, SemanticError};
-use std::process::Command;
 
 fn clang_available() -> bool {
     Command::new("clang").arg("--version").output().is_ok()

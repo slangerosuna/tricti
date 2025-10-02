@@ -46,7 +46,8 @@ fn main() {
         parser::parse("".to_string())
     } else {
         let stdlib_path = std::env::current_dir().unwrap().join("std.tri");
-        let stdlib_content = std::fs::read_to_string(&stdlib_path).expect("Failed to read stdlib file");
+        let stdlib_content =
+            std::fs::read_to_string(&stdlib_path).expect("Failed to read stdlib file");
         let p = parser::parse(stdlib_content);
         expand_modules(p, &std::env::current_dir().unwrap())
     };
@@ -243,7 +244,11 @@ fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
     let mut expanded: Vec<Statement> = Vec::new();
     for stmt in program.statements.into_iter() {
         match &stmt {
-            Statement::ModuleDecl { name, items, is_public: _ } if items.is_none() => {
+            Statement::ModuleDecl {
+                name,
+                items,
+                is_public: _,
+            } if items.is_none() => {
                 // Try base_dir/name.pn then base_dir/src/name.pn
                 let mut tried: Vec<PathBuf> = Vec::new();
                 let p1 = base_dir.join(format!("{}.pn", name));
@@ -267,7 +272,11 @@ fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
                     eprintln!("warning: module '{}' not found on disk", name);
                 }
             }
-            Statement::Use { path, is_public: _, alias: _ } => {
+            Statement::Use {
+                path,
+                is_public: _,
+                alias: _,
+            } => {
                 // Simple import: try to load a module file named by the first path segment or joined path
                 if !path.is_empty() {
                     let joined = path.join("/");

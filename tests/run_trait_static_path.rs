@@ -1,8 +1,8 @@
 use inkwell::context::Context;
+use std::process::Command;
 use tricti::codegen::CodeGenerator;
 use tricti::parser;
 use tricti::semantic::analyze_program;
-use std::process::Command;
 
 #[test]
 fn trait_static_path_call_e2e() {

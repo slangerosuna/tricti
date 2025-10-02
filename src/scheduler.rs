@@ -741,10 +741,7 @@ impl SystemScheduler {
                         continue;
                     }
                     None => {
-                        resource_accesses.insert(
-                            name.clone(),
-                            (access.clone(), type_signature),
-                        );
+                        resource_accesses.insert(name.clone(), (access.clone(), type_signature));
                     }
                 }
             }
@@ -947,12 +944,7 @@ impl SystemScheduler {
         let mut accesses = HashMap::new();
 
         for param in &system.parameters {
-            if let SystemParameter::Resource {
-                name,
-                access,
-                ..
-            } = param
-            {
+            if let SystemParameter::Resource { name, access, .. } = param {
                 accesses.insert(name.clone(), access.clone());
             }
         }

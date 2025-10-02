@@ -1,7 +1,7 @@
 // This module will handle package management for TriCTI when I get the package repo up
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Package {
@@ -48,24 +48,27 @@ pub struct PackageManager {
 
 impl PackageManager {
     pub fn new(registry_url: String, cache_dir: PathBuf) -> Self {
-        Self { registry_url, cache_dir }
+        Self {
+            registry_url,
+            cache_dir,
+        }
     }
 
     /// Install a package and its dependencies
     pub fn install_package(&self, name: &str, version: &str) -> Result<(), PackageError> {
         println!("Installing package: {}@{}", name, version);
-        
+
         // Download package
         let package = self.download_package(name, version)?;
-        
+
         // Install dependencies recursively
         for (dep_name, dep_req) in &package.dependencies {
             self.install_package(dep_name, &dep_req.version)?;
         }
-        
+
         // Extract package to cache
         self.extract_package(&package)?;
-        
+
         Ok(())
     }
 
@@ -73,25 +76,29 @@ impl PackageManager {
     pub fn resolve_dependencies(&self, package: &Package) -> Result<Vec<Package>, PackageError> {
         let mut resolved = Vec::new();
         let mut visited = std::collections::HashSet::new();
-        
+
         self.resolve_deps_recursive(package, &mut resolved, &mut visited)?;
-        
+
         Ok(resolved)
     }
 
-    fn resolve_deps_recursive(&self, package: &Package, resolved: &mut Vec<Package>, 
-                             visited: &mut std::collections::HashSet<String>) -> Result<(), PackageError> {
+    fn resolve_deps_recursive(
+        &self,
+        package: &Package,
+        resolved: &mut Vec<Package>,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Result<(), PackageError> {
         if visited.contains(&package.name) {
             return Ok(());
         }
-        
+
         visited.insert(package.name.clone());
-        
+
         for (dep_name, dep_req) in &package.dependencies {
             let dep_package = self.get_package(dep_name, &dep_req.version)?;
             self.resolve_deps_recursive(&dep_package, resolved, visited)?;
         }
-        
+
         resolved.push(package.clone());
         Ok(())
     }
@@ -103,14 +110,14 @@ impl PackageManager {
         if cache_path.exists() {
             return self.load_cached_package(&cache_path);
         }
-        
+
         // Download from registry
         self.download_package(name, version)
     }
 
     fn download_package(&self, name: &str, version: &str) -> Result<Package, PackageError> {
         println!("Downloading {}@{} from registry", name, version);
-        
+
         // Simulate downloading from registry
         // In a real implementation, this would make HTTP requests
         let package = Package {
@@ -124,14 +131,16 @@ impl PackageManager {
             lib: None,
             bin: vec![],
         };
-        
+
         Ok(package)
     }
 
     fn extract_package(&self, package: &Package) -> Result<(), PackageError> {
-        let package_dir = self.cache_dir.join(format!("{}@{}", package.name, package.version));
+        let package_dir = self
+            .cache_dir
+            .join(format!("{}@{}", package.name, package.version));
         std::fs::create_dir_all(&package_dir).map_err(PackageError::IoError)?;
-        
+
         println!("Extracted {} to {:?}", package.name, package_dir);
         Ok(())
     }
@@ -139,7 +148,7 @@ impl PackageManager {
     fn load_cached_package(&self, path: &PathBuf) -> Result<Package, PackageError> {
         let package_file = path.join("Package.toml");
         let content = std::fs::read_to_string(package_file).map_err(PackageError::IoError)?;
-        
+
         toml::from_str(&content).map_err(|e| PackageError::ParseError(e.to_string()))
     }
 
@@ -162,20 +171,20 @@ impl PackageManager {
 
         let toml_content = toml::to_string_pretty(&package)
             .map_err(|e| PackageError::ParseError(e.to_string()))?;
-            
+
         let manifest_path = path.join("Package.toml");
         std::fs::write(manifest_path, toml_content).map_err(PackageError::IoError)?;
-        
+
         // Create basic directory structure
         std::fs::create_dir_all(path.join("src")).map_err(PackageError::IoError)?;
-        
+
         let lib_content = r#"// TriCTI Library
 pub main :: () -> i64 => {
     42
 }
 "#;
         std::fs::write(path.join("src/lib.tri"), lib_content).map_err(PackageError::IoError)?;
-        
+
         println!("Created new TriCTI package: {}", name);
         Ok(())
     }

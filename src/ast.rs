@@ -121,6 +121,11 @@ pub enum Expression {
         then_branch: Vec<Statement>,
         else_branch: Option<Vec<Statement>>,
     },
+    IfExpr {
+        condition: Box<Expression>,
+        then_expr: Box<Expression>,
+        else_expr: Option<Box<Expression>>,
+    },
     Loop {
         body: Vec<Statement>,
     },

@@ -498,24 +498,36 @@ pub fn resource_access_conflict(existing: &ResourceAccess, requested: &ResourceA
 
 /// Count running tasks in a task list
 pub fn count_running_tasks(tasks: &[AsyncTask]) -> i64 {
-    tasks.iter().filter(|task| matches!(task.state, TaskState::Running { .. })).count() as i64
+    tasks
+        .iter()
+        .filter(|task| matches!(task.state, TaskState::Running { .. }))
+        .count() as i64
 }
 
 /// Get minimum of optional i64 values
 pub fn min_option_i64(current: Option<i64>, candidate: i64) -> Option<i64> {
     match current {
-        Some(existing) => Some(if candidate < existing { candidate } else { existing }),
+        Some(existing) => Some(if candidate < existing {
+            candidate
+        } else {
+            existing
+        }),
         None => Some(candidate),
     }
 }
 
 /// Mark a task as running
 pub fn mark_task_running(runtime: &mut AsyncRuntimeState, task_id: u64) {
-    let task_idx = runtime.active_tasks.iter().position(|task| task.id == task_id)
+    let task_idx = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
         .expect("mark_task_running: unknown task id");
 
     let task = &mut runtime.active_tasks[task_idx];
-    task.state = TaskState::Running { started_at_ms: now_ms() };
+    task.state = TaskState::Running {
+        started_at_ms: now_ms(),
+    };
 }
 
 /// Complete a task with the given state
@@ -527,11 +539,18 @@ pub fn complete_task(runtime: &mut AsyncRuntimeState, task_id: u64, state: TaskS
     }
 
     // Remove waker if present
-    if let Some(pos) = runtime.wakers.iter().position(|waker| waker.task_id == task_id) {
+    if let Some(pos) = runtime
+        .wakers
+        .iter()
+        .position(|waker| waker.task_id == task_id)
+    {
         runtime.wakers.remove(pos);
     }
 
-    let task_idx = runtime.active_tasks.iter().position(|task| task.id == task_id)
+    let task_idx = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
         .expect("complete_task: unknown task id");
 
     let task = runtime.active_tasks.remove(task_idx);
@@ -565,8 +584,16 @@ pub fn complete_task(runtime: &mut AsyncRuntimeState, task_id: u64, state: TaskS
 }
 
 /// Suspend a task at a yield point
-pub fn suspend_task(runtime: &mut AsyncRuntimeState, task_id: u64, yield_point: YieldPoint, intermediate_state: Option<Vec<ParameterValue>>) {
-    let task_idx = runtime.active_tasks.iter().position(|task| task.id == task_id)
+pub fn suspend_task(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    yield_point: YieldPoint,
+    intermediate_state: Option<Vec<ParameterValue>>,
+) {
+    let task_idx = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
         .expect("suspend_task: unknown task id");
 
     let task = &mut runtime.active_tasks[task_idx];
@@ -579,19 +606,26 @@ pub fn suspend_task(runtime: &mut AsyncRuntimeState, task_id: u64, yield_point: 
 
 /// Resume a suspended task
 pub fn resume_task(runtime: &mut AsyncRuntimeState, task_id: u64) -> TaskResumeResult {
-    let task_idx = runtime.active_tasks.iter().position(|task| task.id == task_id);
+    let task_idx = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id);
 
     let task_idx = match task_idx {
         Some(idx) => idx,
-        None => return TaskResumeResult {
-            resumed: false,
-            intermediate_state: None,
-        },
+        None => {
+            return TaskResumeResult {
+                resumed: false,
+                intermediate_state: None,
+            }
+        }
     };
 
     let task = &runtime.active_tasks[task_idx];
     match &task.state {
-        TaskState::Suspended { intermediate_state, .. } => {
+        TaskState::Suspended {
+            intermediate_state, ..
+        } => {
             let intermediate_state = intermediate_state.clone();
             let task = &mut runtime.active_tasks[task_idx];
             task.state = TaskState::Pending;
@@ -639,7 +673,9 @@ pub fn cancel_task(runtime: &mut AsyncRuntimeState, task_id: u64) {
         runtime.resource_summary.queued_tasks = (runtime.resource_summary.queued_tasks - 1).max(0);
     }
 
-    let state = TaskState::Cancelled { cancelled_at_ms: now_ms() };
+    let state = TaskState::Cancelled {
+        cancelled_at_ms: now_ms(),
+    };
     complete_task(runtime, task_id, state);
 }
 
@@ -656,7 +692,11 @@ pub fn fail_task(runtime: &mut AsyncRuntimeState, task_id: u64, error: AsyncExec
 }
 
 /// Complete a task successfully
-pub fn complete_task_success(runtime: &mut AsyncRuntimeState, task_id: u64, result: SystemExecutionResult) {
+pub fn complete_task_success(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    result: SystemExecutionResult,
+) {
     let state = TaskState::Completed {
         completed_at_ms: now_ms(),
         result,
@@ -667,7 +707,10 @@ pub fn complete_task_success(runtime: &mut AsyncRuntimeState, task_id: u64, resu
 /// Yield a task with partial execution result
 pub fn yield_task(runtime: &mut AsyncRuntimeState, task_id: u64, partial: SystemExecutionResult) {
     match partial {
-        SystemExecutionResult::Partial { intermediate_state, next_yield_point } => {
+        SystemExecutionResult::Partial {
+            intermediate_state,
+            next_yield_point,
+        } => {
             suspend_task(runtime, task_id, next_yield_point, Some(intermediate_state));
         }
         _ => panic!("yield_task requires a partial execution result"),
@@ -675,23 +718,25 @@ pub fn yield_task(runtime: &mut AsyncRuntimeState, task_id: u64, partial: System
 }
 
 /// Suspend task for a specific yield point
-pub fn suspend_task_for_yield_point(runtime: &mut AsyncRuntimeState, task_id: u64, yield_point: YieldPoint) {
+pub fn suspend_task_for_yield_point(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    yield_point: YieldPoint,
+) {
     suspend_task(runtime, task_id, yield_point, None);
 }
 
 /// Apply task outcome to runtime state
 pub fn apply_task_outcome(runtime: &mut AsyncRuntimeState, task_id: u64, outcome: TaskOutcome) {
     match outcome {
-        TaskOutcome::Completed { result } => {
-            match result {
-                SystemExecutionResult::Partial { .. } => {
-                    yield_task(runtime, task_id, result);
-                }
-                _ => {
-                    complete_task_success(runtime, task_id, result);
-                }
+        TaskOutcome::Completed { result } => match result {
+            SystemExecutionResult::Partial { .. } => {
+                yield_task(runtime, task_id, result);
             }
-        }
+            _ => {
+                complete_task_success(runtime, task_id, result);
+            }
+        },
         TaskOutcome::Failed { error } => {
             fail_task(runtime, task_id, error);
         }
@@ -705,7 +750,10 @@ pub fn begin_next_task(runtime: &mut AsyncRuntimeState) -> Option<TaskDispatchCo
     let task_id = next_task.id;
     mark_task_running(runtime, task_id);
 
-    let task_idx = runtime.active_tasks.iter().position(|task| task.id == task_id)?;
+    let task_idx = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)?;
     let task = runtime.active_tasks[task_idx].clone();
     let resume_state = take_task_intermediate_state(runtime, task_id);
 
@@ -725,17 +773,31 @@ pub fn take_completed_task(runtime: &mut AsyncRuntimeState) -> Option<CompletedT
 }
 
 /// Take intermediate state for a task
-pub fn take_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u64) -> Option<Vec<ParameterValue>> {
-    let pos = runtime.resume_buffers.iter().position(|state| state.task_id == task_id)?;
+pub fn take_task_intermediate_state(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+) -> Option<Vec<ParameterValue>> {
+    let pos = runtime
+        .resume_buffers
+        .iter()
+        .position(|state| state.task_id == task_id)?;
     let record = runtime.resume_buffers.remove(pos);
     Some(record.values)
 }
 
 /// Store intermediate state for a task
-pub fn store_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u64, values: Vec<ParameterValue>) {
+pub fn store_task_intermediate_state(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    values: Vec<ParameterValue>,
+) {
     let record = TaskIntermediateState { task_id, values };
 
-    if let Some(pos) = runtime.resume_buffers.iter().position(|state| state.task_id == task_id) {
+    if let Some(pos) = runtime
+        .resume_buffers
+        .iter()
+        .position(|state| state.task_id == task_id)
+    {
         runtime.resume_buffers[pos] = record;
     } else {
         runtime.resume_buffers.push(record);
@@ -744,18 +806,37 @@ pub fn store_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u
 
 /// Clear intermediate state for a task
 pub fn clear_task_intermediate_state(runtime: &mut AsyncRuntimeState, task_id: u64) {
-    if let Some(pos) = runtime.resume_buffers.iter().position(|state| state.task_id == task_id) {
+    if let Some(pos) = runtime
+        .resume_buffers
+        .iter()
+        .position(|state| state.task_id == task_id)
+    {
         runtime.resume_buffers.remove(pos);
     }
 }
 
 /// Acquire a resource for a task
-pub fn acquire_resource_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, request: ResourceRequest) -> bool {
-    try_acquire_resource(runtime, task_id, &request.resource_name, request.access_type, request.lease_duration_ms, true)
+pub fn acquire_resource_for_task(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    request: ResourceRequest,
+) -> bool {
+    try_acquire_resource(
+        runtime,
+        task_id,
+        &request.resource_name,
+        request.access_type,
+        request.lease_duration_ms,
+        true,
+    )
 }
 
 /// Acquire multiple resources for a task (all-or-nothing)
-pub fn acquire_resources_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, requests: Vec<ResourceRequest>) -> bool {
+pub fn acquire_resources_for_task(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    requests: Vec<ResourceRequest>,
+) -> bool {
     if requests.is_empty() {
         return true;
     }
@@ -763,7 +844,14 @@ pub fn acquire_resources_for_task(runtime: &mut AsyncRuntimeState, task_id: u64,
     let mut acquired_names: Vec<String> = Vec::new();
 
     for request in &requests {
-        let success = try_acquire_resource(runtime, task_id, &request.resource_name, request.access_type.clone(), request.lease_duration_ms, true);
+        let success = try_acquire_resource(
+            runtime,
+            task_id,
+            &request.resource_name,
+            request.access_type.clone(),
+            request.lease_duration_ms,
+            true,
+        );
         if !success {
             for name in &acquired_names {
                 release_resource_for_task(runtime, task_id, name);
@@ -777,17 +865,31 @@ pub fn acquire_resources_for_task(runtime: &mut AsyncRuntimeState, task_id: u64,
 }
 
 /// Release a resource held by a task
-pub fn release_resource_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, resource_name: &str) {
+pub fn release_resource_for_task(
+    runtime: &mut AsyncRuntimeState,
+    task_id: u64,
+    resource_name: &str,
+) {
     // Remove resource lease
-    runtime.resource_leases.retain(|lease| !(lease.task_id == task_id && lease.resource_name == resource_name));
+    runtime
+        .resource_leases
+        .retain(|lease| !(lease.task_id == task_id && lease.resource_name == resource_name));
 
     // Wake waiting tasks
     wake_waiters_for_resource(runtime, resource_name);
 
     // Remove resource handle from task
-    if let Some(task_idx) = runtime.active_tasks.iter().position(|task| task.id == task_id) {
+    if let Some(task_idx) = runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
+    {
         let task = &mut runtime.active_tasks[task_idx];
-        if let Some(handle_idx) = task.resource_handles.iter().position(|handle| handle.resource_name == resource_name) {
+        if let Some(handle_idx) = task
+            .resource_handles
+            .iter()
+            .position(|handle| handle.resource_name == resource_name)
+        {
             task.resource_handles.remove(handle_idx);
         }
     }
@@ -796,7 +898,9 @@ pub fn release_resource_for_task(runtime: &mut AsyncRuntimeState, task_id: u64, 
 /// Release all resources held by a task
 pub fn release_task_resources(runtime: &mut AsyncRuntimeState, task: &AsyncTask) {
     for handle in &task.resource_handles {
-        runtime.resource_leases.retain(|lease| !(lease.task_id == task.id && lease.resource_name == handle.resource_name));
+        runtime.resource_leases.retain(|lease| {
+            !(lease.task_id == task.id && lease.resource_name == handle.resource_name)
+        });
         wake_waiters_for_resource(runtime, &handle.resource_name);
     }
 }
@@ -810,7 +914,11 @@ pub fn try_acquire_resource(
     lease_duration_ms: Option<i64>,
     enqueue_on_conflict: bool,
 ) -> bool {
-    let task_idx = match runtime.active_tasks.iter().position(|task| task.id == task_id) {
+    let task_idx = match runtime
+        .active_tasks
+        .iter()
+        .position(|task| task.id == task_id)
+    {
         Some(idx) => idx,
         None => return false,
     };
@@ -818,7 +926,11 @@ pub fn try_acquire_resource(
     let task = &runtime.active_tasks[task_idx];
 
     // Check if task already has this resource
-    if task.resource_handles.iter().any(|handle| handle.resource_name == resource_name) {
+    if task
+        .resource_handles
+        .iter()
+        .any(|handle| handle.resource_name == resource_name)
+    {
         return true;
     }
 
@@ -831,7 +943,10 @@ pub fn try_acquire_resource(
 
     if conflict {
         if enqueue_on_conflict {
-            let existing_waiter = runtime.resource_waiters.iter().any(|waiter| waiter.task_id == task_id && waiter.resource_name == resource_name);
+            let existing_waiter = runtime
+                .resource_waiters
+                .iter()
+                .any(|waiter| waiter.task_id == task_id && waiter.resource_name == resource_name);
             if !existing_waiter {
                 let waiter = ResourceWaiter {
                     resource_name: resource_name.to_string(),
@@ -921,7 +1036,11 @@ pub fn register_task_waker(runtime: &mut AsyncRuntimeState, task_id: u64, token:
 
 /// Take a task waker (removes it from runtime)
 pub fn take_task_waker(runtime: &mut AsyncRuntimeState, task_id: u64) -> Option<TaskWaker> {
-    if let Some(pos) = runtime.wakers.iter().position(|waker| waker.task_id == task_id) {
+    if let Some(pos) = runtime
+        .wakers
+        .iter()
+        .position(|waker| waker.task_id == task_id)
+    {
         Some(runtime.wakers.remove(pos))
     } else {
         None
@@ -956,17 +1075,29 @@ pub fn poll_next_ready_task(runtime: &mut AsyncRuntimeState) -> Option<&AsyncTas
 
 /// Wake tasks that have finished sleeping
 pub fn wake_sleeping_tasks(runtime: &mut AsyncRuntimeState, now_ms: i64) {
-    let task_ids_to_resume: Vec<u64> = runtime.active_tasks.iter().filter_map(|task| {
-        if let TaskState::Suspended { yield_point: YieldPoint::Sleeping { duration_ms, started_at_ms }, .. } = &task.state {
-            if now_ms >= started_at_ms + duration_ms {
-                Some(task.id)
+    let task_ids_to_resume: Vec<u64> = runtime
+        .active_tasks
+        .iter()
+        .filter_map(|task| {
+            if let TaskState::Suspended {
+                yield_point:
+                    YieldPoint::Sleeping {
+                        duration_ms,
+                        started_at_ms,
+                    },
+                ..
+            } = &task.state
+            {
+                if now_ms >= started_at_ms + duration_ms {
+                    Some(task.id)
+                } else {
+                    None
+                }
             } else {
                 None
             }
-        } else {
-            None
-        }
-    }).collect();
+        })
+        .collect();
 
     for task_id in task_ids_to_resume {
         let _ = resume_task(runtime, task_id);
@@ -1029,7 +1160,15 @@ pub fn runtime_next_deadline_ms(runtime: &AsyncRuntimeState) -> Option<i64> {
             deadline = min_option_i64(deadline, candidate);
         }
 
-        if let TaskState::Suspended { yield_point: YieldPoint::Sleeping { duration_ms, started_at_ms }, .. } = &task.state {
+        if let TaskState::Suspended {
+            yield_point:
+                YieldPoint::Sleeping {
+                    duration_ms,
+                    started_at_ms,
+                },
+            ..
+        } = &task.state
+        {
             let candidate = started_at_ms + duration_ms;
             deadline = min_option_i64(deadline, candidate);
         }

@@ -1,7 +1,7 @@
 use inkwell::context::Context;
-use tricti::{codegen, parser, semantic};
 use std::fs;
 use std::path::Path;
+use tricti::{codegen, parser, semantic};
 
 #[test]
 fn compiles_minimal_program_to_object() {
