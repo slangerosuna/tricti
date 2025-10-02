@@ -777,9 +777,9 @@ mod tests {
         let query = QueryPlan::select("Users".to_string(), projection, where_clause);
         let result = executor.execute(query).expect("Failed to execute query");
 
-    // Verify statistics - optimized scan touches only matching rows
-    assert_eq!(result.statistics.rows_scanned, 2);
-    assert_eq!(result.statistics.rows_filtered, 1); // Bob was filtered out
+        // Verify statistics - optimized scan touches only matching rows
+        assert_eq!(result.statistics.rows_scanned, 2);
+        assert_eq!(result.statistics.rows_filtered, 1); // Bob was filtered out
         assert_eq!(result.statistics.rows_returned, 2); // Alice and Charlie
         assert!(result.statistics.execution_time_ms >= 0);
     }

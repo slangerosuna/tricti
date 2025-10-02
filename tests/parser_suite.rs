@@ -118,9 +118,7 @@ fn parse_function_with_attribute() {
     let program = parser::parse(src.to_string());
     match &program.statements[0] {
         Statement::ConstDecl {
-            attributes,
-            value,
-            ..
+            attributes, value, ..
         } => {
             assert_eq!(attributes.len(), 1);
             assert_eq!(attributes[0].name, "memoize");

@@ -782,7 +782,35 @@ fn parse_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::path_struct => parse_path_struct_expression(inner),
         Rule::static_path => parse_static_path_expression(inner),
         Rule::identifier => Expression::Identifier(inner.as_str().to_string()),
+        Rule::option_pattern => parse_option_pattern(inner),
         _ => panic!("Unexpected pattern rule: {:?}", inner.as_rule()),
+    }
+}
+
+fn parse_option_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let variant = inner
+        .next()
+        .expect("option pattern missing variant");
+
+    match variant.as_rule() {
+        Rule::some_option_pattern => {
+            let mut some_inner = variant.into_inner();
+            let value_pair = some_inner
+                .next()
+                .expect("some pattern must have an inner pattern");
+            let argument_pattern = parse_pattern(value_pair);
+            Expression::Call {
+                function: Box::new(Expression::Identifier("some".to_string())),
+                type_args: vec![],
+                arguments: vec![Argument {
+                    name: None,
+                    value: argument_pattern,
+                }],
+            }
+        }
+        Rule::none_option_pattern => Expression::Identifier("none".to_string()),
+        other => panic!("unexpected option pattern variant: {:?}", other),
     }
 }
 

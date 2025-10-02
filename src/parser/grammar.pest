@@ -47,7 +47,7 @@ inline_conditional = { "if" ~ expression ~ "then" ~ expression ~ ("else" ~ expre
 attribute       = { "@" ~ identifier ~ ("(" ~ (expression ~ ("," ~ expression)*)? ~ ")")? }
 attributes      = { attribute* }
 
-const_decl = {
+const_decl = @{
     attributes? ~
     WHITESPACE* ~
     ("extern" ~ string?)? ~
@@ -144,7 +144,10 @@ struct_literal = { "{" ~ (full_field | shorthand_field | ".." ~ ","?)* ~ "}" }
 shorthand_field = { identifier ~ ","? }
 full_field = { identifier ~ ":" ~ (unsafe_block | expression) ~ ","? }
 
-pattern       = { path_struct | static_path | literal | identifier | "_" }
+some_option_pattern = { "some" ~ pattern }
+none_option_pattern = { "none" }
+option_pattern = { some_option_pattern | none_option_pattern }
+pattern       = { option_pattern | path_struct | static_path | literal | identifier | "_" }
 
 match         = { "match" ~ expression ~ "{" ~ match_arm+ ~ ("," ~ WHITESPACE* ~ &"}")? ~ "}" }
 match_arm     = { pattern ~ "=>" ~ match_body ~ ("," ~ WHITESPACE* ~ !"}")? }

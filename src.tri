@@ -27,7 +27,7 @@ div :: (x: i32, y: i32) -> !i32 => {
         # this would be equivalent to `return Err(Box::new("Cannot divide by zero"))` in Rust
         ret !"Cannot divide by zero"
     }
-    # Wrapping in Ok or Some is implicit
+    # Wrapping in Ok or Some is implicit unless you use the `some` or `ok` keywords explicitly
     x / y
 }
 
@@ -116,7 +116,7 @@ display_apps :: sys (
 # @gpu hands it off to an OpenCL kernel explicitly, but in future
 # versions the compiler will do this implicitly depending on heuristics
 @gpu
-vector_add :: (arr_a: [f32], arr_b: [f32]) -> [f32] => arr_a + arr_b
+vector_add :: (arr_a: [f32], arr_b: [f32]) -> [f32] => arr_a .+ arr_b
 
 ExampleSignal :: Signal<Mpsc, Buffer, String>
 
@@ -167,7 +167,20 @@ setup_signals :: () => {
 RedrawRequested :: Signal<Spmc, Overwrite, none>
 @trigger(RedrawRequested, Database)
 redraw :: compose {
-    # DAG example: system fan-out and merging
+    display_apps -> emitter_sys,
+
+    # fan out, merge
+    # foo -> (bar, baz) -> quux,
+    # static fanout and merge operates via tuple composition/decomposition
+    # although merge here can also work by copying the value if it is a Copy type and not a tuple
+    # more complicated DAGs are possible too
+    # (a: foo) -> ((b: bar), (c: baz)) -> quux,
+    # (b: bar) -> (c: baz)
+    # as mentioned above, feedback loops are possible too
+    # (c: baz) ?-> (b: bar)
+    # and there is also dynamic fanout and merge via decomposing and composing vectors
+    # foo -> [bar], # runs bar for each element of the vector returned by foo
+    # [bar] -> quux, # merges the results of all bar instances into a vector and passes to quux
 }
 
 # -------------------------------
