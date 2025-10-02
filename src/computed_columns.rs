@@ -533,6 +533,47 @@ impl LazyEvaluationEngine {
                     ))),
                 }
             }
+            // Mixed numeric types: U64 and F64
+            (ColumnValue::U64(l), ColumnValue::F64(r_bits)) => {
+                let l = *l as f64;
+                let r = f64::from_bits(*r_bits);
+                match operator {
+                    BinaryOperator::Add => Ok(ColumnValue::F64((l + r).to_bits())),
+                    BinaryOperator::Sub => Ok(ColumnValue::F64((l - r).to_bits())),
+                    BinaryOperator::Mul => Ok(ColumnValue::F64((l * r).to_bits())),
+                    BinaryOperator::Div => Ok(ColumnValue::F64((l / r).to_bits())),
+                    BinaryOperator::Equal => Ok(ColumnValue::Bool(l == r)),
+                    BinaryOperator::NotEqual => Ok(ColumnValue::Bool(l != r)),
+                    BinaryOperator::Less => Ok(ColumnValue::Bool(l < r)),
+                    BinaryOperator::LessEqual => Ok(ColumnValue::Bool(l <= r)),
+                    BinaryOperator::Greater => Ok(ColumnValue::Bool(l > r)),
+                    BinaryOperator::GreaterEqual => Ok(ColumnValue::Bool(l >= r)),
+                    _ => Err(EvaluationError::ExpressionEvaluationError(format!(
+                        "Unsupported operator {:?} for mixed numeric values",
+                        operator
+                    ))),
+                }
+            }
+            (ColumnValue::F64(l_bits), ColumnValue::U64(r)) => {
+                let l = f64::from_bits(*l_bits);
+                let r = *r as f64;
+                match operator {
+                    BinaryOperator::Add => Ok(ColumnValue::F64((l + r).to_bits())),
+                    BinaryOperator::Sub => Ok(ColumnValue::F64((l - r).to_bits())),
+                    BinaryOperator::Mul => Ok(ColumnValue::F64((l * r).to_bits())),
+                    BinaryOperator::Div => Ok(ColumnValue::F64((l / r).to_bits())),
+                    BinaryOperator::Equal => Ok(ColumnValue::Bool(l == r)),
+                    BinaryOperator::NotEqual => Ok(ColumnValue::Bool(l != r)),
+                    BinaryOperator::Less => Ok(ColumnValue::Bool(l < r)),
+                    BinaryOperator::LessEqual => Ok(ColumnValue::Bool(l <= r)),
+                    BinaryOperator::Greater => Ok(ColumnValue::Bool(l > r)),
+                    BinaryOperator::GreaterEqual => Ok(ColumnValue::Bool(l >= r)),
+                    _ => Err(EvaluationError::ExpressionEvaluationError(format!(
+                        "Unsupported operator {:?} for mixed numeric values",
+                        operator
+                    ))),
+                }
+            }
             (ColumnValue::String(l), ColumnValue::String(r)) => match operator {
                 BinaryOperator::Add => Ok(ColumnValue::String(format!("{}{}", l, r))),
                 BinaryOperator::Equal => Ok(ColumnValue::Bool(l == r)),

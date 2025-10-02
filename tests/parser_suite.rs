@@ -387,10 +387,12 @@ fn parse_trait_type_and_impl_for() {
             trait_name,
             type_name,
             methods,
+            type_params,
         } => {
             assert_eq!(trait_name.as_deref(), Some("my_iterator"));
             assert_eq!(type_name, "my_struct");
             assert_eq!(methods.len(), 1);
+            assert!(type_params.is_empty());
         }
         other => panic!("expected ImplBlock, got {:?}", other),
     }

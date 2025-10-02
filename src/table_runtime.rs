@@ -23,6 +23,7 @@ pub struct ColumnarStorage {
 #[derive(Debug, Clone)]
 pub enum ColumnData {
     U64(Vec<Option<u64>>),
+    I32(Vec<Option<i32>>),
     String(Vec<Option<String>>),
     Bool(Vec<Option<bool>>),
     F64(Vec<Option<f64>>),
@@ -75,6 +76,7 @@ pub enum PredicateResult {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ColumnValue {
     U64(u64),
+    I32(i32),
     String(String),
     Bool(bool),
     F64(u64), // Store as bits for Eq/Hash
@@ -105,7 +107,8 @@ impl ColumnData {
     fn new_for_type(type_name: &str) -> Self {
         match type_name {
             "u64" => ColumnData::U64(Vec::new()),
-            "String" => ColumnData::String(Vec::new()),
+            "i32" => ColumnData::I32(Vec::new()),
+            "string" | "String" => ColumnData::String(Vec::new()),
             "bool" => ColumnData::Bool(Vec::new()),
             "f64" => ColumnData::F64(Vec::new()),
             _ => ColumnData::String(Vec::new()), // Default fallback
@@ -115,6 +118,7 @@ impl ColumnData {
     fn push_value(&mut self, value: ColumnValue) -> Result<(), TableError> {
         match (self, value) {
             (ColumnData::U64(vec), ColumnValue::U64(v)) => vec.push(Some(v)),
+            (ColumnData::I32(vec), ColumnValue::I32(v)) => vec.push(Some(v)),
             (ColumnData::String(vec), ColumnValue::String(v)) => vec.push(Some(v)),
             (ColumnData::Bool(vec), ColumnValue::Bool(v)) => vec.push(Some(v)),
             (ColumnData::F64(vec), ColumnValue::F64(v)) => vec.push(Some(f64::from_bits(v))),
@@ -134,6 +138,7 @@ impl ColumnData {
         while self.len() <= index {
             match self {
                 ColumnData::U64(vec) => vec.push(None),
+                ColumnData::I32(vec) => vec.push(None),
                 ColumnData::String(vec) => vec.push(None),
                 ColumnData::Bool(vec) => vec.push(None),
                 ColumnData::F64(vec) => vec.push(None),
@@ -143,6 +148,8 @@ impl ColumnData {
         match (self, value) {
             (ColumnData::U64(vec), Some(ColumnValue::U64(v))) => vec[index] = Some(v),
             (ColumnData::U64(vec), None) => vec[index] = None,
+            (ColumnData::I32(vec), Some(ColumnValue::I32(v))) => vec[index] = Some(v),
+            (ColumnData::I32(vec), None) => vec[index] = None,
             (ColumnData::String(vec), Some(ColumnValue::String(v))) => vec[index] = Some(v),
             (ColumnData::String(vec), None) => vec[index] = None,
             (ColumnData::Bool(vec), Some(ColumnValue::Bool(v))) => vec[index] = Some(v),
@@ -165,6 +172,7 @@ impl ColumnData {
     pub fn get_value(&self, index: usize) -> Option<ColumnValue> {
         match self {
             ColumnData::U64(vec) => vec.get(index)?.as_ref().map(|&v| ColumnValue::U64(v)),
+            ColumnData::I32(vec) => vec.get(index)?.as_ref().map(|&v| ColumnValue::I32(v)),
             ColumnData::String(vec) => vec
                 .get(index)?
                 .as_ref()
@@ -180,6 +188,11 @@ impl ColumnData {
     fn set_value(&mut self, index: usize, value: ColumnValue) -> Result<(), TableError> {
         match (self, value) {
             (ColumnData::U64(vec), ColumnValue::U64(v)) => {
+                if let Some(slot) = vec.get_mut(index) {
+                    *slot = Some(v);
+                }
+            }
+            (ColumnData::I32(vec), ColumnValue::I32(v)) => {
                 if let Some(slot) = vec.get_mut(index) {
                     *slot = Some(v);
                 }
@@ -217,6 +230,11 @@ impl ColumnData {
                     *slot = None;
                 }
             }
+            ColumnData::I32(vec) => {
+                if let Some(slot) = vec.get_mut(index) {
+                    *slot = None;
+                }
+            }
             ColumnData::String(vec) => {
                 if let Some(slot) = vec.get_mut(index) {
                     *slot = None;
@@ -238,6 +256,7 @@ impl ColumnData {
     fn len(&self) -> usize {
         match self {
             ColumnData::U64(vec) => vec.len(),
+            ColumnData::I32(vec) => vec.len(),
             ColumnData::String(vec) => vec.len(),
             ColumnData::Bool(vec) => vec.len(),
             ColumnData::F64(vec) => vec.len(),
@@ -684,6 +703,7 @@ impl TableRuntime {
 
         let actual_type = match value {
             ColumnValue::U64(_) => "u64",
+            ColumnValue::I32(_) => "i32",
             ColumnValue::String(_) => "String",
             ColumnValue::Bool(_) => "bool",
             ColumnValue::F64(_) => "f64",

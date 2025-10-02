@@ -1,22 +1,26 @@
 .PHONY: build run test fmt lint clean setup
 
 SHELL := /usr/bin/env bash
+ARGS := $(filter-out $@,$(MAKECMDGOALS))
 
 build:
-	./scripts/build.sh
+	@./scripts/build.sh
 
 run:
-	./scripts/run.sh
+	@./scripts/run.sh
 
 test:
-	./scripts/test.sh
+	@./scripts/test.sh $(ARGS)
 
 fmt lint:
-	./scripts/fmt.sh
+	@./scripts/fmt.sh
 
 clean:
-	cargo clean
+	@cargo clean
 
 setup:
-	chmod +x scripts/*.sh
+	@zchmod +x scripts/*.sh
 	@echo "Marked scripts executable. Create and edit .env if needed (see .env.example)."
+
+%:
+	@:

@@ -756,12 +756,10 @@ impl AsyncSystemRuntime {
                     }
                 }
                 SystemParameter::Resource { name, .. } => {
-                    if !parameters.contains_key(name) {
-                        return Err(AsyncExecutionError::SystemError {
-                            system: system_def.name.clone(),
-                            message: format!("Missing required resource: {}", name),
-                        });
-                    }
+                    // Resource validation is handled by the SystemStateMachineExecutor
+                    // during execution, not during submission. Resources are provided
+                    // through table_runtimes, not parameters.
+                    // Skip validation here to avoid false positives.
                 }
                 SystemParameter::Query { name, .. } => {
                     // Query parameters are handled differently

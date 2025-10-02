@@ -17,3 +17,6 @@ if command -v cargo &>/dev/null; then
     cargo clippy -- -D warnings
   fi
 fi
+
+echo "[tools] tricti fmt"
+echo "TriCTI formatting is yet-to-be-implemented"

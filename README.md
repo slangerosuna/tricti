@@ -3,6 +3,95 @@
 TriCTI is a high-performance (theoretically, it's too early to properly test), concurrent, data-oriented programming language that unifies **ECS architectures, relational databases, array-oriented computation, and reactive programming** in a Rust-inspired, statically analyzable framework. It emphasizes **implicit optimization** via static concurrency analysis, SIMD/vectorized operations, and optional GPGPU acceleration.
 
 ---
+## Quick Start
+
+Common development commands are available via `make`.
+
+### Build
+
+```bash
+make build
+```
+
+Compiles the project using Cargo.
+
+### Run
+
+```bash
+make run
+```
+
+Runs the executable, automatically loading `.env` if present.
+
+### Test
+
+```bash
+make test
+```
+
+Runs both Cargo and TriCTI tests.
+
+To pass arguments, use `--` to separate them from `make`:
+
+- Run only TriCTI tests:
+
+  ```bash
+  make test -- -t
+  ```
+
+- Run only Cargo tests:
+
+  ```bash
+  make test -- -c
+  ```
+
+- Run specific TriCTI tests:
+
+  ```bash
+  make test -- -t foo/bar.tri
+  ```
+
+  (Resolves to `tests/tests/foo/bar.tri`)
+
+- Run specific Cargo tests:
+
+  ```bash
+  make test -- -c --test my_module
+  ```
+
+- Run both with arguments:
+
+  ```bash
+  make test -- -t foo/bar.tri -c --test my_module
+  ```
+
+### Format and Lint
+
+```bash
+make fmt
+```
+
+Runs code formatting and lint checks.
+
+### Clean
+
+```bash
+make clean
+```
+
+Removes build artifacts.
+
+### Setup
+
+```bash
+make setup
+```
+
+Marks all scripts in `scripts/` as executable and prepares `.env`.
+
+---
+
+After cloning, run `make setup` once to initialize the project scripts.
 
 ## Design Motivation
 

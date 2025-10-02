@@ -430,6 +430,14 @@ impl EventLoopManager {
             state.is_running = false;
         }
 
+        // Notify shutdown completion
+        {
+            let (lock, cvar) = &*self.shutdown_signal;
+            let mut shutdown = lock.lock().unwrap();
+            *shutdown = false;
+            cvar.notify_all();
+        }
+
         Ok(())
     }
 
