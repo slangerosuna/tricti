@@ -23,7 +23,7 @@ use crate::async_scheduler_integration::{AsyncSystemScheduler, SystemExecutionRe
 use crate::event_loop_manager::{EventLoopConfig, EventLoopManager, LoadBalancingStrategy};
 use crate::table_runtime::{ColumnValue, TableRuntime};
 use inkwell::context::Context;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
@@ -41,6 +41,12 @@ fn main() {
     println!("Using source file: {}", path);
     let file_content = std::fs::read_to_string(path).expect("Failed to read source file");
 
+    let mut visited_modules: HashSet<std::path::PathBuf> = HashSet::new();
+
+    if let Ok(canonical_source) = std::fs::canonicalize(path) {
+        visited_modules.insert(canonical_source);
+    }
+
     let stdlib_program = if std::env::var("SKIP_STDLIB").unwrap_or_default() == "1" {
         // allow tests to skip loading the stdlib
         parser::parse("".to_string())
@@ -48,15 +54,22 @@ fn main() {
         let stdlib_path = std::env::current_dir().unwrap().join("std.tri");
         let stdlib_content =
             std::fs::read_to_string(&stdlib_path).expect("Failed to read stdlib file");
+        if let Ok(canonical_stdlib) = std::fs::canonicalize(&stdlib_path) {
+            visited_modules.insert(canonical_stdlib);
+        }
         let p = parser::parse(stdlib_content);
-        expand_modules(p, &std::env::current_dir().unwrap())
+        expand_modules(p, &std::env::current_dir().unwrap(), &mut visited_modules)
     };
 
     // Parse the program
     println!("Parsing...");
     let mut program = parser::parse(file_content);
     // Expand external modules declared as `mod name;` by reading name.pn
-    program = expand_modules(program, &std::env::current_dir().unwrap());
+    program = expand_modules(
+        program,
+        &std::env::current_dir().unwrap(),
+        &mut visited_modules,
+    );
 
     // Prepend stdlib to the program
     let mut combined_statements = stdlib_program.statements;
@@ -239,7 +252,11 @@ fn run_async_systems(
     Ok(())
 }
 
-fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
+fn expand_modules(
+    program: Program,
+    base_dir: &std::path::Path,
+    visited: &mut HashSet<std::path::PathBuf>,
+) -> Program {
     // Collect new statements to append when we inline modules
     let mut expanded: Vec<Statement> = Vec::new();
     for stmt in program.statements.into_iter() {
@@ -251,21 +268,29 @@ fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
             } if items.is_none() => {
                 // Try base_dir/name.pn then base_dir/src/name.pn
                 let mut tried: Vec<PathBuf> = Vec::new();
-                let p1 = base_dir.join(format!("{}.pn", name));
-                tried.push(p1.clone());
-                let p2 = base_dir.join(format!("{}.tri", name));
-                tried.push(p2.clone());
-                let p3 = base_dir.join("src").join(format!("{}.pn", name));
-                tried.push(p3.clone());
-                let p4 = base_dir.join("src").join(format!("{}.tri", name));
-                tried.push(p4.clone());
-                let content_opt = tried
-                    .into_iter()
-                    .find_map(|p| std::fs::read_to_string(&p).ok());
-                if let Some(content) = content_opt {
+                tried.push(base_dir.join(format!("{}.pn", name)));
+                tried.push(base_dir.join(format!("{}.tri", name)));
+                tried.push(base_dir.join("src").join(format!("{}.pn", name)));
+                tried.push(base_dir.join("src").join(format!("{}.tri", name)));
+
+                let mut loaded: Option<(String, PathBuf)> = None;
+                for candidate in tried {
+                    if let Ok(canonical) = std::fs::canonicalize(&candidate) {
+                        if visited.contains(&canonical) {
+                            continue;
+                        }
+                        if let Ok(content) = std::fs::read_to_string(&canonical) {
+                            visited.insert(canonical.clone());
+                            loaded = Some((content, canonical));
+                            break;
+                        }
+                    }
+                }
+
+                if let Some((content, _canonical)) = loaded {
                     let mut sub = parser::parse(content);
                     // Recursively expand submodules relative to same base_dir
-                    sub = expand_modules(sub, base_dir);
+                    sub = expand_modules(sub, base_dir, visited);
                     // Splice submodule items at top-level for now
                     expanded.extend(sub.statements);
                 } else {
@@ -296,12 +321,22 @@ fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
                     tried.push(base_dir.join("src").join(format!("{}.tri", name)));
                     tried.push(base_dir.join("stdlib").join(format!("{}.pn", name)));
                     tried.push(base_dir.join("stdlib").join(format!("{}.tri", name)));
-                    let content_opt = tried
-                        .into_iter()
-                        .find_map(|p| std::fs::read_to_string(&p).ok());
-                    if let Some(content) = content_opt {
+                    let mut loaded: Option<(String, PathBuf)> = None;
+                    for candidate in tried {
+                        if let Ok(canonical) = std::fs::canonicalize(&candidate) {
+                            if visited.contains(&canonical) {
+                                continue;
+                            }
+                            if let Ok(content) = std::fs::read_to_string(&canonical) {
+                                visited.insert(canonical.clone());
+                                loaded = Some((content, canonical));
+                                break;
+                            }
+                        }
+                    }
+                    if let Some((content, _canonical)) = loaded {
                         let mut sub = parser::parse(content);
-                        sub = expand_modules(sub, base_dir);
+                        sub = expand_modules(sub, base_dir, visited);
                         expanded.extend(sub.statements);
                     } else {
                         eprintln!("warning: use {:?} not found on disk", path);

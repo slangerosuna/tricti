@@ -1,0 +1,6 @@
+# Collections namespace aggregator.
+# Ensures collection implementations are available via `use collections` or `use std::collections`.
+
+use collections::hashmap
+use collections::hashset
+use collections::vec

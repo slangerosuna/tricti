@@ -7,8 +7,8 @@ use ffi
 # Caller is responsible for freeing with free_cstr
 string_to_cstr :: (s: String) -> *u8 => {
     len := String::len(&s)
-    ptr := ffi_malloc(len + 1)
-    ffi_memcpy(ptr, String::as_ptr(&s), len)
+    ptr := ffi::malloc(len + 1)
+    ffi::memcpy(ptr, String::as_ptr(&s), len)
     *(ptr + len) = 0
     ret ptr
 }
@@ -31,7 +31,7 @@ cstr_to_string :: (cstr: *u8) -> String => {
 # Free C string allocated by string_to_cstr
 free_cstr :: (cstr: *u8) => {
     if cstr != (0 as *u8) {
-        ffi_free(cstr)
+        ffi::free(cstr)
     }
 }
 
@@ -42,8 +42,8 @@ array_to_c :: <T>(arr: &[T]) -> *T => {
         ret 0 as *T
     }
     size := arr.len * sizeof::<T>()
-    ptr := ffi_malloc(size) as *T
-    ffi_memcpy(ptr as *u8, arr.data as *u8, size)
+    ptr := ffi::malloc(size) as *T
+    ffi::memcpy(ptr as *u8, arr.data as *u8, size)
     ret ptr
 }
 
@@ -51,26 +51,26 @@ array_to_c :: <T>(arr: &[T]) -> *T => {
 c_array_to_vec :: <T>(ptr: *T, len: u64) -> [T] => {
     mut vec := new [T; len]
     size := len * sizeof::<T>()
-    ffi_memcpy(vec.data as *u8, ptr as *u8, size)
+    ffi::memcpy(vec.data as *u8, ptr as *u8, size)
     ret vec
 }
 
 # Allocate C-compatible memory
 c_alloc :: <T>() -> *T => {
-    ffi_malloc(sizeof::<T>()) as *T
+    ffi::malloc(sizeof::<T>()) as *T
 }
 
 # Allocate array of C-compatible memory
 c_alloc_array :: <T>(count: u64) -> *T => {
-    ffi_malloc(count * sizeof::<T>()) as *T
+    ffi::malloc(count * sizeof::<T>()) as *T
 }
 
 # Free C-allocated memory
 c_free :: <T>(ptr: *T) => {
-    ffi_free(ptr as *u8)
+    ffi::free(ptr as *u8)
 }
 
 # Zero-initialize memory
 c_zero :: <T>(ptr: *T) => {
-    ffi_memset(ptr as *u8, 0, sizeof::<T>())
+    ffi::memset(ptr as *u8, 0, sizeof::<T>())
 }

@@ -1,7 +1,17 @@
+Apps :: table {
+    @primary id: u64,
+    title: String,
+    display: bool = false,
+    downloads: u64 = 0,
+}
+
 display_apps :: sys (
-    query q: select id, name from apps where downloads > 1000,
-    gui gui_handle: res &mut Gui,
-    limit max_apps: i64 = 10
-) -> !nil {
-    return nil;
+    query: (id: u64, name: String) from Apps where downloads > 1000,
+    gui: res &mut Gui,
+) -> !none {
+    a := 1
+    # verify that you can parse this pattern without it thinking it's multiplication
+    *gui = *gui
+        
+    ret none
 }

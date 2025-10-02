@@ -176,6 +176,13 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
     match inner_pair.as_rule() {
         Rule::variable_decl => parse_variable_decl(inner_pair),
         Rule::const_decl => parse_const_decl(inner_pair),
+        Rule::const_statement => {
+            let mut nested = inner_pair.into_inner();
+            let const_decl_pair = nested
+                .next()
+                .expect("const_statement must contain a const_decl");
+            parse_const_decl(const_decl_pair)
+        }
         Rule::assignment => parse_assignment(inner_pair),
         Rule::return_statement => parse_return_statement(inner_pair),
         Rule::break_statement => parse_break_statement(inner_pair),
@@ -186,6 +193,87 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
         Rule::ifdef_statement => parse_ifdef_statement(inner_pair),
         Rule::expression => Statement::Expression(parse_expression(inner_pair)),
         _ => panic!("Unexpected statement rule: {:?}", inner_pair.as_rule()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_simple_const_declaration() {
+        let src = "assert :: (cond: bool, msg: string) -> none => { ret none }";
+        let mut pairs = PnParser::parse(Rule::statement, src).expect("failed to parse const statement");
+        let statement_pair = pairs.next().expect("expected statement pair");
+        assert_eq!(statement_pair.as_rule(), Rule::statement);
+    }
+
+    #[test]
+    fn parses_stdlib_prelude_file() {
+        let src = std::fs::read_to_string("stdlib/prelude.tri").expect("failed to read prelude");
+        PnParser::parse(Rule::program, &src).expect("failed to parse stdlib prelude");
+    }
+
+    #[test]
+    fn parses_assert_block() {
+    let function_src = "(cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
+    PnParser::parse(Rule::function, function_src).expect("failed to parse function snippet");
+
+    let statement_src = "assert :: (cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
+    PnParser::parse(Rule::statement, statement_src).expect("failed to parse assert statement snippet");
+
+    let single_program_src = "# Assert a condition holds; otherwise panic with message\nassert :: (cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
+    PnParser::parse(Rule::program, single_program_src).expect("failed to parse single assert program");
+
+    let two_simple_consts = "foo :: () -> none => {}\nbar :: () -> none => {}";
+    PnParser::parse(Rule::program, two_simple_consts).expect("failed to parse two simple const declarations");
+
+    let blank_line_between_consts = "foo :: () -> none => {}\n\nbar :: () -> none => {}";
+    PnParser::parse(Rule::program, blank_line_between_consts).expect("failed to parse const declarations separated by blank line");
+
+    let comment_between_consts = r"foo :: () -> none => {}
+# a helpful message
+bar :: () -> none => {}
+";
+    PnParser::parse(Rule::program, comment_between_consts).expect("failed to parse const declarations separated by comment");
+
+    let panic_only_const = r#"panic :: (msg: string) -> none => {
+    println("Assertion failed:", msg)
+    exit(1)
+}
+"#;
+    PnParser::parse(Rule::program, panic_only_const).expect("failed to parse panic-only const declaration");
+
+    let two_nontrivial_consts = r#"foo :: () -> none => {
+    bar()
+}
+bar :: () -> none => {
+    ret none
+}
+"#;
+    PnParser::parse(Rule::program, two_nontrivial_consts).expect("failed to parse consecutive nontrivial const declarations");
+
+        let src = r#"
+panic :: (msg: string) -> none => {
+    println("Assertion failed:", msg)
+    exit(1)
+}
+assert :: (cond: bool, msg: string) -> none => {
+    if ~cond { panic(msg) }
+}
+"#;
+
+        let mut statement_pairs = PnParser::parse(Rule::statement, src)
+            .expect("failed to parse statement with consecutive const declarations");
+        let statement_pair = statement_pairs
+            .next()
+            .expect("expected at least one statement pair");
+        assert_ne!(
+            statement_pair.as_str().trim(),
+            src.trim(),
+            "two const declarations should not be parsed as a single statement",
+        );
+        PnParser::parse(Rule::program, src).expect("failed to parse assert block snippet");
     }
 }
 

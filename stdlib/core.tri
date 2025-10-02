@@ -1,0 +1,19 @@
+# Core namespace aggregator for the TriCTI standard library.
+# Pulls in the individual core modules so they can be accessed via `use core` or `use std::core`.
+
+use core::collections
+use core::config
+use core::errors
+use core::io
+use core::logging
+use core::pg_table
+use core::platform
+use core::postgresql
+use core::query
+use core::result
+use core::signal
+use core::string
+use core::system
+use core::table
+use core::traits
+use core::trigger

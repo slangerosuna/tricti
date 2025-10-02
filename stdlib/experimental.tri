@@ -1,0 +1,3 @@
+# Experimental namespace placeholder for TriCTI stdlib.
+# No concrete modules are exposed yet, but this file allows `use experimental`
+# and `use std::experimental` to resolve without errors.
