@@ -35,7 +35,7 @@
         },
         {
           "name": "keyword.other.tricti",
-          "match": "\\b(db|table|compose|struct|enum|impl|trait|use|mod|pub|let|mut|const|static|fn|type|where|self|Self|super|crate)\\b"
+          "match": "\\b(db|table|compose|struct|enum|impl|trait|use|mod|pub|let|mut|const|static|fn|type|where|self|Self|super|crate|sys|shader|vert|frag|comp|new|emit|select|from|on|join|inner|left|right|full|query|res)\\b"
         },
         {
           "name": "storage.type.tricti",

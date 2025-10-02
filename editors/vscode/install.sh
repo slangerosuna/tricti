@@ -2,7 +2,47 @@
 
 # TriCTI VS Code Extension Installation Script
 
-set -e
+set -euo pipefail
+
+INSTALL_VIM=false
+VIM_INSTALL_ARGS=()
+
+usage() {
+    cat <<EOF
+Usage: ./install.sh [--with-vim] [--vim-path PATH] [--nvim-path PATH]
+
+Installs the TriCTI VS Code extension. Pass --with-vim to also install the accompanying
+Vim/Neovim syntax files (you can forward optional --vim-path/--nvim-path arguments to
+control where they are installed).
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --with-vim)
+            INSTALL_VIM=true
+            shift
+            ;;
+        --vim-path|--nvim-path)
+            INSTALL_VIM=true
+            if [[ $# -lt 2 ]]; then
+                echo "Error: $1 requires an argument" >&2
+                exit 1
+            fi
+            VIM_INSTALL_ARGS+=("$1" "$2")
+            shift 2
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
 
 echo "Installing TriCTI VS Code Extension..."
 
@@ -32,5 +72,9 @@ echo "Installing extension..."
 code --install-extension "$SCRIPT_DIR/tricti-extension.vsix"
 
 echo "✅ TriCTI VS Code Extension installed successfully!"
+if $INSTALL_VIM; then
+    echo "Installing TriCTI Vim/Neovim syntax..."
+    bash "$SCRIPT_DIR/../vim/install.sh" "${VIM_INSTALL_ARGS[@]}"
+fi
 echo "You may need to restart VS Code for the extension to take effect."
 echo "Open any .tri file to see syntax highlighting."
