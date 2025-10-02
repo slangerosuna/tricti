@@ -4,7 +4,7 @@ use rt
 # -------------------------------
 # Generic and utility functions
 # -------------------------------
-generic_identity <T> :: (value: T) -> T => value
+generic_identity<T> :: (value: T) -> T => value
 
 add :: (x: i32, y: i32) => x + y
 div :: (x: i32, y: i32) -> !i32 => {
@@ -17,13 +17,15 @@ div :: (x: i32, y: i32) -> !i32 => {
 # -------------------------------
 # Compile-time evaluation
 # -------------------------------
-@par_const
+@const
 PI_APPROX :: f32 := 3.14159
 
-# Compile-time evaluated function with heap allocation
+# because of @par_const this evaluates to a section of .data in the binary
+# that is allocated to the heap at runtime
+# [i32] here is just syntax sugar for std::core::collections::Vec<i32>
 @par_const
 make_array :: (n: i32) -> [i32] => {
-    arr := [0] * n
+    arr := [0; n]
     for i in 0:n { arr[i] = i * i }
     arr
 }
@@ -93,32 +95,41 @@ display_apps :: sys (
   })
 }
 
-# Example system offloaded to GPU for vectorized computation
+# Example function offloaded to GPU for vectorized computation
+# @gpu hands it off to an OpenCL kernel explicitly, but in future
+# versions the compiler will do this implicitly depending on heuristics
 @gpu
-vector_add :: sys (@sys_input arr_a: [f32], @sys_input arr_b: [f32]) -> [f32] => {
-    n := arr_a.len
-    out := [0.0] * n
-    for i in 0:n {
-        out[i] = arr_a[i] + arr_b[i]
-    }
-    out
-}
+vector_add :: (arr_a: [f32], arr_b: [f32]) -> [f32] => arr_a + arr_b
+
+ExampleSignal :: Signal<Mpsc, Buffer, String>
 
 emitter_sys :: sys () => { emit(ExampleSignal, "Frame Finalized") }
+
+@trigger ExampleSignal
 receiver_sys :: sys (@trigger_recv msg: String) => { println("Received: {}", msg) }
 
 # -------------------------------
 # Interaction composition
 # -------------------------------
+Table :: table {
+    @primary id: u64,
+    foo: Foo,
+    bar: Bar,
+}
+
 Foo :: {}
 Bar :: {}
 Quux :: {}
 
-init_foobar :: sys (query: select (Bar) from Table) -> ?Quux { }
-foo :: sys (query: select (Foo) from Table, @sys_input quux: Quux) -> Baz { }
-bar :: sys (query: select (Bar) from Table, @sys_input baz: Baz) -> ?Quux { }
+init_foobar :: sys (query: select (Bar) from Table) -> ?Quux { some Quux { } }
+foo :: sys (query: select (Foo) from Table, @sys_input quux: Quux) -> Baz { Baz { } }
+bar :: sys (query: select (Bar) from Table, @sys_input baz: Baz) -> ?Quux { none }
 
-compose {
+foobar :: compose {
+    # runs init_foobar, if it returns a Quux, passes it to foo
+    # takes the Baz result from foo and passes it to bar
+    # if bar returns a Quux, passes it back to foo, creating a feedback loop
+    # that terminates when bar returns none
     init_foobar ?-> (a: foo) -> (b: bar),
     (b: bar) ?-> (a: foo),
 }
@@ -131,7 +142,8 @@ setup_signals :: () => {
     println("Initializing signals and DAGs")
 }
 
-@trigger ExampleSignal, Database
+RedrawRequested :: Signal<Spmc, Overwrite, none>
+@trigger RedrawRequested, Database
 redraw :: compose {
     # DAG example: system fan-out and merging
 }
@@ -139,7 +151,7 @@ redraw :: compose {
 # -------------------------------
 # Vector and matrix operations
 # -------------------------------
-example_arrays :: sys () => {
+example_arrays :: () => {
     arr := [1, 2, 3]
     println(arr.map(add.bind(y: 1)))
     println(arr.filter((x) => x % 2 == 0))
@@ -152,7 +164,7 @@ example_arrays :: sys () => {
 # -------------------------------
 # GPGPU example usage
 # -------------------------------
-gpu_example :: sys () => {
+gpu_example :: () => {
     a := [1.0, 2.0, 3.0]
     b := [4.0, 5.0, 6.0]
     c := vector_add(a, b) # executed on GPU via OpenCL kernel

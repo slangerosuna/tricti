@@ -2290,7 +2290,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Statement::Expression(expr) => {
                 self.generate_expression(expr)?;
             }
-            Statement::ModuleDecl { name: _, items } => {
+            Statement::ModuleDecl { name: _, items, is_public: _ } => {
                 if let Some(stmts) = items {
                     for s in stmts {
                         let _ = self.generate_statement(s);

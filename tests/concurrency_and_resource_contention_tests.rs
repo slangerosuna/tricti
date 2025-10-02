@@ -483,6 +483,10 @@ mod concurrency_resource_tests {
             trait_impls: HashMap::new(),
             inherent_impls: HashMap::new(),
             tables: HashMap::new(),
+            modules: HashMap::new(),
+            current_module_path: Vec::new(),
+            use_imports: HashMap::new(),
+            glob_imports: Vec::new(),
         }
     }
 

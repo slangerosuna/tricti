@@ -28,7 +28,9 @@ pub enum Statement {
     Return(Option<Expression>),
     Break(Option<Expression>),
     Use {
+        is_public: bool,
         path: Vec<String>,
+        alias: Option<String>,
     },
     ImplBlock {
         type_params: Vec<TypeParam>,
@@ -51,6 +53,7 @@ pub enum Statement {
     },
     // Rust-style module declaration: `mod name;` or `mod name { .. }`
     ModuleDecl {
+        is_public: bool,
         name: String,
         items: Option<Vec<Statement>>, // None => external file module to be loaded by driver
     },

@@ -27,8 +27,9 @@ statement    = {
     ~ ";"?
 }
 
-use_statement = { "use" ~ identifier ~ ("::" ~ (identifier | "*"))* ~ ";"? }
-mod_decl = { "mod" ~ identifier ~ (";" | ("{" ~ statement* ~ "}")) }
+use_statement = { ("pub" ~ "use" | "use") ~ identifier ~ ("::" ~ (identifier | "*"))* ~ use_alias? ~ ";"? }
+use_alias = { "as" ~ identifier }
+mod_decl = { ("pub" ~ "mod" | "mod") ~ identifier ~ (";" | ("{" ~ statement* ~ "}")) }
 return_statement = { "ret" ~ expression? }
 break_statement = { "break" ~ expression? }
 ifdef_statement = { "@ifdef" ~ "(" ~ expression ~ ")" ~ block ~ ("@else" ~ block)? }
@@ -56,19 +57,24 @@ const_decl = {
     )
 }
 
-const_body = {
+const_body = { attributes ~ const_body_inner | const_body_inner }
+
+const_body_inner = {
             sys_def
         | compose_def
         | table_def
         | db_def
         | function
+        | type_assign
         | type
         | expression
 }
 
+type_assign = { type ~ ":=" ~ expression }
+
 sys_def = { "async"? ~ "sys" ~ "(" ~ sys_params? ~ ")" ~ return_type? ~ "=>" ~ block }
 sys_params = { sys_param ~ ("," ~ sys_param)* ~ ","? }
-sys_param = { query_param | resource_param | regular_param | function_param }
+sys_param = { attributes? ~ (query_param | resource_param | regular_param | function_param) }
 query_param = { "query" ~ identifier? ~ ":" ~ query_spec }
 resource_param = { identifier ~ ":" ~ "res" ~ resource_ref ~ type }
 regular_param = { identifier ~ ":" ~ type ~ ("=" ~ expression)? }
@@ -136,7 +142,7 @@ struct_literal = { "{" ~ (full_field | shorthand_field | ".." ~ ","?)* ~ "}" }
 shorthand_field = { identifier ~ ","? }
 full_field = { identifier ~ ":" ~ (unsafe_block | expression) ~ ","? }
 
-pattern       = { path_struct | static_path | identifier | "_" }
+pattern       = { path_struct | static_path | literal | identifier | "_" }
 
 match         = { "match" ~ expression ~ "{" ~ match_arm+ ~ ("," ~ WHITESPACE* ~ &"}")? ~ "}" }
 match_arm     = { pattern ~ "=>" ~ match_body ~ ("," ~ WHITESPACE* ~ !"}")? }

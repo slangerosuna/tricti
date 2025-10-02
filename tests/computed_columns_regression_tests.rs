@@ -456,9 +456,9 @@ fn test_computed_column_forward_references() {
     let src = r#"
         ForwardRef :: table {
             base_value: i64,
-            early_column: computed(later_column + 10),  // References later_column defined below
+            early_column: computed(later_column + 10),  # References later_column defined below
             middle_column: computed(base_value * 2),
-            later_column: computed(base_value + 5),     // Referenced by early_column above
+            later_column: computed(base_value + 5),     # Referenced by early_column above
         }
     "#;
 
@@ -495,10 +495,10 @@ fn test_computed_column_complex_forward_references() {
     let src = r#"
         ComplexForward :: table {
             input: i64,
-            final_result: computed(step_three * 2),      // References step_three (defined later)
-            step_one: computed(input + 1),               // References input (regular column)
-            step_three: computed(step_two + step_one),   // References step_two (defined later) and step_one (defined earlier)
-            step_two: computed(step_one * 3),            // References step_one (defined earlier)
+            final_result: computed(step_three * 2),      # References step_three (defined later)
+            step_one: computed(input + 1),               # References input (regular column)
+            step_three: computed(step_two + step_one),   # References step_two (defined later) and step_one (defined earlier)
+            step_two: computed(step_one * 3),            # References step_one (defined earlier)
         }
     "#;
 
@@ -534,10 +534,10 @@ fn test_computed_column_mixed_references_with_types() {
         MixedTypes :: table {
             count: i64,
             rate: f64,
-            total_value: computed(count_float * rate),        // Forward reference to count_float
-            count_float: computed(count as f64),              // Backward reference to count
-            is_high_value: computed(total_value > 100.0),     // Forward reference to total_value
-            description: computed(if is_high_value then "high" else "low"), // Forward reference to is_high_value
+            total_value: computed(count_float * rate),        # Forward reference to count_float
+            count_float: computed(count as f64),              # Backward reference to count
+            is_high_value: computed(total_value > 100.0),     # Forward reference to total_value
+            description: computed(if is_high_value then "high" else "low"), # Forward reference to is_high_value
         }
     "#;
 
@@ -580,8 +580,8 @@ fn test_forward_references_vs_circular_dependencies() {
     let valid_src = r#"
         ValidForward :: table {
             base: i64,
-            derived_a: computed(derived_b + 1),  // Forward reference
-            derived_b: computed(base * 2),       // No cycle
+            derived_a: computed(derived_b + 1),  # Forward reference
+            derived_b: computed(base * 2),       # No cycle
         }
     "#;
 
@@ -596,8 +596,8 @@ fn test_forward_references_vs_circular_dependencies() {
     let circular_src = r#"
         CircularTest :: table {
             base: i64,
-            circular_a: computed(circular_b + 1),  // References circular_b
-            circular_b: computed(circular_a * 2),  // References circular_a -> cycle!
+            circular_a: computed(circular_b + 1),  # References circular_b
+            circular_b: computed(circular_a * 2),  # References circular_a -> cycle!
         }
     "#;
 
@@ -615,9 +615,9 @@ fn test_forward_references_with_function_calls() {
     let src = r#"
         FunctionForward :: table {
             text: String,
-            processed_length: computed(len(processed_text)),  // Forward reference with function
-            processed_text: computed(text + " processed"),     // Simple transformation
-            is_long: computed(processed_length > 20),          // Forward reference chain with function
+            processed_length: computed(len(processed_text)),  # Forward reference with function
+            processed_text: computed(text + " processed"),     # Simple transformation
+            is_long: computed(processed_length > 20),          # Forward reference chain with function
         }
     "#;
 

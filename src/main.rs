@@ -243,7 +243,7 @@ fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
     let mut expanded: Vec<Statement> = Vec::new();
     for stmt in program.statements.into_iter() {
         match &stmt {
-            Statement::ModuleDecl { name, items } if items.is_none() => {
+            Statement::ModuleDecl { name, items, is_public: _ } if items.is_none() => {
                 // Try base_dir/name.pn then base_dir/src/name.pn
                 let mut tried: Vec<PathBuf> = Vec::new();
                 let p1 = base_dir.join(format!("{}.pn", name));
@@ -267,7 +267,7 @@ fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
                     eprintln!("warning: module '{}' not found on disk", name);
                 }
             }
-            Statement::Use { path } => {
+            Statement::Use { path, is_public: _, alias: _ } => {
                 // Simple import: try to load a module file named by the first path segment or joined path
                 if !path.is_empty() {
                     let joined = path.join("/");
@@ -302,6 +302,7 @@ fn expand_modules(program: Program, base_dir: &std::path::Path) -> Program {
             Statement::ModuleDecl {
                 name: _,
                 items: Some(items),
+                is_public: _,
             } => {
                 // Inline module: just keep items at top-level for now
                 for s in items {

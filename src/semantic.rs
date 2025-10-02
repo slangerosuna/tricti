@@ -1,5 +1,6 @@
 use crate::ast::*;
 use std::collections::HashMap;
+use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct SemanticContext {
@@ -21,6 +22,12 @@ pub struct SemanticContext {
     pub inherent_impls: HashMap<String, ImplInfo>,               // type -> impl
     // Table schemas
     pub tables: HashMap<String, TableDef>,
+    
+    // Module system - Rust-like namespacing
+    pub modules: HashMap<String, ModuleInfo>,
+    pub current_module_path: Vec<String>,
+    pub use_imports: HashMap<String, String>, // alias -> full_path
+    pub glob_imports: Vec<String>, // modules imported with *
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +47,19 @@ pub struct TraitInfo {
 pub struct ImplInfo {
     pub associated_types: HashMap<String, Type>,
     pub methods: HashMap<String, FunctionSignature>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModuleInfo {
+    pub name: String,
+    pub path: Vec<String>, // Full module path (e.g., ["std", "collections", "vec"])
+    pub is_public: bool,
+    pub variables: HashMap<String, Type>,
+    pub functions: HashMap<String, FunctionSignature>,
+    pub types: HashMap<String, Type>,
+    pub traits: HashMap<String, TraitInfo>,
+    pub submodules: HashMap<String, String>, // name -> full_path
+    pub exports: HashMap<String, String>, // name -> full_path for pub use
 }
 
 #[derive(Debug)]
@@ -83,6 +103,10 @@ impl SemanticContext {
             trait_impls: HashMap::new(),
             inherent_impls: HashMap::new(),
             tables: HashMap::new(),
+            modules: HashMap::new(),
+            current_module_path: Vec::new(),
+            use_imports: HashMap::new(),
+            glob_imports: Vec::new(),
         };
 
         // Add built-in functions
@@ -434,6 +458,81 @@ impl SemanticContext {
         }
     }
 
+    /// Enter a module namespace
+    pub fn enter_module(&mut self, module_name: String) {
+        self.current_module_path.push(module_name.clone());
+        let full_path = self.current_module_path.join("::");
+        
+        if !self.modules.contains_key(&full_path) {
+            self.modules.insert(full_path.clone(), ModuleInfo {
+                name: module_name,
+                path: self.current_module_path.clone(),
+                is_public: true, // Default to public, can be changed later
+                variables: HashMap::new(),
+                functions: HashMap::new(),
+                types: HashMap::new(),
+                traits: HashMap::new(),
+                submodules: HashMap::new(),
+                exports: HashMap::new(),
+            });
+        }
+    }
+
+    /// Exit current module namespace
+    pub fn exit_module(&mut self) {
+        self.current_module_path.pop();
+    }
+
+    /// Get the current module's full path
+    pub fn current_module_full_path(&self) -> String {
+        self.current_module_path.join("::")
+    }
+
+    /// Register a use import
+    pub fn add_use_import(&mut self, path: Vec<String>, alias: Option<String>) {
+        let full_path = path.join("::");
+        let import_name = alias.unwrap_or_else(|| {
+            path.last().unwrap_or(&"".to_string()).clone()
+        });
+        
+        if full_path.ends_with("*") {
+            // Glob import
+            let module_path = full_path.trim_end_matches("::*");
+            self.glob_imports.push(module_path.to_string());
+        } else {
+            // Named import
+            self.use_imports.insert(import_name, full_path);
+        }
+    }
+
+    /// Resolve a name through module system
+    pub fn resolve_name(&self, name: &str) -> Option<String> {
+        // First check direct imports
+        if let Some(full_path) = self.use_imports.get(name) {
+            return Some(full_path.clone());
+        }
+
+        // Then check glob imports
+        for glob_module in &self.glob_imports {
+            let potential_path = format!("{}::{}", glob_module, name);
+            if self.modules.contains_key(&potential_path) {
+                return Some(potential_path);
+            }
+        }
+
+        // Finally check current module
+        let current_module = self.current_module_full_path();
+        if !current_module.is_empty() {
+            let local_path = format!("{}::{}", current_module, name);
+            if self.modules.contains_key(&local_path) {
+                return Some(local_path);
+            }
+        }
+
+        // Return as-is if not found (for built-ins or local names)
+        Some(name.to_string())
+    }
+
     pub fn resolve_type(&self, ty: &Type) -> Type {
         match ty {
             Type::Identifier { name, type_args } if !type_args.is_empty() => {
@@ -543,15 +642,66 @@ impl SemanticContext {
                 return Some(t);
             }
         }
+        
+        // Try module-resolved name
+        if let Some(resolved_name) = self.resolve_name(name) {
+            if let Some(t) = self.variables.get(&resolved_name) {
+                return Some(t);
+            }
+            
+            // Check in modules
+            for (module_path, module_info) in &self.modules {
+                if resolved_name.starts_with(module_path) {
+                    let local_name = resolved_name.trim_start_matches(module_path).trim_start_matches("::");
+                    if let Some(t) = module_info.variables.get(local_name) {
+                        return Some(t);
+                    }
+                }
+            }
+        }
+        
         self.variables.get(name)
     }
 
     pub fn define_function(&mut self, name: String, signature: FunctionSignature) {
-        self.functions.insert(name, signature);
+        let current_module = self.current_module_full_path();
+        if current_module.is_empty() {
+            self.functions.insert(name, signature);
+        } else {
+            // Store in current module
+            if let Some(module_info) = self.modules.get_mut(&current_module) {
+                module_info.functions.insert(name.clone(), signature.clone());
+            }
+            // Also store globally with module prefix for compatibility
+            let full_name = format!("{}::{}", current_module, name);
+            self.functions.insert(full_name, signature);
+        }
     }
 
     pub fn get_function_signature(&self, name: &str) -> Option<&FunctionSignature> {
-        self.functions.get(name)
+        // First try direct lookup
+        if let Some(sig) = self.functions.get(name) {
+            return Some(sig);
+        }
+        
+        // Try module-resolved name
+        if let Some(resolved_name) = self.resolve_name(name) {
+            if let Some(sig) = self.functions.get(&resolved_name) {
+                return Some(sig);
+            }
+            
+            // Check in modules
+            for (module_path, module_info) in &self.modules {
+                if resolved_name.starts_with(module_path) {
+                    let local_name = resolved_name.trim_start_matches(module_path).trim_start_matches("::");
+                    if let Some(sig) = module_info.functions.get(local_name) {
+                        return Some(sig);
+                    }
+                }
+            }
+        }
+        
+        None
     }
 }
 
@@ -583,12 +733,18 @@ fn collect_definitions(
     context: &mut SemanticContext,
 ) -> Result<(), SemanticError> {
     match statement {
-        Statement::ModuleDecl { name: _, items } => {
+        Statement::ModuleDecl { is_public: _, name, items } => {
+            // Enter module namespace for definition collection
+            context.enter_module(name.clone());
+            
             if let Some(stmts) = items {
                 for s in stmts {
                     collect_definitions(s, context)?;
                 }
             }
+            
+            // Exit module namespace
+            context.exit_module();
         }
         Statement::ConstDecl {
             name,
@@ -808,12 +964,18 @@ fn analyze_statement(
     context: &mut SemanticContext,
 ) -> Result<(), SemanticError> {
     match statement {
-        Statement::ModuleDecl { name: _, items } => {
+        Statement::ModuleDecl { is_public: _, name, items } => {
+            // Enter module namespace
+            context.enter_module(name.clone());
+            
             if let Some(stmts) = items {
                 for s in stmts {
                     analyze_statement(s, context)?;
                 }
             }
+            
+            // Exit module namespace
+            context.exit_module();
         }
         Statement::ConstDecl {
             name,
@@ -1207,6 +1369,22 @@ fn analyze_statement(
                     }
                 }
                 context.inherent_impls.insert(type_name.clone(), info);
+            }
+        }
+        Statement::Use { is_public: _, path, alias } => {
+            // Handle use statements for module imports
+            context.add_use_import(path.clone(), alias.clone());
+        }
+        Statement::IfDef { condition: _, then_branch, else_branch } => {
+            // For now, always analyze the then branch
+            // TODO: Add proper conditional compilation support
+            for stmt in then_branch {
+                analyze_statement(stmt, context)?;
+            }
+            if let Some(else_stmts) = else_branch {
+                for stmt in else_stmts {
+                    analyze_statement(stmt, context)?;
+                }
             }
         }
         _ => {}

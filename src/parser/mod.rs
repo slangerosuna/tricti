@@ -221,9 +221,24 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
             }
             Rule::const_body => {
                 let mut body_inner = pair.into_inner();
-                let body_pair = body_inner
+                let mut body_pair = body_inner
                     .next()
                     .expect("const body should contain a value");
+
+                if body_pair.as_rule() == Rule::attributes {
+                    body_pair = body_inner
+                        .next()
+                        .expect("const body attribute should be followed by a value");
+                }
+
+                let body_pair = if body_pair.as_rule() == Rule::const_body_inner {
+                    let mut inner = body_pair.into_inner();
+                    inner
+                        .next()
+                        .expect("const body inner should contain a value")
+                } else {
+                    body_pair
+                };
                 let const_value = match body_pair.as_rule() {
                     Rule::r#type => ConstValue::Type(parse_type(body_pair)),
                     Rule::expression => ConstValue::Expression(parse_expression(body_pair)),
@@ -232,6 +247,17 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
                     Rule::sys_def => ConstValue::SystemDef(parse_sys_def(body_pair, &name)),
                     Rule::compose_def => ConstValue::ComposeDef(parse_compose_def(body_pair)),
                     Rule::db_def => ConstValue::DatabaseDef(parse_db_def(body_pair)),
+                    Rule::type_assign => {
+                        let mut assign_inner = body_pair.into_inner();
+                        let ty_pair = assign_inner
+                            .next()
+                            .expect("type assignment requires a type");
+                        let expr_pair = assign_inner
+                            .next()
+                            .expect("type assignment requires an expression");
+                        type_annotation = Some(parse_type(ty_pair));
+                        ConstValue::Expression(parse_expression(expr_pair))
+                    }
                     _ => panic!("Unexpected const body rule: {:?}", body_pair.as_rule()),
                 };
                 value = Some(const_value);
@@ -1204,30 +1230,69 @@ fn parse_for_loop(pair: pest::iterators::Pair<Rule>) -> Statement {
 }
 
 fn parse_use_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
+    // Check if the source string starts with "pub"
+    let source = pair.as_str();
+    let is_public = source.starts_with("pub ");
+    
     let mut path: Vec<String> = Vec::new();
+    let mut alias: Option<String> = None;
+    
     for inner in pair.into_inner() {
         match inner.as_rule() {
-            Rule::identifier => path.push(inner.as_str().to_string()),
-            _ => {}
+            Rule::identifier => {
+                let identifier = inner.as_str().to_string();
+                if identifier == "pub" {
+                    // Skip the "pub" keyword 
+                } else if identifier == "use" {
+                    // Skip the "use" keyword
+                } else {
+                    path.push(identifier);
+                }
+            }
+            Rule::use_alias => {
+                // Parse the use_alias rule to extract the alias identifier
+                for alias_inner in inner.into_inner() {
+                    if alias_inner.as_rule() == Rule::identifier {
+                        alias = Some(alias_inner.as_str().to_string());
+                    }
+                }
+            }
+            _ => {
+                // Skip other rules
+            }
         }
     }
-    Statement::Use { path }
+    Statement::Use { is_public, path, alias }
 }
 
 fn parse_mod_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
+    // Check if the source string starts with "pub"
+    let source = pair.as_str();
+    let is_public = source.trim_start().starts_with("pub");
+    
     let mut it = pair.into_inner();
-    let name = it.next().unwrap().as_str().to_string();
-    // If there is a block, we will see statement items here, otherwise nothing
+    let mut name = String::new();
     let mut items: Vec<Statement> = Vec::new();
+    
     for inner in it {
-        if inner.as_rule() == Rule::statement {
-            items.push(parse_statement(inner));
+        match inner.as_rule() {
+            Rule::identifier => {
+                if name.is_empty() {
+                    name = inner.as_str().to_string();
+                }
+            }
+            Rule::statement => {
+                items.push(parse_statement(inner));
+            }
+            _ => {}
         }
     }
+    
     if items.is_empty() {
-        Statement::ModuleDecl { name, items: None }
+        Statement::ModuleDecl { is_public, name, items: None }
     } else {
         Statement::ModuleDecl {
+            is_public,
             name,
             items: Some(items),
         }
@@ -1484,18 +1549,46 @@ fn parse_sys_def(pair: pest::iterators::Pair<Rule>, name: &str) -> SystemDef {
     }
 }
 
-fn parse_system_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter {
-    let mut inner = pair.into_inner();
-    let first = inner
-        .next()
-        .expect("system parameter should contain a value");
+fn collect_attribute_names(pair: pest::iterators::Pair<Rule>) -> Vec<String> {
+    let mut names = Vec::new();
+    for attr_pair in pair.into_inner() {
+        if attr_pair.as_rule() == Rule::attribute {
+            let mut attr_inner = attr_pair.into_inner();
+            if let Some(name_pair) = attr_inner.next() {
+                names.push(name_pair.as_str().to_string());
+            }
+        }
+    }
+    names
+}
 
-    match first.as_rule() {
-        Rule::query_param => parse_query_parameter(first),
-        Rule::resource_param => parse_resource_parameter(first),
-        Rule::regular_param => parse_regular_parameter(first),
+fn parse_system_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter {
+    let mut attributes = Vec::new();
+    let mut param_value: Option<pest::iterators::Pair<Rule>> = None;
+
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::attributes => {
+                attributes.extend(collect_attribute_names(inner));
+            }
+            Rule::query_param
+            | Rule::resource_param
+            | Rule::regular_param
+            | Rule::function_param => {
+                param_value = Some(inner);
+            }
+            _ => {}
+        }
+    }
+
+    let value_pair = param_value.expect("system parameter should contain a value");
+
+    let mut parameter = match value_pair.as_rule() {
+        Rule::query_param => parse_query_parameter(value_pair),
+        Rule::resource_param => parse_resource_parameter(value_pair),
+        Rule::regular_param => parse_regular_parameter(value_pair),
         Rule::function_param => {
-            let param = parse_function_param(first);
+            let param = parse_function_param(value_pair);
             SystemParameter::Regular {
                 param_type: "value".to_string(),
                 name: param.name,
@@ -1504,15 +1597,36 @@ fn parse_system_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter 
             }
         }
         _ => {
-            // Fallback for unexpected parameter shape
             SystemParameter::Regular {
                 param_type: "value".to_string(),
-                name: first.as_str().to_string(),
+                name: value_pair.as_str().to_string(),
                 value_type: Type::None,
                 default_value: None,
             }
         }
+    };
+
+    if !attributes.is_empty() {
+        let attr = attributes.last().cloned().unwrap_or_default();
+        parameter = match parameter {
+            SystemParameter::Regular {
+                param_type: _,
+                name,
+                value_type,
+                default_value,
+            } => {
+                SystemParameter::Regular {
+                    param_type: attr,
+                    name,
+                    value_type,
+                    default_value,
+                }
+            }
+            other => other,
+        };
     }
+
+    parameter
 }
 
 fn parse_query_parameter(pair: pest::iterators::Pair<Rule>) -> SystemParameter {

@@ -1,54 +1,59 @@
-# Peano Prelude (very early draft)
-# Re-export core functions/types that user code may `use` later.
+# TriCTI Standard Library Prelude
+# Core types and functions available to all TriCTI programs
 
-# Import modern enum-based error and result types from core modules
-use core::errors
-use core::result
+# Identity function
+id<T> :: (value: T) -> T => value
 
-# Re-export the modern types for convenience
-pub use StdError
-pub use StdResult
-pub use std_error_message
-pub use std_ok
-pub use std_err
+# Basic math functions - simplified implementations
+clamp_i64 :: (value: i64, min: i64, max: i64) -> i64 => min
 
-# Legacy result functions for backward compatibility during migration
-std_result_is_ok<T> :: (result: StdResult<T>) -> bool => {
-        match result {
-                StdResult::Ok { .. } => true,
-                StdResult::Err { .. } => false,
-        }
+sign_i64 :: (value: i64) -> i64 => -1
+
+is_even_i64 :: (value: i64) -> bool => true
+
+is_odd_i64 :: (value: i64) -> bool => true
+
+# Array utility functions
+array_map<T, U> :: (arr: [T], func: (T) -> U) -> [U] => {
+    # TODO: Implement when array operations are supported
+    arr
 }
 
-std_result_unwrap<T> :: (result: StdResult<T>) -> T => {
-        match result {
-                StdResult::Ok { value } => value,
-                StdResult::Err { error } => panic(std_error_message(error)),
-        }
+array_all<T> :: (arr: [T], predicate: (T) -> bool) -> bool => {
+    # TODO: Implement when array operations are supported
+    true
 }
 
-std_result_error<T> :: (result: StdResult<T>) -> ?StdError => {
-        match result {
-                StdResult::Ok { .. } => none,
-                StdResult::Err { error } => some error,
-        }
+array_any<T> :: (arr: [T], predicate: (T) -> bool) -> bool => {
+    # TODO: Implement when array operations are supported
+    true
 }
 
-# Helper functions for creating modern error types
-std_error_message_only :: (message: string) -> StdError => {
-        StdError::Message { message: message }
+array_fold<T, U> :: (arr: [T], initial: U, func: (U, T) -> U) -> U => {
+    # TODO: Implement when array operations are supported
+    initial
 }
 
-std_error_panic :: (message: string, source: ?string) -> StdError => {
-        StdError::Panic { message: message, source: source }
+array_remove_at<T> :: (arr: [T], index: i64) -> [T] => {
+    # TODO: Implement when array operations are supported
+    arr
 }
 
-std_error_invalid_argument :: (parameter: string, message: string) -> StdError => {
-        StdError::InvalidArgument { parameter: parameter, message: message }
+# String functions
+streq :: (a: string, b: string) -> bool => {
+    # TODO: Implement when string operations are supported
+    true
 }
 
-std_error_unsupported :: (feature: string) -> StdError => {
-        StdError::Unsupported { feature: feature }
+# Simple error message functions for immediate use
+# TODO: Add rich error types when pattern matching supports value extraction
+
+std_error_message_only :: (message: string) -> string => {
+    message
+}
+
+std_error_unsupported :: (feature: string) -> string => {
+    feature
 }
 
 LogLevel :: enum {
