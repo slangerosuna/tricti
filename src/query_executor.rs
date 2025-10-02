@@ -5,7 +5,7 @@ use crate::query::{
     WhereClause,
 };
 use crate::table_runtime::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 /// Query execution engine with optimization context
@@ -398,15 +398,50 @@ impl QueryExecutor {
             execution_time_ms: 0,
         };
 
-        // DIFFERENT EXECUTION: nested loop join algorithm
+        // DIFFERENT EXECUTION: nested loop join algorithm with outer join support
         let mut joined_rows = Vec::new();
+        let mut matched_left: HashSet<RowId> = HashSet::new();
+        let mut matched_right: HashSet<RowId> = HashSet::new();
+
         for (left_row_id, left_row) in &left_result.rows {
             for (right_row_id, right_row) in &right_result.rows {
                 if self.evaluate_join_condition_simple(join_condition, left_row, right_row)? {
+                    matched_left.insert(*left_row_id);
+                    matched_right.insert(*right_row_id);
                     joined_rows.push((
                         *left_row_id,
                         *right_row_id,
                         left_row.clone(),
+                        right_row.clone(),
+                    ));
+                }
+            }
+        }
+
+        if matches!(join_type, JoinType::LeftOuter | JoinType::FullOuter) {
+            for (left_row_id, left_row) in &left_result.rows {
+                if !matched_left.contains(left_row_id) {
+                    joined_rows.push((
+                        *left_row_id,
+                        RowId(usize::MAX),
+                        left_row.clone(),
+                        TableRow {
+                            values: HashMap::new(),
+                        },
+                    ));
+                }
+            }
+        }
+
+        if matches!(join_type, JoinType::RightOuter | JoinType::FullOuter) {
+            for (right_row_id, right_row) in &right_result.rows {
+                if !matched_right.contains(right_row_id) {
+                    joined_rows.push((
+                        RowId(usize::MAX),
+                        *right_row_id,
+                        TableRow {
+                            values: HashMap::new(),
+                        },
                         right_row.clone(),
                     ));
                 }
@@ -453,8 +488,10 @@ impl QueryExecutor {
             execution_time_ms: 0,
         };
 
-        // DIFFERENT EXECUTION: hash join algorithm
+        // DIFFERENT EXECUTION: hash join algorithm with outer join support
         let mut joined_rows = Vec::new();
+        let mut matched_left: HashSet<RowId> = HashSet::new();
+        let mut matched_right: HashSet<RowId> = HashSet::new();
 
         match build_side {
             BuildSide::Right => {
@@ -474,6 +511,8 @@ impl QueryExecutor {
                     if let Some(left_key) = left_row.values.get(&join_condition.left_column) {
                         if let Some(matching_rights) = hash_table.get(left_key) {
                             for (right_row_id, right_row) in matching_rights {
+                                matched_left.insert(*left_row_id);
+                                matched_right.insert(*right_row_id);
                                 joined_rows.push((
                                     *left_row_id,
                                     *right_row_id,
@@ -502,6 +541,8 @@ impl QueryExecutor {
                     if let Some(right_key) = right_row.values.get(&join_condition.right_column) {
                         if let Some(matching_lefts) = hash_table.get(right_key) {
                             for (left_row_id, left_row) in matching_lefts {
+                                matched_left.insert(*left_row_id);
+                                matched_right.insert(*right_row_id);
                                 joined_rows.push((
                                     *left_row_id,
                                     *right_row_id,
@@ -511,6 +552,36 @@ impl QueryExecutor {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        if matches!(join_type, JoinType::LeftOuter | JoinType::FullOuter) {
+            for (left_row_id, left_row) in &left_result.rows {
+                if !matched_left.contains(left_row_id) {
+                    joined_rows.push((
+                        *left_row_id,
+                        RowId(usize::MAX),
+                        left_row.clone(),
+                        TableRow {
+                            values: HashMap::new(),
+                        },
+                    ));
+                }
+            }
+        }
+
+        if matches!(join_type, JoinType::RightOuter | JoinType::FullOuter) {
+            for (right_row_id, right_row) in &right_result.rows {
+                if !matched_right.contains(right_row_id) {
+                    joined_rows.push((
+                        RowId(usize::MAX),
+                        *right_row_id,
+                        TableRow {
+                            values: HashMap::new(),
+                        },
+                        right_row.clone(),
+                    ));
                 }
             }
         }
@@ -558,8 +629,10 @@ impl QueryExecutor {
             execution_time_ms: 0,
         };
 
-        // DIFFERENT EXECUTION: uses index lookups for each left row
+        // DIFFERENT EXECUTION: uses index lookups for each left row with outer join support
         let mut joined_rows = Vec::new();
+        let mut matched_left: HashSet<RowId> = HashSet::new();
+        let mut matched_right: HashSet<RowId> = HashSet::new();
         for (left_row_id, left_row) in &left_result.rows {
             if let Some(join_key) = left_row.values.get(&join_condition.left_column) {
                 // Use index to find matching rows in right table
@@ -568,7 +641,39 @@ impl QueryExecutor {
                 statistics.rows_scanned += matching_rights.len();
 
                 for (right_row_id, right_row) in matching_rights {
+                    matched_left.insert(*left_row_id);
+                    matched_right.insert(right_row_id);
                     joined_rows.push((*left_row_id, right_row_id, left_row.clone(), right_row));
+                }
+            }
+        }
+
+        if matches!(join_type, JoinType::LeftOuter | JoinType::FullOuter) {
+            for (left_row_id, left_row) in &left_result.rows {
+                if !matched_left.contains(left_row_id) {
+                    joined_rows.push((
+                        *left_row_id,
+                        RowId(usize::MAX),
+                        left_row.clone(),
+                        TableRow {
+                            values: HashMap::new(),
+                        },
+                    ));
+                }
+            }
+        }
+
+        if matches!(join_type, JoinType::RightOuter | JoinType::FullOuter) {
+            for (right_row_id, right_row) in table.scan_all() {
+                if !matched_right.contains(&right_row_id) {
+                    joined_rows.push((
+                        RowId(usize::MAX),
+                        right_row_id,
+                        TableRow {
+                            values: HashMap::new(),
+                        },
+                        right_row,
+                    ));
                 }
             }
         }
@@ -693,44 +798,22 @@ impl QueryExecutor {
             })?;
 
         match join_condition.operator {
-            BinaryOperator::Equal => Ok(left_value == right_value),
-            BinaryOperator::NotEqual => Ok(left_value != right_value),
-            BinaryOperator::Less => Ok(self.compare_values_simple(left_value, right_value)? < 0),
+            BinaryOperator::Equal => Ok(Self::values_equal(left_value, right_value)),
+            BinaryOperator::NotEqual => Ok(!Self::values_equal(left_value, right_value)),
+            BinaryOperator::Less => self.compare_values(left_value, right_value, |cmp| cmp < 0),
             BinaryOperator::LessEqual => {
-                Ok(self.compare_values_simple(left_value, right_value)? <= 0)
+                self.compare_values(left_value, right_value, |cmp| cmp <= 0)
             }
-            BinaryOperator::Greater => Ok(self.compare_values_simple(left_value, right_value)? > 0),
+            BinaryOperator::Greater => {
+                self.compare_values(left_value, right_value, |cmp| cmp > 0)
+            }
             BinaryOperator::GreaterEqual => {
-                Ok(self.compare_values_simple(left_value, right_value)? >= 0)
+                self.compare_values(left_value, right_value, |cmp| cmp >= 0)
             }
             _ => Err(QueryError::ExecutionError(format!(
                 "Unsupported join operator: {:?}",
                 join_condition.operator
             ))),
-        }
-    }
-
-    /// Compare two column values
-    fn compare_values_simple(
-        &self,
-        left: &ColumnValue,
-        right: &ColumnValue,
-    ) -> Result<i32, QueryError> {
-        match (left, right) {
-            (ColumnValue::U64(l), ColumnValue::U64(r)) => Ok(l.cmp(r) as i32),
-            (ColumnValue::F64(l), ColumnValue::F64(r)) => {
-                let l_float = f64::from_bits(*l);
-                let r_float = f64::from_bits(*r);
-                Ok(l_float
-                    .partial_cmp(&r_float)
-                    .unwrap_or(std::cmp::Ordering::Equal) as i32)
-            }
-            (ColumnValue::String(l), ColumnValue::String(r)) => Ok(l.cmp(r) as i32),
-            (ColumnValue::Bool(l), ColumnValue::Bool(r)) => Ok(l.cmp(r) as i32),
-            _ => Err(QueryError::TypeMismatch {
-                expected: "comparable types".to_string(),
-                found: "incomparable types".to_string(),
-            }),
         }
     }
 
@@ -749,19 +832,23 @@ impl QueryExecutor {
                 let left_value = self.evaluate_expression_simple(left, row)?;
                 let right_value = self.evaluate_expression_simple(right, row)?;
                 match operator {
-                    BinaryOperator::Equal => Ok(left_value == right_value),
-                    BinaryOperator::NotEqual => Ok(left_value != right_value),
+                    BinaryOperator::Equal => {
+                        Ok(Self::values_equal(&left_value, &right_value))
+                    }
+                    BinaryOperator::NotEqual => {
+                        Ok(!Self::values_equal(&left_value, &right_value))
+                    }
                     BinaryOperator::Less => {
-                        Ok(self.compare_values_simple(&left_value, &right_value)? < 0)
+                        self.compare_values(&left_value, &right_value, |cmp| cmp < 0)
                     }
                     BinaryOperator::LessEqual => {
-                        Ok(self.compare_values_simple(&left_value, &right_value)? <= 0)
+                        self.compare_values(&left_value, &right_value, |cmp| cmp <= 0)
                     }
                     BinaryOperator::Greater => {
-                        Ok(self.compare_values_simple(&left_value, &right_value)? > 0)
+                        self.compare_values(&left_value, &right_value, |cmp| cmp > 0)
                     }
                     BinaryOperator::GreaterEqual => {
-                        Ok(self.compare_values_simple(&left_value, &right_value)? >= 0)
+                        self.compare_values(&left_value, &right_value, |cmp| cmp >= 0)
                     }
                     BinaryOperator::And => {
                         let left_bool = self.value_to_bool(&left_value)?;
@@ -1299,8 +1386,8 @@ impl QueryExecutor {
         right: &ColumnValue,
     ) -> Result<bool, QueryError> {
         match operator {
-            BinaryOperator::Equal => Ok(left == right),
-            BinaryOperator::NotEqual => Ok(left != right),
+            BinaryOperator::Equal => Ok(Self::values_equal(left, right)),
+            BinaryOperator::NotEqual => Ok(!Self::values_equal(left, right)),
             BinaryOperator::Less => self.compare_values(left, right, |cmp| cmp < 0),
             BinaryOperator::LessEqual => self.compare_values(left, right, |cmp| cmp <= 0),
             BinaryOperator::Greater => self.compare_values(left, right, |cmp| cmp > 0),
@@ -1401,26 +1488,50 @@ impl QueryExecutor {
     where
         F: Fn(i32) -> bool,
     {
-        let comparison = match (left, right) {
-            (ColumnValue::U64(l), ColumnValue::U64(r)) => l.cmp(r) as i32,
-            (ColumnValue::F64(l), ColumnValue::F64(r)) => {
-                let l_float = f64::from_bits(*l);
-                let r_float = f64::from_bits(*r);
-                l_float
-                    .partial_cmp(&r_float)
-                    .unwrap_or(std::cmp::Ordering::Equal) as i32
-            }
-            (ColumnValue::String(l), ColumnValue::String(r)) => l.cmp(r) as i32,
-            (ColumnValue::Bool(l), ColumnValue::Bool(r)) => l.cmp(r) as i32,
-            _ => {
-                return Err(QueryError::TypeMismatch {
-                    expected: "comparable types".to_string(),
-                    found: "incomparable types".to_string(),
-                })
+        let comparison = if let (Some(lhs), Some(rhs)) = (
+            Self::value_as_f64(left),
+            Self::value_as_f64(right),
+        ) {
+            lhs.partial_cmp(&rhs)
+                .unwrap_or(std::cmp::Ordering::Equal) as i32
+        } else {
+            match (left, right) {
+                (ColumnValue::U64(l), ColumnValue::U64(r)) => l.cmp(r) as i32,
+                (ColumnValue::I32(l), ColumnValue::I32(r)) => l.cmp(r) as i32,
+                (ColumnValue::String(l), ColumnValue::String(r)) => l.cmp(r) as i32,
+                (ColumnValue::Bool(l), ColumnValue::Bool(r)) => l.cmp(r) as i32,
+                _ => {
+                    return Err(QueryError::TypeMismatch {
+                        expected: "comparable types".to_string(),
+                        found: "incomparable types".to_string(),
+                    })
+                }
             }
         };
 
         Ok(cmp_fn(comparison))
+    }
+
+    fn value_as_f64(value: &ColumnValue) -> Option<f64> {
+        match value {
+            ColumnValue::U64(v) => Some(*v as f64),
+            ColumnValue::I32(v) => Some(*v as f64),
+            ColumnValue::F64(bits) => Some(f64::from_bits(*bits)),
+            _ => None,
+        }
+    }
+
+    fn values_equal(left: &ColumnValue, right: &ColumnValue) -> bool {
+        if left == right {
+            return true;
+        }
+
+        match (Self::value_as_f64(left), Self::value_as_f64(right)) {
+            (Some(lhs), Some(rhs)) => lhs
+                .partial_cmp(&rhs)
+                .map_or(false, |ordering| ordering == std::cmp::Ordering::Equal),
+            _ => false,
+        }
     }
 
     /// Apply projection to rows

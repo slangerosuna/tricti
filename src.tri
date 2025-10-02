@@ -1,16 +1,33 @@
 use prelude
 use rt
 
+# There are four types of pointers in Tricti that interact different ways with the borrow checker:
+# 1. Owned pointers: `*T` - own the data they point to, frees the data when they go out of scope
+# 2. Shared pointers: `&T` - shared immutable references to data owned by someone else
+# 3. Mutable references: `&mut T` - exclusive mutable references to data owned by someone else
+# 4. Raw pointers: `*raw T` - these are unsafe pointers that do not have any ownership semantics
+#    and can be null or dangling. They are used for FFI and low-level programming. Important to
+#    note that dereferencing is unsafe and you must free the memory manually.
+
+# All 4 of these pointer types, by default, are non-nullable(except *raw T, but you are supposed
+# to use ?*raw T if it would actually wind up null)
+# To make any of these pointer types nullable, just prefix with a `?` to make it an optional
+# e.g. `?*T`, `?&T`, `?&mut T`, `?*raw T`
+
 # -------------------------------
 # Generic and utility functions
 # -------------------------------
 generic_identity<T> :: (value: T) -> T => value
 
 add :: (x: i32, y: i32) => x + y
+# !i32 is syntax sugar for Result<i32, *dyn Error>
 div :: (x: i32, y: i32) -> !i32 => {
     if y == 0 {
+        # `!expr` wraps the type of expr (which has to impl `Error`) in an owned pointer to a trait object (*dyn Error)
+        # this would be equivalent to `return Err(Box::new("Cannot divide by zero"))` in Rust
         ret !"Cannot divide by zero"
     }
+    # Wrapping in Ok or Some is implicit
     x / y
 }
 
@@ -121,6 +138,11 @@ Foo :: {}
 Bar :: {}
 Quux :: {}
 
+# here the expression `Quux { }` is wrapped in Some explicitly with the `some` keyword
+# however, this is not necessary in the return statement of functions that return Option types
+# e.g. `Quux { }` would be equivalent
+#
+# wrapping in Some explicitly is really just there if the end user prefers it
 init_foobar :: sys (query: select (Bar) from Table) -> ?Quux { some Quux { } }
 foo :: sys (query: select (Foo) from Table, @sys_input quux: Quux) -> Baz { Baz { } }
 bar :: sys (query: select (Bar) from Table, @sys_input baz: Baz) -> ?Quux { none }
@@ -137,13 +159,13 @@ foobar :: compose {
 # -------------------------------
 # Triggers
 # -------------------------------
-@trigger Init
+@trigger(Init)
 setup_signals :: () => {
     println("Initializing signals and DAGs")
 }
 
 RedrawRequested :: Signal<Spmc, Overwrite, none>
-@trigger RedrawRequested, Database
+@trigger(RedrawRequested, Database)
 redraw :: compose {
     # DAG example: system fan-out and merging
 }

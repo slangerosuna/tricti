@@ -1012,7 +1012,7 @@ fn analyze_statement(
             type_params,
             type_annotation,
             value,
-            extern_linkage: _extern_linkage,
+            ..
         } => {
             if !type_params.is_empty() {
                 context.type_generics.insert(
@@ -2709,6 +2709,17 @@ fn extract_column_references_recursive(
                 for stmt in else_stmts {
                     extract_statement_column_references(stmt, references, column_names);
                 }
+            }
+        }
+        Expression::IfExpr {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            extract_column_references_recursive(condition, references, column_names);
+            extract_column_references_recursive(then_expr, references, column_names);
+            if let Some(else_branch) = else_expr {
+                extract_column_references_recursive(else_branch, references, column_names);
             }
         }
         Expression::Block { statements } => {

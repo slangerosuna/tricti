@@ -285,10 +285,12 @@ impl AsyncSystemScheduler {
         let system1_resources = self.extract_system_resources(system1);
         let system2_resources = self.extract_system_resources(system2);
 
-        // Check for resource overlap
-        for resource in &system1_resources {
-            if system2_resources.contains(resource) {
-                return Ok(ConflictType::ReadWrite); // Simplified conflict type
+        for (resource, access1) in &system1_resources {
+            if let Some(access2) = system2_resources.get(resource) {
+                if let Some(conflict) = Self::determine_conflict_type(access1, access2) {
+                    self.record_resource_conflict();
+                    return Ok(conflict);
+                }
             }
         }
 
@@ -306,14 +308,18 @@ impl AsyncSystemScheduler {
 
         while !unscheduled.is_empty() {
             let mut current_batch = Vec::new();
-            let mut batch_resources: HashSet<String> = HashSet::new();
+            let mut batch_resource_accesses: HashMap<String, Vec<ResourceAccess>> =
+                HashMap::new();
 
             // Find systems that can execute concurrently
             let mut to_remove = Vec::new();
 
             for &i in &unscheduled {
                 let system = &systems[i];
-                let system_resources = self.extract_system_resources(system);
+                let system_resources: Vec<(String, ResourceAccess)> = self
+                    .extract_system_resources(system)
+                    .into_iter()
+                    .collect();
 
                 // Check if this system conflicts with current batch
                 let mut has_conflict = false;
@@ -325,20 +331,30 @@ impl AsyncSystemScheduler {
                     }
                 }
 
-                // Check resource conflicts
                 if !has_conflict {
-                    for resource in &system_resources {
-                        if batch_resources.contains(resource) {
-                            // Check if access types are compatible
-                            has_conflict = true;
-                            break;
+                    for (resource, access) in &system_resources {
+                        if let Some(existing) = batch_resource_accesses.get(resource) {
+                            if existing
+                                .iter()
+                                .any(|existing_access| {
+                                    Self::resource_accesses_conflict(existing_access, access)
+                                })
+                            {
+                                has_conflict = true;
+                                break;
+                            }
                         }
                     }
                 }
 
                 if !has_conflict {
                     current_batch.push(i);
-                    batch_resources.extend(system_resources);
+                    for (resource, access) in system_resources {
+                        batch_resource_accesses
+                            .entry(resource)
+                            .or_insert_with(Vec::new)
+                            .push(access);
+                    }
                     to_remove.push(i);
                 }
             }
@@ -365,16 +381,45 @@ impl AsyncSystemScheduler {
     }
 
     /// Extract resources used by a system
-    fn extract_system_resources(&self, system: &SystemExecutionRequest) -> Vec<String> {
-        let mut resources = Vec::new();
+    fn extract_system_resources(
+        &self,
+        system: &SystemExecutionRequest,
+    ) -> HashMap<String, ResourceAccess> {
+        let mut resources = HashMap::new();
 
         for param in &system.system_def.parameters {
-            if let SystemParameter::Resource { name, .. } = param {
-                resources.push(name.clone());
+            if let SystemParameter::Resource { name, access, .. } = param {
+                resources.insert(name.clone(), access.clone());
             }
         }
 
         resources
+    }
+
+    fn record_resource_conflict(&self) {
+        let mut stats = self.stats.lock().unwrap();
+        stats.resource_conflicts_resolved += 1;
+    }
+
+    fn resource_accesses_conflict(a: &ResourceAccess, b: &ResourceAccess) -> bool {
+        Self::determine_conflict_type(a, b).is_some()
+    }
+
+    fn determine_conflict_type(
+        access1: &ResourceAccess,
+        access2: &ResourceAccess,
+    ) -> Option<ConflictType> {
+        match (access1, access2) {
+            (ResourceAccess::Immutable, ResourceAccess::Immutable) => None,
+            (ResourceAccess::Immutable, ResourceAccess::Mutable)
+            | (ResourceAccess::Immutable, ResourceAccess::Owned) => Some(ConflictType::ReadWrite),
+            (ResourceAccess::Mutable, ResourceAccess::Immutable)
+            | (ResourceAccess::Owned, ResourceAccess::Immutable) => Some(ConflictType::WriteRead),
+            (ResourceAccess::Mutable, ResourceAccess::Mutable)
+            | (ResourceAccess::Mutable, ResourceAccess::Owned)
+            | (ResourceAccess::Owned, ResourceAccess::Mutable)
+            | (ResourceAccess::Owned, ResourceAccess::Owned) => Some(ConflictType::WriteWrite),
+        }
     }
 
     /// Check for resource conflicts with existing systems

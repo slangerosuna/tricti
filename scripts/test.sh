@@ -13,9 +13,12 @@ export RUSTFLAGS="-Awarnings"
 mkdir -p tmp
 trap 'echo "[tools] cleaning tmp artifacts"; rm -f tmp/output tests/tmp_*.o tests/tmp_*.out || true' EXIT
 
+TEST_TIMEOUT="${TEST_TIMEOUT:-30s}"
+
 # Argument parsing
 RUN_TRI=false
 RUN_CARGO=false
+CUSTOM_TEST_TIMEOUT=false
 TRI_ARGS=()
 CARGO_ARGS=()
 
@@ -25,7 +28,7 @@ while [[ $# -gt 0 ]]; do
       RUN_TRI=true
       shift
       # collect everything until next -c or end
-      while [[ $# -gt 0 && "$1" != "-c" && "$1" != "-t" ]]; do
+      while [[ $# -gt 0 && "$1" != "-c" && "$1" != "-t" && "$1" != "-to" ]]; do
         TRI_ARGS+=("$1")
         shift
       done
@@ -34,10 +37,21 @@ while [[ $# -gt 0 ]]; do
       RUN_CARGO=true
       shift
       # collect everything until next -t or end
-      while [[ $# -gt 0 && "$1" != "-c" && "$1" != "-t" ]]; do
+      while [[ $# -gt 0 && "$1" != "-c" && "$1" != "-t" && "$1" != "-to" ]]; do
         CARGO_ARGS+=("$1")
         shift
       done
+      ;;
+    -to)
+      CUSTOM_TEST_TIMEOUT=true
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "[tools] error: -to requires a timeout value"
+        exit 1
+      fi
+
+      TEST_TIMEOUT="$1"
+      shift
       ;;
     *)
       # treat as positional args if no flag
@@ -53,9 +67,18 @@ if ! ($RUN_TRI || $RUN_CARGO); then
   RUN_CARGO=true
 fi
 
+if $CUSTOM_TEST_TIMEOUT && ! $RUN_CARGO; then
+  echo "[tools] warning: -to specified without -c, ignoring custom timeout"
+fi
+
 if $RUN_CARGO; then
   echo "[tools] running cargo tests"
-  timeout 30s cargo test -- --nocapture "${CARGO_ARGS[@]}" &>tmp/test_output
+  if [ "$TEST_TIMEOUT" == "none" ]; then
+    cargo test -- --nocapture "${CARGO_ARGS[@]}" &>tmp/test_output
+  else
+    timeout "$TEST_TIMEOUT" cargo test -- --nocapture "${CARGO_ARGS[@]}" &>tmp/test_output
+  fi
+  
   rc=$?
   if [[ $rc -ne 0 ]]; then
     echo "[tools] cargo tests failed (code $rc)"

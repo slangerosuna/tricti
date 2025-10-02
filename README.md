@@ -65,6 +65,12 @@ To pass arguments, use `--` to separate them from `make`:
   make test -- -t foo/bar.tri -c --test my_module
   ```
 
+- Set a custom time out for the run of `cargo test`
+
+  ```bash
+  make test -- -to 10s
+  ```
+
 ### Format and Lint
 
 ```bash

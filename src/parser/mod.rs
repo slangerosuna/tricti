@@ -38,6 +38,39 @@ fn parse_type_params(pair: pest::iterators::Pair<Rule>) -> Vec<TypeParam> {
     type_params
 }
 
+fn parse_attribute(pair: pest::iterators::Pair<Rule>) -> Attribute {
+    let mut name = String::new();
+    let mut arguments = Vec::new();
+
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::identifier => {
+                if name.is_empty() {
+                    name = inner.as_str().to_string();
+                } else {
+                    arguments.push(Expression::Identifier(inner.as_str().to_string()));
+                }
+            }
+            Rule::expression => {
+                arguments.push(parse_expression(inner));
+            }
+            _ => {}
+        }
+    }
+
+    Attribute { name, arguments }
+}
+
+fn parse_attributes(pair: pest::iterators::Pair<Rule>) -> Vec<Attribute> {
+    let mut attributes = Vec::new();
+    for attr_pair in pair.into_inner() {
+        if attr_pair.as_rule() == Rule::attribute {
+            attributes.push(parse_attribute(attr_pair));
+        }
+    }
+    attributes
+}
+
 pub fn parse(file: String) -> Program {
     let successful_parse = match PnParser::parse(Rule::program, &file) {
         Ok(p) => p,
@@ -184,9 +217,15 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut inner = pair.into_inner();
 
     let mut extern_linkage = None;
-    let mut first = inner.next().unwrap();
+    let mut attributes: Vec<Attribute> = Vec::new();
+    let mut first = inner
+        .next()
+        .expect("const declaration must have a name or attribute");
     while first.as_rule() == Rule::attributes {
-        first = inner.next().unwrap();
+        attributes.extend(parse_attributes(first));
+        first = inner
+            .next()
+            .expect("const declaration must have a name after attributes");
     }
     let name;
     if first.as_str() == "extern" {
@@ -226,6 +265,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
                     .expect("const body should contain a value");
 
                 if body_pair.as_rule() == Rule::attributes {
+                    attributes.extend(parse_attributes(body_pair));
                     body_pair = body_inner
                         .next()
                         .expect("const body attribute should be followed by a value");
@@ -284,6 +324,7 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     let value = value.expect("Expected const value");
 
     Statement::ConstDecl {
+        attributes,
         name,
         type_params,
         type_annotation,
@@ -1114,14 +1155,18 @@ fn parse_block(pair: pest::iterators::Pair<Rule>) -> Vec<Statement> {
 }
 
 fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
-    let is_async = false;
+    let mut is_async = false;
     let mut params: Vec<Parameter> = Vec::new();
     let mut return_ty: Option<Type> = None;
     let mut body_opt: Option<FunctionBody> = None;
     let mut type_params: Vec<TypeParam> = Vec::new();
+    let mut attributes: Vec<Attribute> = Vec::new();
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
+            Rule::attributes => {
+                attributes.extend(parse_attributes(inner));
+            }
             Rule::type_params => {
                 type_params = parse_type_params(inner);
             }
@@ -1156,6 +1201,9 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
                 let ty_pair = inner.into_inner().next().unwrap();
                 return_ty = Some(parse_type(ty_pair));
             }
+            Rule::identifier if inner.as_str() == "async" => {
+                is_async = true;
+            }
             Rule::function_body => {
                 if let Some(first) = inner.into_inner().next() {
                     match first.as_rule() {
@@ -1178,6 +1226,7 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
         parameters: params,
         return_type: return_ty,
         body: body_opt.unwrap_or(FunctionBody::Block(Vec::new())),
+        attributes,
     }
 }
 

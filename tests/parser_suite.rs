@@ -90,6 +90,82 @@ fn parse_struct_with_optional_field() {
 }
 
 #[test]
+fn parse_const_decl_with_attributes() {
+    let src = r#"
+        @par_const Gui :: @resource {}
+    "#;
+
+    let program = parser::parse(src.to_string());
+    assert_eq!(program.statements.len(), 1);
+    match &program.statements[0] {
+        Statement::ConstDecl { attributes, .. } => {
+            assert_eq!(attributes.len(), 2);
+            assert_eq!(attributes[0].name, "par_const");
+            assert!(attributes[0].arguments.is_empty());
+            assert_eq!(attributes[1].name, "resource");
+            assert!(attributes[1].arguments.is_empty());
+        }
+        other => panic!("expected const declaration, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_function_with_attribute() {
+    let src = r#"
+        @memoize fib :: (n: i32) -> i32 => { n }
+    "#;
+
+    let program = parser::parse(src.to_string());
+    match &program.statements[0] {
+        Statement::ConstDecl {
+            attributes,
+            value,
+            ..
+        } => {
+            assert_eq!(attributes.len(), 1);
+            assert_eq!(attributes[0].name, "memoize");
+            assert!(attributes[0].arguments.is_empty());
+
+            match value {
+                ConstValue::Expression(Expression::Function { attributes, .. }) => {
+                    assert!(attributes.is_empty(), "function-level attributes should be empty when defined via const attribute");
+                }
+                other => panic!("expected function expression, got {:?}", other),
+            }
+        }
+        other => panic!("expected const declaration, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_attribute_with_identifier_arguments() {
+    let src = r#"
+    @trigger(ExampleSignal, Database)
+        receiver_sys :: sys () => {}
+    "#;
+
+    let program = parser::parse(src.to_string());
+    assert_eq!(program.statements.len(), 1);
+    match &program.statements[0] {
+        Statement::ConstDecl { attributes, .. } => {
+            assert_eq!(attributes.len(), 1);
+            let attr = &attributes[0];
+            assert_eq!(attr.name, "trigger");
+            assert_eq!(attr.arguments.len(), 2);
+            assert_eq!(
+                attr.arguments[0],
+                Expression::Identifier("ExampleSignal".to_string())
+            );
+            assert_eq!(
+                attr.arguments[1],
+                Expression::Identifier("Database".to_string())
+            );
+        }
+        other => panic!("expected const declaration, got {:?}", other),
+    }
+}
+
+#[test]
 fn parse_new_array_expression() {
     let src = r#"
         output := new [i64; 0]

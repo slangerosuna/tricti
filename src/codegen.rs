@@ -893,10 +893,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         match statement {
             Statement::ConstDecl {
                 name,
-                type_params: _,
                 type_annotation,
                 value,
-                extern_linkage: _extern_linkage,
+                ..
             } => {
                 // Handle only non-function const expressions here; functions are handled in declare/define passes
                 if let ConstValue::Expression(expr) = value {

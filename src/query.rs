@@ -429,14 +429,32 @@ impl QueryPlan {
         left_projection: Vec<FieldProjection>,
         right_projection: Vec<FieldProjection>,
     ) -> Self {
+        let mut left_scan_projection = left_projection.clone();
+        if !left_scan_projection
+            .iter()
+            .any(|proj| proj.source_column == join_condition.left_column)
+        {
+            left_scan_projection
+                .push(FieldProjection::column(join_condition.left_column.clone()));
+        }
+
+        let mut right_scan_projection = right_projection.clone();
+        if !right_scan_projection
+            .iter()
+            .any(|proj| proj.source_column == join_condition.right_column)
+        {
+            right_scan_projection
+                .push(FieldProjection::column(join_condition.right_column.clone()));
+        }
+
         let left_input = QueryPlan::TableScan {
             table_name: left_table,
-            projection: left_projection.clone(),
+            projection: left_scan_projection,
         };
 
         let right_input = QueryPlan::TableScan {
             table_name: right_table,
-            projection: right_projection.clone(),
+            projection: right_scan_projection,
         };
 
         // Start with nested loop join as default

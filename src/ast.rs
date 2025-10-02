@@ -13,6 +13,7 @@ pub enum Statement {
         value: Expression,
     },
     ConstDecl {
+        attributes: Vec<Attribute>,
         name: String,
         type_params: Vec<TypeParam>,
         type_annotation: Option<Type>,
@@ -72,6 +73,12 @@ pub enum ConstValue {
     SystemDef(SystemDef),
     ComposeDef(ComposeDef),
     DatabaseDef(DatabaseDef),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Attribute {
+    pub name: String,
+    pub arguments: Vec<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -141,6 +148,7 @@ pub enum Expression {
         parameters: Vec<Parameter>,
         return_type: Option<Type>,
         body: FunctionBody,
+        attributes: Vec<Attribute>,
     },
     Tuple(Vec<Expression>),
     Match {

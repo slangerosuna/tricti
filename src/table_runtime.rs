@@ -626,7 +626,12 @@ impl TableRuntime {
         }
 
         // Fall back to filtered scan for non-indexed columns
-        self.scan_filtered(|row| row.values.get(column_name).map_or(false, |v| v == value))
+        let normalized_value = self.normalize_value_for_column(column_name, value.clone());
+        self.scan_filtered(|row| {
+            row.values
+                .get(column_name)
+                .map_or(false, |v| Self::values_equal(v, &normalized_value))
+        })
     }
 
     /// Scan with range filter (for numeric columns)
@@ -825,7 +830,7 @@ impl TableRuntime {
             for i in 0..self.next_row_id {
                 if !self.deleted_rows.contains(&i) {
                     if let Some(col_value) = column_data.get_value(i) {
-                        if col_value == *value {
+                        if Self::values_equal(&col_value, value) {
                             matches += 1;
                         }
                     }
@@ -838,16 +843,16 @@ impl TableRuntime {
     }
 
     fn compare_column_values(&self, left: &ColumnValue, right: &ColumnValue) -> Option<bool> {
+        if let (Some(lhs), Some(rhs)) = (Self::value_as_f64(left), Self::value_as_f64(right)) {
+            return lhs.partial_cmp(&rhs).map(|ordering| {
+                matches!(ordering, std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+            });
+        }
+
         match (left, right) {
-            (ColumnValue::U64(a), ColumnValue::U64(b)) => Some(a >= b),
             (ColumnValue::String(a), ColumnValue::String(b)) => Some(a >= b),
             (ColumnValue::Bool(a), ColumnValue::Bool(b)) => Some(a >= b),
-            (ColumnValue::F64(a), ColumnValue::F64(b)) => {
-                let a_val = f64::from_bits(*a);
-                let b_val = f64::from_bits(*b);
-                Some(a_val >= b_val)
-            }
-            _ => None, // Type mismatch
+            _ => None,
         }
     }
 
@@ -914,12 +919,15 @@ impl TableRuntime {
         right: &Expression,
     ) -> Result<PredicateResult, TableError> {
         if let (Expression::Identifier(column_name), Expression::Literal(literal)) = (left, right) {
-            let value = self.literal_to_column_value(literal)?;
+            let value = self.normalize_value_for_column(
+                column_name,
+                self.literal_to_column_value(literal)?,
+            );
 
             // Check for primary key index usage - O(1) lookup
             if let Some(ref pk_col) = self.primary_index.column_name {
                 if pk_col == column_name {
-                    if let Some(row_id) = self.find_by_primary_key(value) {
+                    if let Some(row_id) = self.find_by_primary_key(value.clone()) {
                         return Ok(PredicateResult::IndexLookup(vec![row_id]));
                     } else {
                         return Ok(PredicateResult::IndexLookup(vec![]));
@@ -949,24 +957,32 @@ impl TableRuntime {
         column_name: &str,
         value: &ColumnValue,
     ) -> Result<PredicateResult, TableError> {
-        if let Some(column_data) = self.storage.columns.get(column_name) {
-            let mut bitmap = RowBitmap::new(self.next_row_id);
+        if !self
+            .schema
+            .columns
+            .iter()
+            .any(|col| col.name == column_name)
+        {
+            return Err(TableError::ColumnNotFound(column_name.to_string()));
+        }
 
-            // CRITICAL: Evaluate directly on column data, no row materialization
-            for i in 0..self.next_row_id {
-                if !self.deleted_rows.contains(&i) {
-                    if let Some(col_value) = column_data.get_value(i) {
-                        if col_value == *value {
-                            bitmap.set(i, true);
-                        }
-                    }
-                }
+        let target_value = self.normalize_value_for_column(column_name, value.clone());
+        let mut bitmap = RowBitmap::new(self.next_row_id);
+
+        for i in 0..self.next_row_id {
+            if self.deleted_rows.contains(&i) {
+                continue;
             }
 
-            Ok(PredicateResult::Bitmap(bitmap))
-        } else {
-            Err(TableError::ColumnNotFound(column_name.to_string()))
+            let row_id = RowId(i);
+            if let Some(col_value) = self.get_value_for_row(row_id, column_name) {
+                if Self::values_equal(&col_value, &target_value) {
+                    bitmap.set(i, true);
+                }
+            }
         }
+
+        Ok(PredicateResult::Bitmap(bitmap))
     }
 
     /// Evaluate range predicate with potential index usage
@@ -977,7 +993,10 @@ impl TableRuntime {
         right: &Expression,
     ) -> Result<PredicateResult, TableError> {
         if let (Expression::Identifier(column_name), Expression::Literal(literal)) = (left, right) {
-            let value = self.literal_to_column_value(literal)?;
+            let value = self.normalize_value_for_column(
+                column_name,
+                self.literal_to_column_value(literal)?,
+            );
 
             // Check for secondary index usage for range queries - O(log n)
             if let Some(index) = self.secondary_indexes.get(column_name) {
@@ -1026,43 +1045,64 @@ impl TableRuntime {
         operator: &BinaryOperator,
         value: &ColumnValue,
     ) -> Result<PredicateResult, TableError> {
-        if let Some(column_data) = self.storage.columns.get(column_name) {
-            let mut bitmap = RowBitmap::new(self.next_row_id);
+        if !self
+            .schema
+            .columns
+            .iter()
+            .any(|col| col.name == column_name)
+        {
+            return Err(TableError::ColumnNotFound(column_name.to_string()));
+        }
 
-            // CRITICAL: Evaluate directly on column data, no row materialization
-            for i in 0..self.next_row_id {
-                if !self.deleted_rows.contains(&i) {
-                    if let Some(col_value) = column_data.get_value(i) {
-                        let matches = match operator {
-                            BinaryOperator::Less => self
-                                .compare_column_values(value, &col_value)
-                                .unwrap_or(false),
-                            BinaryOperator::LessEqual => {
-                                self.compare_column_values(value, &col_value)
-                                    .unwrap_or(false)
-                                    || col_value == *value
-                            }
-                            BinaryOperator::Greater => self
-                                .compare_column_values(&col_value, value)
-                                .unwrap_or(false),
-                            BinaryOperator::GreaterEqual => {
-                                self.compare_column_values(&col_value, value)
-                                    .unwrap_or(false)
-                                    || col_value == *value
-                            }
-                            _ => false,
-                        };
+        let target_value = self.normalize_value_for_column(column_name, value.clone());
+        let mut bitmap = RowBitmap::new(self.next_row_id);
 
-                        if matches {
-                            bitmap.set(i, true);
-                        }
-                    }
-                }
+        for i in 0..self.next_row_id {
+            if self.deleted_rows.contains(&i) {
+                continue;
             }
 
-            Ok(PredicateResult::Bitmap(bitmap))
+            let row_id = RowId(i);
+            if let Some(col_value) = self.get_value_for_row(row_id, column_name) {
+                let matches = match operator {
+                    BinaryOperator::Less => self
+                        .compare_column_values(&target_value, &col_value)
+                        .unwrap_or(false),
+                    BinaryOperator::LessEqual => {
+                        self.compare_column_values(&target_value, &col_value)
+                            .unwrap_or(false)
+                            || Self::values_equal(&col_value, &target_value)
+                    }
+                    BinaryOperator::Greater => self
+                        .compare_column_values(&col_value, &target_value)
+                        .unwrap_or(false),
+                    BinaryOperator::GreaterEqual => {
+                        self.compare_column_values(&col_value, &target_value)
+                            .unwrap_or(false)
+                            || Self::values_equal(&col_value, &target_value)
+                    }
+                    _ => false,
+                };
+
+                if matches {
+                    bitmap.set(i, true);
+                }
+            }
+        }
+
+        Ok(PredicateResult::Bitmap(bitmap))
+    }
+
+    fn get_value_for_row(&self, row_id: RowId, column_name: &str) -> Option<ColumnValue> {
+        if self.is_computed_column(column_name) {
+            self.get_row(row_id)
+                .ok()
+                .and_then(|row| row.values.get(column_name).cloned())
         } else {
-            Err(TableError::ColumnNotFound(column_name.to_string()))
+            self.storage
+                .columns
+                .get(column_name)
+                .and_then(|column_data| column_data.get_value(row_id.0))
         }
     }
 
@@ -1304,7 +1344,10 @@ impl TableRuntime {
                         if let (Expression::Identifier(column_name), Expression::Literal(literal)) =
                             (left.as_ref(), right.as_ref())
                         {
-                            let value = self.literal_to_column_value(literal)?;
+                            let value = self.normalize_value_for_column(
+                                column_name,
+                                self.literal_to_column_value(literal)?,
+                            );
                             // Use optimized bitmap index lookup
                             return self.create_equality_bitmap_optimized(column_name, &value);
                         }
@@ -1339,6 +1382,56 @@ impl TableRuntime {
             Literal::Float(f) => Ok(ColumnValue::F64(f.to_bits())),
             Literal::String(s) => Ok(ColumnValue::String(s.clone())),
             Literal::Char(c) => Ok(ColumnValue::String(c.to_string())),
+        }
+    }
+
+    fn normalize_value_for_column(&self, column_name: &str, value: ColumnValue) -> ColumnValue {
+        let target_type = self
+            .schema
+            .columns
+            .iter()
+            .find(|col| col.name == column_name)
+            .and_then(|col| match &col.column_type {
+                Type::Identifier { name, .. } => Some(name.as_str()),
+                _ => None,
+            });
+
+        if let Some(target) = target_type {
+            match (target, value) {
+                ("f64", ColumnValue::U64(v)) => ColumnValue::F64((v as f64).to_bits()),
+                ("f64", ColumnValue::I32(v)) => ColumnValue::F64((v as f64).to_bits()),
+                ("f64", ColumnValue::F64(bits)) => ColumnValue::F64(bits),
+                ("u64", ColumnValue::I32(v)) => ColumnValue::U64(v as u64),
+                ("i32", ColumnValue::U64(v)) => ColumnValue::I32(v as i32),
+                ("i32", ColumnValue::F64(bits)) => {
+                    ColumnValue::I32(f64::from_bits(bits) as i32)
+                }
+                (_, v) => v,
+            }
+        } else {
+            value
+        }
+    }
+
+    fn value_as_f64(value: &ColumnValue) -> Option<f64> {
+        match value {
+            ColumnValue::U64(v) => Some(*v as f64),
+            ColumnValue::I32(v) => Some(*v as f64),
+            ColumnValue::F64(bits) => Some(f64::from_bits(*bits)),
+            _ => None,
+        }
+    }
+
+    fn values_equal(left: &ColumnValue, right: &ColumnValue) -> bool {
+        if left == right {
+            return true;
+        }
+
+        match (Self::value_as_f64(left), Self::value_as_f64(right)) {
+            (Some(lhs), Some(rhs)) => lhs
+                .partial_cmp(&rhs)
+                .map_or(false, |ordering| ordering == std::cmp::Ordering::Equal),
+            _ => false,
         }
     }
 }
