@@ -308,18 +308,15 @@ impl AsyncSystemScheduler {
 
         while !unscheduled.is_empty() {
             let mut current_batch = Vec::new();
-            let mut batch_resource_accesses: HashMap<String, Vec<ResourceAccess>> =
-                HashMap::new();
+            let mut batch_resource_accesses: HashMap<String, Vec<ResourceAccess>> = HashMap::new();
 
             // Find systems that can execute concurrently
             let mut to_remove = Vec::new();
 
             for &i in &unscheduled {
                 let system = &systems[i];
-                let system_resources: Vec<(String, ResourceAccess)> = self
-                    .extract_system_resources(system)
-                    .into_iter()
-                    .collect();
+                let system_resources: Vec<(String, ResourceAccess)> =
+                    self.extract_system_resources(system).into_iter().collect();
 
                 // Check if this system conflicts with current batch
                 let mut has_conflict = false;
@@ -334,12 +331,9 @@ impl AsyncSystemScheduler {
                 if !has_conflict {
                     for (resource, access) in &system_resources {
                         if let Some(existing) = batch_resource_accesses.get(resource) {
-                            if existing
-                                .iter()
-                                .any(|existing_access| {
-                                    Self::resource_accesses_conflict(existing_access, access)
-                                })
-                            {
+                            if existing.iter().any(|existing_access| {
+                                Self::resource_accesses_conflict(existing_access, access)
+                            }) {
                                 has_conflict = true;
                                 break;
                             }

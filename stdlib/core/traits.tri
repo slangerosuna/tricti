@@ -45,15 +45,16 @@ Hash :: trait {
 # Clone (deep copy)
 Clone :: trait {
     clone : (&Self) -> Self,
-    clone_from : (*Self, &Self) -> none,
+    clone_from : (&mut Self, &Self) -> none,
 }
-
-# Copy (bitwise copy) - marker trait
+# Copy - marker trait
 Copy :: trait {
-    # Automatically implements Clone as bitwise copy
+    # Just a marker trait to allow implicit cloning
 }
 
 # Drop (destructor)
+# Implemented for all types by default
+# Can be overridden for custom cleanup
 Drop :: trait {
     drop : (*Self) -> none,
 }
@@ -173,48 +174,48 @@ Index<Idx> :: trait {
 }
 
 IndexMut<Idx> :: trait {
-    index_mut : (*Self, Idx) -> *u8,
+    index_mut : (&mut Self, Idx) -> *u8,
 }
 
 # Assignment Operators
 AddAssign :: trait {
-    add_assign : (*Self, Self) -> none,
+    add_assign : (&mut Self, Self) -> none,
 }
 
 SubAssign :: trait {
-    sub_assign : (*Self, Self) -> none,
+    sub_assign : (&mut Self, Self) -> none,
 }
 
 MulAssign :: trait {
-    mul_assign : (*Self, Self) -> none,
+    mul_assign : (&mut Self, Self) -> none,
 }
 
 DivAssign :: trait {
-    div_assign : (*Self, Self) -> none,
+    div_assign : (&mut Self, Self) -> none,
 }
 
 RemAssign :: trait {
-    rem_assign : (*Self, Self) -> none,
+    rem_assign : (&mut Self, Self) -> none,
 }
 
 BitAndAssign :: trait {
-    bitand_assign : (*Self, Self) -> none,
+    bitand_assign : (&mut Self, Self) -> none,
 }
 
 BitOrAssign :: trait {
-    bitor_assign : (*Self, Self) -> none,
+    bitor_assign : (&mut Self, Self) -> none,
 }
 
 BitXorAssign :: trait {
-    bitxor_assign : (*Self, Self) -> none,
+    bitxor_assign : (&mut Self, Self) -> none,
 }
 
 ShlAssign :: trait {
-    shl_assign : (*Self, u64) -> none,
+    shl_assign : (&mut Self, u64) -> none,
 }
 
 ShrAssign :: trait {
-    shr_assign : (*Self, u64) -> none,
+    shr_assign : (&mut Self, u64) -> none,
 }
 
 # =============================================================================
@@ -223,14 +224,14 @@ ShrAssign :: trait {
 
 # Read trait for reading bytes from a source
 Read :: trait {
-    read : (&mut Self, buf: *u8, len: u64) -> ?u64,
-    read_exact : (&mut Self, buf: *u8, len: u64) -> bool,
+    read : (&mut Self, buf: &mut u8, len: u64) -> ?u64,
+    read_exact : (&mut Self, buf: &mut u8, len: u64) -> bool,
 }
 
 # Write trait for writing bytes to a destination
 Write :: trait {
-    write : (&mut Self, buf: *u8, len: u64) -> ?u64,
-    write_all : (&mut Self, buf: *u8, len: u64) -> bool,
+    write : (&mut Self, buf: &mut u8, len: u64) -> ?u64,
+    write_all : (&mut Self, buf: &mut u8, len: u64) -> bool,
     flush : (&mut Self) -> bool,
 }
 

@@ -140,7 +140,7 @@ fn slice_i64_constructor_in_prelude() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
         slice_i64 := {
             ptr: &i64,
@@ -167,7 +167,7 @@ fn vec_i64_push_pop_len() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
     tricti_main :: () => {
             println("start")

@@ -65,14 +65,9 @@ LogLevel :: enum {
 }
 
 log_message :: (level: LogLevel, message: string) -> none => {
-        label := match level {
-                LogLevel::Trace => "[trace]",
-                LogLevel::Debug => "[debug]",
-                LogLevel::Info => "[info]",
-                LogLevel::Warn => "[warn]",
-                LogLevel::Error => "[error]",
-        }
-        println(label)
+        # Pattern matching on enum variants isn't supported in the analyzer yet;
+        # keep logging simple for now.
+        println("[log]")
         println(message)
 }
 

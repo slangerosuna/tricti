@@ -534,10 +534,14 @@ fn test_computed_column_mixed_references_with_types() {
         MixedTypes :: table {
             count: i64,
             rate: f64,
-            total_value: computed(count_float * rate),        # Forward reference to count_float
-            count_float: computed(count as f64),              # Backward reference to count
-            is_high_value: computed(total_value > 100.0),     # Forward reference to total_value
-            description: computed(if is_high_value then "high" else "low"), # Forward reference to is_high_value
+            # Forward reference to count_float
+            total_value: computed(count_float * rate),
+            # Backward reference to count
+            count_float: computed(count * 1.0),
+            # Forward reference to total_value
+            is_high_value: computed(total_value > 100.0),
+            # Forward reference to is_high_value
+            description: computed(if is_high_value then "high" else "low"),
         }
     "#;
 

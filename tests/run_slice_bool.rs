@@ -14,7 +14,7 @@ fn iterate_slice_bool() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
         v: [bool; 5] := [true, false, true, true, false]
         s: slice_bool := slice_bool_from(v, 5)
@@ -61,7 +61,7 @@ fn slice_bool_helpers() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
         v: [bool; 4] := [true, true, false, false]
         s: slice_bool := slice_bool_from(v, 4)

@@ -804,9 +804,7 @@ impl QueryExecutor {
             BinaryOperator::LessEqual => {
                 self.compare_values(left_value, right_value, |cmp| cmp <= 0)
             }
-            BinaryOperator::Greater => {
-                self.compare_values(left_value, right_value, |cmp| cmp > 0)
-            }
+            BinaryOperator::Greater => self.compare_values(left_value, right_value, |cmp| cmp > 0),
             BinaryOperator::GreaterEqual => {
                 self.compare_values(left_value, right_value, |cmp| cmp >= 0)
             }
@@ -832,12 +830,8 @@ impl QueryExecutor {
                 let left_value = self.evaluate_expression_simple(left, row)?;
                 let right_value = self.evaluate_expression_simple(right, row)?;
                 match operator {
-                    BinaryOperator::Equal => {
-                        Ok(Self::values_equal(&left_value, &right_value))
-                    }
-                    BinaryOperator::NotEqual => {
-                        Ok(!Self::values_equal(&left_value, &right_value))
-                    }
+                    BinaryOperator::Equal => Ok(Self::values_equal(&left_value, &right_value)),
+                    BinaryOperator::NotEqual => Ok(!Self::values_equal(&left_value, &right_value)),
                     BinaryOperator::Less => {
                         self.compare_values(&left_value, &right_value, |cmp| cmp < 0)
                     }
@@ -1488,26 +1482,23 @@ impl QueryExecutor {
     where
         F: Fn(i32) -> bool,
     {
-        let comparison = if let (Some(lhs), Some(rhs)) = (
-            Self::value_as_f64(left),
-            Self::value_as_f64(right),
-        ) {
-            lhs.partial_cmp(&rhs)
-                .unwrap_or(std::cmp::Ordering::Equal) as i32
-        } else {
-            match (left, right) {
-                (ColumnValue::U64(l), ColumnValue::U64(r)) => l.cmp(r) as i32,
-                (ColumnValue::I32(l), ColumnValue::I32(r)) => l.cmp(r) as i32,
-                (ColumnValue::String(l), ColumnValue::String(r)) => l.cmp(r) as i32,
-                (ColumnValue::Bool(l), ColumnValue::Bool(r)) => l.cmp(r) as i32,
-                _ => {
-                    return Err(QueryError::TypeMismatch {
-                        expected: "comparable types".to_string(),
-                        found: "incomparable types".to_string(),
-                    })
+        let comparison =
+            if let (Some(lhs), Some(rhs)) = (Self::value_as_f64(left), Self::value_as_f64(right)) {
+                lhs.partial_cmp(&rhs).unwrap_or(std::cmp::Ordering::Equal) as i32
+            } else {
+                match (left, right) {
+                    (ColumnValue::U64(l), ColumnValue::U64(r)) => l.cmp(r) as i32,
+                    (ColumnValue::I32(l), ColumnValue::I32(r)) => l.cmp(r) as i32,
+                    (ColumnValue::String(l), ColumnValue::String(r)) => l.cmp(r) as i32,
+                    (ColumnValue::Bool(l), ColumnValue::Bool(r)) => l.cmp(r) as i32,
+                    _ => {
+                        return Err(QueryError::TypeMismatch {
+                            expected: "comparable types".to_string(),
+                            found: "incomparable types".to_string(),
+                        })
+                    }
                 }
-            }
-        };
+            };
 
         Ok(cmp_fn(comparison))
     }

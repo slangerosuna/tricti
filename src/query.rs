@@ -434,8 +434,7 @@ impl QueryPlan {
             .iter()
             .any(|proj| proj.source_column == join_condition.left_column)
         {
-            left_scan_projection
-                .push(FieldProjection::column(join_condition.left_column.clone()));
+            left_scan_projection.push(FieldProjection::column(join_condition.left_column.clone()));
         }
 
         let mut right_scan_projection = right_projection.clone();

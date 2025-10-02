@@ -203,7 +203,8 @@ mod tests {
     #[test]
     fn parses_simple_const_declaration() {
         let src = "assert :: (cond: bool, msg: string) -> none => { ret none }";
-        let mut pairs = PnParser::parse(Rule::statement, src).expect("failed to parse const statement");
+        let mut pairs =
+            PnParser::parse(Rule::statement, src).expect("failed to parse const statement");
         let statement_pair = pairs.next().expect("expected statement pair");
         assert_eq!(statement_pair.as_rule(), Rule::statement);
     }
@@ -216,42 +217,50 @@ mod tests {
 
     #[test]
     fn parses_assert_block() {
-    let function_src = "(cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
-    PnParser::parse(Rule::function, function_src).expect("failed to parse function snippet");
+        let function_src = "(cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
+        PnParser::parse(Rule::function, function_src).expect("failed to parse function snippet");
 
-    let statement_src = "assert :: (cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
-    PnParser::parse(Rule::statement, statement_src).expect("failed to parse assert statement snippet");
+        let statement_src =
+            "assert :: (cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
+        PnParser::parse(Rule::statement, statement_src)
+            .expect("failed to parse assert statement snippet");
 
-    let single_program_src = "# Assert a condition holds; otherwise panic with message\nassert :: (cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
-    PnParser::parse(Rule::program, single_program_src).expect("failed to parse single assert program");
+        let single_program_src = "# Assert a condition holds; otherwise panic with message\nassert :: (cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
+        PnParser::parse(Rule::program, single_program_src)
+            .expect("failed to parse single assert program");
 
-    let two_simple_consts = "foo :: () -> none => {}\nbar :: () -> none => {}";
-    PnParser::parse(Rule::program, two_simple_consts).expect("failed to parse two simple const declarations");
+        let two_simple_consts = "foo :: () -> none => {}\nbar :: () -> none => {}";
+        PnParser::parse(Rule::program, two_simple_consts)
+            .expect("failed to parse two simple const declarations");
 
-    let blank_line_between_consts = "foo :: () -> none => {}\n\nbar :: () -> none => {}";
-    PnParser::parse(Rule::program, blank_line_between_consts).expect("failed to parse const declarations separated by blank line");
+        let blank_line_between_consts = "foo :: () -> none => {}\n\nbar :: () -> none => {}";
+        PnParser::parse(Rule::program, blank_line_between_consts)
+            .expect("failed to parse const declarations separated by blank line");
 
-    let comment_between_consts = r"foo :: () -> none => {}
+        let comment_between_consts = r"foo :: () -> none => {}
 # a helpful message
 bar :: () -> none => {}
 ";
-    PnParser::parse(Rule::program, comment_between_consts).expect("failed to parse const declarations separated by comment");
+        PnParser::parse(Rule::program, comment_between_consts)
+            .expect("failed to parse const declarations separated by comment");
 
-    let panic_only_const = r#"panic :: (msg: string) -> none => {
+        let panic_only_const = r#"panic :: (msg: string) -> none => {
     println("Assertion failed:", msg)
     exit(1)
 }
 "#;
-    PnParser::parse(Rule::program, panic_only_const).expect("failed to parse panic-only const declaration");
+        PnParser::parse(Rule::program, panic_only_const)
+            .expect("failed to parse panic-only const declaration");
 
-    let two_nontrivial_consts = r#"foo :: () -> none => {
+        let two_nontrivial_consts = r#"foo :: () -> none => {
     bar()
 }
 bar :: () -> none => {
     ret none
 }
 "#;
-    PnParser::parse(Rule::program, two_nontrivial_consts).expect("failed to parse consecutive nontrivial const declarations");
+        PnParser::parse(Rule::program, two_nontrivial_consts)
+            .expect("failed to parse consecutive nontrivial const declarations");
 
         let src = r#"
 panic :: (msg: string) -> none => {
@@ -867,19 +876,23 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 fn parse_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
     let inner = pair.into_inner().next().unwrap();
     match inner.as_rule() {
+        Rule::bare_identifier_pattern => {
+            let ident = inner.into_inner().next().unwrap().as_str().to_string();
+            Expression::Identifier(ident)
+        }
         Rule::path_struct => parse_path_struct_expression(inner),
         Rule::static_path => parse_static_path_expression(inner),
         Rule::identifier => Expression::Identifier(inner.as_str().to_string()),
+        Rule::literal => parse_literal(inner),
         Rule::option_pattern => parse_option_pattern(inner),
+        _ if inner.as_str() == "_" => Expression::Identifier("_".to_string()),
         _ => panic!("Unexpected pattern rule: {:?}", inner.as_rule()),
     }
 }
 
 fn parse_option_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut inner = pair.into_inner();
-    let variant = inner
-        .next()
-        .expect("option pattern missing variant");
+    let variant = inner.next().expect("option pattern missing variant");
 
     match variant.as_rule() {
         Rule::some_option_pattern => {

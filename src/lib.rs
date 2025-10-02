@@ -12,6 +12,7 @@ pub mod ffi_runtime;
 pub mod filesystem;
 pub mod package_manager;
 pub mod parser;
+pub mod program_loader;
 pub mod query;
 pub mod query_executor;
 pub mod resource_lifecycle;

@@ -7,6 +7,7 @@ pub mod computed_columns;
 pub mod error_propagation;
 pub mod event_loop_manager;
 pub mod parser;
+pub mod program_loader;
 pub mod query;
 pub mod query_executor;
 pub mod resource_lifecycle;
@@ -19,66 +20,73 @@ pub mod tri_runtime_bridge;
 
 use crate::ast::*;
 use crate::async_runtime::RuntimeConfig;
-use crate::async_scheduler_integration::{AsyncSystemScheduler, SystemExecutionRequest};
+use crate::async_scheduler_integration::SystemExecutionRequest;
 use crate::event_loop_manager::{EventLoopConfig, EventLoopManager, LoadBalancingStrategy};
-use crate::table_runtime::{ColumnValue, TableRuntime};
+use crate::program_loader::{parse_file_with_std, StdlibStatus};
 use inkwell::context::Context;
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 {
-        if args[1] == "--help" || args[1] == "-h" {
-            println!("Usage: tricti [source_file]");
-            println!("If no source_file is provided, defaults to 'src.pn'.");
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!("Usage: tricti [--no-std] [source_file]");
+        println!("If no source_file is provided, defaults to 'src.tri'.");
+        return;
+    }
+
+    let mut skip_std_flag = false;
+    let mut source_path: Option<String> = None;
+
+    for arg in args {
+        match arg.as_str() {
+            "--no-std" => skip_std_flag = true,
+            _ if arg.starts_with('-') => {
+                eprintln!("Unknown option: {}", arg);
+                println!("Use --help to see available options.");
+                return;
+            }
+            _ => {
+                if source_path.is_some() {
+                    eprintln!("Multiple source files provided. Only one is supported.");
+                    return;
+                }
+                source_path = Some(arg);
+            }
+        }
+    }
+
+    let path = source_path.unwrap_or_else(|| "src.tri".to_string());
+    println!("Using source file: {}", path);
+    println!("Parsing...");
+
+    let loaded = match parse_file_with_std(Path::new(&path), skip_std_flag) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            eprintln!("Failed to load source file {}: {}", path, error);
             return;
         }
-    }
-    let path = if args.len() > 1 { &args[1] } else { "src.pn" };
-    println!("Using source file: {}", path);
-    let file_content = std::fs::read_to_string(path).expect("Failed to read source file");
-
-    let mut visited_modules: HashSet<std::path::PathBuf> = HashSet::new();
-
-    if let Ok(canonical_source) = std::fs::canonicalize(path) {
-        visited_modules.insert(canonical_source);
-    }
-
-    let stdlib_program = if std::env::var("SKIP_STDLIB").unwrap_or_default() == "1" {
-        // allow tests to skip loading the stdlib
-        parser::parse("".to_string())
-    } else {
-        let stdlib_path = std::env::current_dir().unwrap().join("std.tri");
-        let stdlib_content =
-            std::fs::read_to_string(&stdlib_path).expect("Failed to read stdlib file");
-        if let Ok(canonical_stdlib) = std::fs::canonicalize(&stdlib_path) {
-            visited_modules.insert(canonical_stdlib);
-        }
-        let p = parser::parse(stdlib_content);
-        expand_modules(p, &std::env::current_dir().unwrap(), &mut visited_modules)
     };
 
-    // Parse the program
-    println!("Parsing...");
-    let mut program = parser::parse(file_content);
-    // Expand external modules declared as `mod name;` by reading name.pn
-    program = expand_modules(
-        program,
-        &std::env::current_dir().unwrap(),
-        &mut visited_modules,
-    );
+    match loaded.stdlib_status {
+        StdlibStatus::Included => println!("Standard library included."),
+        StdlibStatus::SkippedEnvironment => {
+            println!("Standard library skipped due to SKIP_STDLIB=1.");
+        }
+        StdlibStatus::SkippedFlag => {
+            println!("Standard library skipped due to --no-std flag.");
+        }
+        StdlibStatus::SkippedAttribute => {
+            println!("Standard library skipped due to @no_std attribute.");
+        }
+    }
 
-    // Prepend stdlib to the program
-    let mut combined_statements = stdlib_program.statements;
-    combined_statements.extend(program.statements);
-    program.statements = combined_statements;
-
+    let program = loaded.program;
     println!("AST: {:#?}", program);
 
-    // Perform semantic analysis
     println!("\nPerforming semantic analysis...");
     let semantic_context = match semantic::analyze_program(&program) {
         Ok(context) => {
@@ -91,7 +99,6 @@ fn main() {
         }
     };
 
-    // Check if we have async systems that need the async runtime
     let async_systems = extract_async_systems(&program);
     if !async_systems.is_empty() {
         println!(
@@ -99,7 +106,6 @@ fn main() {
             async_systems.len()
         );
 
-        // Run async systems through the event loop
         if let Err(error) = run_async_systems(async_systems, semantic_context.clone()) {
             eprintln!("Async execution error: {:?}", error);
             return;
@@ -108,7 +114,6 @@ fn main() {
         println!("Async execution completed successfully!");
     }
 
-    // Generate LLVM IR
     println!("\nGenerating LLVM IR...");
     let context = Context::create();
     let mut codegen = match codegen::CodeGenerator::new(&context, semantic_context) {
@@ -127,17 +132,15 @@ fn main() {
     println!("Generated LLVM IR:");
     codegen.print_ir();
 
-    // Write object file
     println!("\nWriting object file...");
     if let Err(error) = codegen.write_object_file("output.o") {
         eprintln!("Failed to write object file: {}", error);
         return;
     }
 
-    // Link with clang to create executable
     println!("Linking with clang...");
     let output = Command::new("clang")
-        .args(&["output.o", "-o", "output.out"])
+        .args(["output.o", "-o", "output.out"])
         .output();
 
     match output {
@@ -145,7 +148,6 @@ fn main() {
             if result.status.success() {
                 println!("Successfully created executable 'output.out'");
 
-                // Run the executable
                 println!("\nRunning the program:");
                 let run_result = Command::new("./output.out").output();
                 match run_result {
@@ -168,7 +170,6 @@ fn main() {
     }
 }
 
-/// Extract async systems from the program
 fn extract_async_systems(program: &Program) -> Vec<SystemDef> {
     let mut async_systems = Vec::new();
 
@@ -187,12 +188,10 @@ fn extract_async_systems(program: &Program) -> Vec<SystemDef> {
     async_systems
 }
 
-/// Run async systems through the event loop manager
 fn run_async_systems(
     async_systems: Vec<SystemDef>,
     semantic_context: crate::semantic::SemanticContext,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Configure the async runtime
     let runtime_config = RuntimeConfig {
         max_concurrent_systems: 100,
         default_task_timeout: Duration::from_secs(30),
@@ -201,7 +200,6 @@ fn run_async_systems(
         enable_preemption: true,
     };
 
-    // Configure the event loop
     let event_loop_config = EventLoopConfig {
         max_executor_threads: std::thread::available_parallelism()
             .map(|p| p.get())
@@ -213,150 +211,35 @@ fn run_async_systems(
         load_balancing_strategy: LoadBalancingStrategy::ResourceAware,
     };
 
-    // Create the event loop manager
     let event_loop = EventLoopManager::new(runtime_config, semantic_context, event_loop_config);
 
-    // Create system execution requests for async systems
     let mut execution_requests = Vec::new();
     for system_def in async_systems {
         let request = SystemExecutionRequest {
             system_def: system_def.clone(),
-            parameters: HashMap::new(), // Default empty parameters
+            parameters: HashMap::new(),
             priority: crate::async_runtime::TaskPriority::Normal,
             timeout: Some(Duration::from_secs(30)),
-            table_runtimes: HashMap::new(), // Will be registered separately if needed
+            table_runtimes: HashMap::new(),
         };
         execution_requests.push(request);
     }
 
-    // Execute the async systems
     if !execution_requests.is_empty() {
         println!(
             "Starting event loop for {} async systems...",
             execution_requests.len()
         );
 
-        // For now, we'll start the event loop and let it run briefly
-        // In a full implementation, this would be more sophisticated
         std::thread::spawn(move || {
             if let Err(e) = event_loop.start() {
                 eprintln!("Event loop error: {:?}", e);
             }
         });
 
-        // Give the event loop time to process
         std::thread::sleep(Duration::from_millis(100));
         println!("Async systems processing initiated.");
     }
 
     Ok(())
-}
-
-fn expand_modules(
-    program: Program,
-    base_dir: &std::path::Path,
-    visited: &mut HashSet<std::path::PathBuf>,
-) -> Program {
-    // Collect new statements to append when we inline modules
-    let mut expanded: Vec<Statement> = Vec::new();
-    for stmt in program.statements.into_iter() {
-        match &stmt {
-            Statement::ModuleDecl {
-                name,
-                items,
-                is_public: _,
-            } if items.is_none() => {
-                // Try base_dir/name.pn then base_dir/src/name.pn
-                let mut tried: Vec<PathBuf> = Vec::new();
-                tried.push(base_dir.join(format!("{}.pn", name)));
-                tried.push(base_dir.join(format!("{}.tri", name)));
-                tried.push(base_dir.join("src").join(format!("{}.pn", name)));
-                tried.push(base_dir.join("src").join(format!("{}.tri", name)));
-
-                let mut loaded: Option<(String, PathBuf)> = None;
-                for candidate in tried {
-                    if let Ok(canonical) = std::fs::canonicalize(&candidate) {
-                        if visited.contains(&canonical) {
-                            continue;
-                        }
-                        if let Ok(content) = std::fs::read_to_string(&canonical) {
-                            visited.insert(canonical.clone());
-                            loaded = Some((content, canonical));
-                            break;
-                        }
-                    }
-                }
-
-                if let Some((content, _canonical)) = loaded {
-                    let mut sub = parser::parse(content);
-                    // Recursively expand submodules relative to same base_dir
-                    sub = expand_modules(sub, base_dir, visited);
-                    // Splice submodule items at top-level for now
-                    expanded.extend(sub.statements);
-                } else {
-                    eprintln!("warning: module '{}' not found on disk", name);
-                }
-            }
-            Statement::Use {
-                path,
-                is_public: _,
-                alias: _,
-            } => {
-                // Simple import: try to load a module file named by the first path segment or joined path
-                if !path.is_empty() {
-                    let joined = path.join("/");
-                    let name = &path[0];
-                    let mut tried: Vec<PathBuf> = Vec::new();
-                    // Try exact joined path under base, src, stdlib
-                    tried.push(base_dir.join(format!("{}.pn", joined)));
-                    tried.push(base_dir.join(format!("{}.tri", joined)));
-                    tried.push(base_dir.join("src").join(format!("{}.pn", joined)));
-                    tried.push(base_dir.join("src").join(format!("{}.tri", joined)));
-                    tried.push(base_dir.join("stdlib").join(format!("{}.pn", joined)));
-                    tried.push(base_dir.join("stdlib").join(format!("{}.tri", joined)));
-                    // Try single-segment name fallback
-                    tried.push(base_dir.join(format!("{}.pn", name)));
-                    tried.push(base_dir.join(format!("{}.tri", name)));
-                    tried.push(base_dir.join("src").join(format!("{}.pn", name)));
-                    tried.push(base_dir.join("src").join(format!("{}.tri", name)));
-                    tried.push(base_dir.join("stdlib").join(format!("{}.pn", name)));
-                    tried.push(base_dir.join("stdlib").join(format!("{}.tri", name)));
-                    let mut loaded: Option<(String, PathBuf)> = None;
-                    for candidate in tried {
-                        if let Ok(canonical) = std::fs::canonicalize(&candidate) {
-                            if visited.contains(&canonical) {
-                                continue;
-                            }
-                            if let Ok(content) = std::fs::read_to_string(&canonical) {
-                                visited.insert(canonical.clone());
-                                loaded = Some((content, canonical));
-                                break;
-                            }
-                        }
-                    }
-                    if let Some((content, _canonical)) = loaded {
-                        let mut sub = parser::parse(content);
-                        sub = expand_modules(sub, base_dir, visited);
-                        expanded.extend(sub.statements);
-                    } else {
-                        eprintln!("warning: use {:?} not found on disk", path);
-                    }
-                }
-            }
-            Statement::ModuleDecl {
-                name: _,
-                items: Some(items),
-                is_public: _,
-            } => {
-                // Inline module: just keep items at top-level for now
-                for s in items {
-                    expanded.push(s.clone());
-                }
-            }
-            _ => expanded.push(stmt.clone()),
-        }
-    }
-    Program {
-        statements: expanded,
-    }
 }

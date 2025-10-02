@@ -845,7 +845,10 @@ impl TableRuntime {
     fn compare_column_values(&self, left: &ColumnValue, right: &ColumnValue) -> Option<bool> {
         if let (Some(lhs), Some(rhs)) = (Self::value_as_f64(left), Self::value_as_f64(right)) {
             return lhs.partial_cmp(&rhs).map(|ordering| {
-                matches!(ordering, std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+                matches!(
+                    ordering,
+                    std::cmp::Ordering::Greater | std::cmp::Ordering::Equal
+                )
             });
         }
 
@@ -919,10 +922,8 @@ impl TableRuntime {
         right: &Expression,
     ) -> Result<PredicateResult, TableError> {
         if let (Expression::Identifier(column_name), Expression::Literal(literal)) = (left, right) {
-            let value = self.normalize_value_for_column(
-                column_name,
-                self.literal_to_column_value(literal)?,
-            );
+            let value = self
+                .normalize_value_for_column(column_name, self.literal_to_column_value(literal)?);
 
             // Check for primary key index usage - O(1) lookup
             if let Some(ref pk_col) = self.primary_index.column_name {
@@ -993,10 +994,8 @@ impl TableRuntime {
         right: &Expression,
     ) -> Result<PredicateResult, TableError> {
         if let (Expression::Identifier(column_name), Expression::Literal(literal)) = (left, right) {
-            let value = self.normalize_value_for_column(
-                column_name,
-                self.literal_to_column_value(literal)?,
-            );
+            let value = self
+                .normalize_value_for_column(column_name, self.literal_to_column_value(literal)?);
 
             // Check for secondary index usage for range queries - O(log n)
             if let Some(index) = self.secondary_indexes.get(column_name) {
@@ -1403,9 +1402,7 @@ impl TableRuntime {
                 ("f64", ColumnValue::F64(bits)) => ColumnValue::F64(bits),
                 ("u64", ColumnValue::I32(v)) => ColumnValue::U64(v as u64),
                 ("i32", ColumnValue::U64(v)) => ColumnValue::I32(v as i32),
-                ("i32", ColumnValue::F64(bits)) => {
-                    ColumnValue::I32(f64::from_bits(bits) as i32)
-                }
+                ("i32", ColumnValue::F64(bits)) => ColumnValue::I32(f64::from_bits(bits) as i32),
                 (_, v) => v,
             }
         } else {

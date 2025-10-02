@@ -14,7 +14,7 @@ fn stdlib_rt_can_coexist_with_hosted_main() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let rt = fs::read_to_string("stdlib/rt.pn").expect("read rt");
+    let rt = fs::read_to_string("stdlib/rt.tri").expect("read rt");
     let user = r#"
         main :: () => {
             println("rt present")

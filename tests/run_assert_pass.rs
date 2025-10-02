@@ -14,7 +14,7 @@ fn assert_passes() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
         main :: () => {
             assert(true, "should not print")

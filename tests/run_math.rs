@@ -57,7 +57,7 @@ fn stdlib_abs_min_max_i64() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
         main :: () => {
             println(abs_i64(-5))
@@ -76,7 +76,7 @@ fn stdlib_rem_i64() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
         main :: () => {
             println(rem_i64(10, 3))
@@ -95,7 +95,7 @@ fn small_integer_widths_behave() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.pn").expect("read prelude");
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
         main :: () => {
             x: u8 := 255u8

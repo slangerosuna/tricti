@@ -1532,6 +1532,9 @@ fn infer_expression_type(
         }
 
         Expression::Identifier(name) => {
+            if name == "if" {
+                panic!("identifier expression encountered: 'if'");
+            }
             // Heuristic: enum variant static path lowered by parser as Identifier("Type_Variant").
             // If it matches a known enum type and existing variant name, treat as i64 tag.
             if let Some((tname, vname)) = name.split_once('_') {
@@ -1670,6 +1673,9 @@ fn infer_expression_type(
                     }
 
                     let signature_opt = context.get_function_signature(name).cloned();
+                    if signature_opt.is_none() {
+                        eprintln!("missing function lookup for {}", name);
+                    }
                     let signature = signature_opt
                         .ok_or_else(|| SemanticError::UndefinedFunction(name.clone()))?;
 
@@ -2216,8 +2222,8 @@ fn infer_binary_op_type(
             if matches!(right, Type::None) {
                 return Ok(left.clone());
             }
-            if types_compatible(left, right) && is_numeric_type(left) {
-                Ok(left.clone())
+            if types_compatible(left, right) && (is_numeric_type(left) || is_numeric_type(right)) {
+                Ok(promote_numeric_types(left, right))
             } else {
                 Err(SemanticError::InvalidOperation {
                     operator: format!("{:?}", operator),
@@ -2233,8 +2239,8 @@ fn infer_binary_op_type(
             if matches!(right, Type::None) {
                 return Ok(left.clone());
             }
-            if types_compatible(left, right) && is_numeric_type(left) {
-                Ok(left.clone())
+            if types_compatible(left, right) && (is_numeric_type(left) || is_numeric_type(right)) {
+                Ok(promote_numeric_types(left, right))
             } else {
                 Err(SemanticError::InvalidOperation {
                     operator: format!("{:?}", operator),
@@ -2551,6 +2557,52 @@ fn analyze_pattern(
             "unknown pattern: {:?}",
             pattern
         ))),
+    }
+}
+
+fn numeric_type_name(t: &Type) -> Option<&str> {
+    if let Type::Identifier { name, .. } = t {
+        let as_str = name.as_str();
+        if matches!(
+            as_str,
+            "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64"
+        ) {
+            return Some(as_str);
+        }
+    }
+    None
+}
+
+fn promote_numeric_types(left: &Type, right: &Type) -> Type {
+    let left_name = numeric_type_name(left);
+    let right_name = numeric_type_name(right);
+
+    match (left_name, right_name) {
+        (Some(ln), Some(rn)) => {
+            let target = if ln == "f64" || rn == "f64" {
+                "f64"
+            } else if ln == "f32" || rn == "f32" {
+                "f32"
+            } else if ln == "i64" || rn == "i64" {
+                "i64"
+            } else if ln == "u64" || rn == "u64" {
+                "u64"
+            } else if ln == "i32" || rn == "i32" {
+                "i32"
+            } else if ln == "u32" || rn == "u32" {
+                "u32"
+            } else {
+                "u16"
+            };
+
+            Type::Identifier {
+                name: target.to_string(),
+                type_args: vec![],
+            }
+        }
+        (Some(_), None) => left.clone(),
+        (None, Some(_)) => right.clone(),
+        _ => left.clone(),
     }
 }
 
