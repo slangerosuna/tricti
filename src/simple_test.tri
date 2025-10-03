@@ -14,7 +14,7 @@ main :: () => {
     t2 := current_timestamp()
     println("  t1 = " + t1.to_string())
     println("  t2 = " + t2.to_string())
-    println("  ✓ Timestamps work")
+    println("  Timestamps work")
     println("")
     
     # Test allocation
@@ -22,7 +22,7 @@ main :: () => {
     ptr := alloc(1024)
     println("  Allocated 1024 bytes")
     dealloc(ptr)
-    println("  ✓ Allocation works")
+    println("  Allocation works")
     println("")
     
     # Test Vec_u64
@@ -33,7 +33,7 @@ main :: () => {
     println("  Pushed 42, len = " + Vec_u64_len(v).to_string())
     val := Vec_u64_get(v, 0)
     println("  Got value: " + val.to_string())
-    println("  ✓ Vec_u64 works")
+    println("  Vec_u64 works")
     println("")
     
     # Test HashMap_u64_u64
@@ -44,10 +44,10 @@ main :: () => {
     println("  Inserted (10, 100)")
     result := HashMap_u64_u64_get(m, 10)
     println("  Got value: " + result.to_string())
-    println("  ✓ HashMap_u64_u64 works")
+    println("  HashMap_u64_u64 works")
     println("")
     
     println("=======================================")
-    println("  ✓ Basic tests completed successfully")
+    println("  Basic tests completed successfully   ")
     println("=======================================")
 }

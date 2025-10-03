@@ -385,11 +385,11 @@ main :: () => {
     
     if total_passed == total_tests {
         println("")
-        println("  ✓ ALL TESTS PASSED!")
+        println("  :) ALL TESTS PASSED!")
         println("")
     } else {
         println("")
-        println("  ✗ Some tests failed")
+        println("  :( Some tests failed")
         println("")
     }
 }

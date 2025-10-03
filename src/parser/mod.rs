@@ -461,20 +461,26 @@ fn parse_assignment(pair: pest::iterators::Pair<Rule>) -> Statement {
 fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let rule = pair.as_rule();
     match rule {
-        Rule::or => parse_binary_expression(pair),
-        Rule::and => parse_binary_expression(pair),
-        Rule::comparison => parse_binary_expression(pair),
-        Rule::shift => parse_binary_expression(pair),
-        Rule::addition => parse_binary_expression(pair),
-        Rule::multiplication => parse_binary_expression(pair),
-        Rule::with_range => parse_with_range(pair),
-        Rule::unary => parse_unary(pair),
-        Rule::cast_expr => parse_cast_expression(pair),
-        Rule::post_fix => parse_postfix_expression(pair),
-        Rule::primary => parse_primary_expression(pair),
+        Rule::or
+        | Rule::and
+        | Rule::comparison
+        | Rule::shift
+        | Rule::addition
+        | Rule::multiplication
+        | Rule::or_no_block
+        | Rule::and_no_block
+        | Rule::comparison_no_block
+        | Rule::shift_no_block
+        | Rule::addition_no_block
+        | Rule::multiplication_no_block => parse_binary_expression(pair),
+        Rule::with_range | Rule::with_range_no_block => parse_with_range(pair),
+        Rule::unary | Rule::unary_no_block => parse_unary(pair),
+        Rule::cast_expr | Rule::cast_expr_no_block => parse_cast_expression(pair),
+        Rule::post_fix | Rule::post_fix_no_block => parse_postfix_expression(pair),
+        Rule::primary | Rule::primary_no_block => parse_primary_expression(pair),
         Rule::array_new => parse_array_new(pair),
         Rule::function => parse_function(pair),
-        Rule::literal => parse_literal(pair),
+        Rule::literal | Rule::literal_no_struct => parse_literal(pair),
         Rule::identifier => Expression::Identifier(pair.as_str().to_string()),
         Rule::number => parse_number(pair),
         Rule::integer => Expression::Literal(parse_integer_literal(pair)),
@@ -529,19 +535,23 @@ fn parse_unary(pair: pest::iterators::Pair<Rule>) -> Expression {
     let first = it.next();
     if let Some(p) = first.clone() {
         match p.as_rule() {
-            Rule::post_fix => {
+            Rule::post_fix | Rule::post_fix_no_block => {
                 // no unary operator
                 return parse_postfix_expression(p);
             }
-            Rule::cast_expr => {
+            Rule::cast_expr | Rule::cast_expr_no_block => {
                 return parse_cast_expression(p);
             }
             Rule::op_unary => {
                 let op_str = p.as_str();
                 let operand_pair = it.next().expect("unary missing operand");
                 let operand_expr = match operand_pair.as_rule() {
-                    Rule::post_fix => parse_postfix_expression(operand_pair),
-                    Rule::cast_expr => parse_cast_expression(operand_pair),
+                    Rule::post_fix | Rule::post_fix_no_block => {
+                        parse_postfix_expression(operand_pair)
+                    }
+                    Rule::cast_expr | Rule::cast_expr_no_block => {
+                        parse_cast_expression(operand_pair)
+                    }
                     _ => parse_expression(operand_pair),
                 };
                 if op_str == "some" {
@@ -699,7 +709,7 @@ fn parse_cast_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut inner = pair.into_inner();
     let first = inner.next().expect("cast expression missing base");
     let mut expr = match first.as_rule() {
-        Rule::post_fix => parse_postfix_expression(first),
+        Rule::post_fix | Rule::post_fix_no_block => parse_postfix_expression(first),
         _ => parse_expression(first),
     };
 
@@ -1364,7 +1374,9 @@ fn parse_if_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut else_stmts: Option<Vec<Statement>> = None;
     for inner in pair.into_inner() {
         match inner.as_rule() {
-            Rule::expression => condition = Some(parse_expression(inner)),
+            Rule::expression | Rule::expression_no_block => {
+                condition = Some(parse_expression(inner))
+            }
             Rule::block => {
                 if then_stmts.is_empty() {
                     then_stmts = parse_block(inner);

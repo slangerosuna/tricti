@@ -238,8 +238,8 @@ fn assert_fails_exits_nonzero() {
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
         main :: () => {
-            assert(false, "boom")
-            println(999) # unreachable
+            assert(false, "boom");
+            println(999); # unreachable
         }
     "#;
     let src = format!("{}\n{}", prelude, user);

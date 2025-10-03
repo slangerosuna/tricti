@@ -1,10 +1,10 @@
 WHITESPACE   = _{ " " | "\t" | "\n" | "\r" | COMMENT }
 COMMENT      = _{ ("#" ~ (!"\n" ~ ANY)*) | ("/*" ~ (!"*/" ~ ANY)*) }
 
-keyword_if   = _{ "if" ~ !("_"|ASCII_ALPHANUMERIC) }
-keyword_else = _{ "else" ~ !("_"|ASCII_ALPHANUMERIC) }
-keyword_break = _{ "break" ~ !("_"|ASCII_ALPHANUMERIC) }
-keyword_continue = _{ "cont" ~ !("_"|ASCII_ALPHANUMERIC) }
+keyword_if   = @{ "if" ~ !("_"|ASCII_ALPHANUMERIC) }
+keyword_else = @{ "else" ~ !("_"|ASCII_ALPHANUMERIC) }
+keyword_break = @{ "break" ~ !("_"|ASCII_ALPHANUMERIC) }
+keyword_continue = @{ "cont" ~ !("_"|ASCII_ALPHANUMERIC) }
 reserved_keyword = _{ keyword_if | keyword_else | keyword_break | keyword_continue }
 identifier   = @{ !reserved_keyword ~ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
 int_body     = { ASCII_DIGIT+ ~ ("_" ~ ASCII_DIGIT+)* }
@@ -20,19 +20,22 @@ program      = { SOI ~ WHITESPACE* ~ statement* ~ EOI }
 statement    = {
     WHITESPACE* ~ (
         const_statement
-    | (use_statement
+        | (simple_statement ~ ";"?)
+    ) ~ WHITESPACE*
+}
+simple_statement = _{
+        use_statement
         | mod_decl
         | variable_decl
         | assignment
         | impl_block
         | for_loop
         | return_statement
-    | break_statement
-    | continue_statement
+        | break_statement
+        | continue_statement
         | ifdef_statement
-    | conditional
-        | expression) ~ ";"?
-    ) ~ WHITESPACE*
+        | conditional
+        | expression
 }
 
 const_statement = { const_decl ~ (";" ~ WHITESPACE*)? }
@@ -40,20 +43,20 @@ const_statement = { const_decl ~ (";" ~ WHITESPACE*)? }
 use_statement = { ("pub" ~ "use" | "use") ~ identifier ~ ("::" ~ (identifier | "*"))* ~ use_alias? ~ ";"? }
 use_alias = { "as" ~ identifier }
 mod_decl = { ("pub" ~ "mod" | "mod") ~ identifier ~ (";" | ("{" ~ statement* ~ "}")) }
-return_statement = { "ret" ~ expression? }
-break_statement = { "break" ~ expression? }
+return_statement = { "ret" ~ WHITESPACE* ~ expression? }
+break_statement = { "break" ~ WHITESPACE* ~ expression? }
 continue_statement = { "cont" }
 ifdef_statement = { "@ifdef" ~ "(" ~ expression ~ ")" ~ block ~ ("@else" ~ block)? }
 impl_block    = { "impl" ~ type_params? ~ type ~ ("for" ~ type)? ~ "{" ~ impl_methods ~ "}" }
 impl_method   = { attributes? ~ identifier ~ "::" ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
 impl_methods  = _{ ((impl_method | const_decl) ~ ","?)* }
-block = { "{" ~ WHITESPACE* ~ statement* ~ WHITESPACE* ~ "}" }
+block = { "{" ~ WHITESPACE* ~ statement* ~ (expression ~ ";"?)? ~ WHITESPACE* ~ "}" }
 unsafe_block = { "unsafe" ~ block }
 
-for_loop     = { "for" ~ identifier ~ (":" ~ type)? ~ "in" ~ expression ~ block }
-loop         = { "loop" ~ block }
-conditional  = { "if" ~ expression ~ block ~ ("else" ~ block)? }
-inline_conditional = { "if" ~ expression ~ "then" ~ expression ~ ("else" ~ expression)? }
+for_loop     = { "for" ~ WHITESPACE* ~ identifier ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ type)? ~ WHITESPACE* ~ "in" ~ WHITESPACE* ~ expression ~ WHITESPACE* ~ block }
+loop         = { "loop" ~ WHITESPACE* ~ block }
+conditional  = { keyword_if ~ WHITESPACE* ~ expression_no_block ~ &(WHITESPACE* ~ "{") ~ WHITESPACE* ~ block ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ block)? }
+inline_conditional = { keyword_if ~ WHITESPACE* ~ expression_no_block ~ WHITESPACE* ~ "then" ~ WHITESPACE* ~ expression ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ expression)? }
 
 attribute       = { "@" ~ identifier ~ ("(" ~ (expression ~ ("," ~ expression)*)? ~ ")")? }
 attributes      = { attribute* }
@@ -116,38 +119,51 @@ db_entries = { db_entry ~ ("," ~ db_entry)* ~ ","? }
 db_entry = { identifier ~ (":" ~ identifier)? }
 
 expression    = { or }
+expression_no_block    = { or_no_block }
 
 op_or         = { "or" | "xor" | "||" }
-or            = { and ~ (op_or ~ and )* }
+or            = { and ~ (WHITESPACE* ~ op_or ~ WHITESPACE* ~ and)* }
+or_no_block   = { and_no_block ~ (WHITESPACE* ~ op_or ~ WHITESPACE* ~ and_no_block)* }
 op_and        = { "and" | "&&" }
-and           = { comparison ~ (op_and ~ comparison )* }
+and           = { comparison ~ (WHITESPACE* ~ op_and ~ WHITESPACE* ~ comparison)* }
+and_no_block  = { comparison_no_block ~ (WHITESPACE* ~ op_and ~ WHITESPACE* ~ comparison_no_block)* }
 op_cmp        = { "==" | "~=" | "<=" | ">=" | ">" | "<" }
-comparison    = { shift ~ (op_cmp ~ shift )* }
+comparison    = { shift ~ (WHITESPACE* ~ op_cmp ~ WHITESPACE* ~ shift)* }
+comparison_no_block = { shift_no_block ~ (WHITESPACE* ~ op_cmp ~ WHITESPACE* ~ shift_no_block)* }
 op_shift      = { "<<" | ">>" }
-shift         = { addition ~ (op_shift ~ addition )* }
+shift         = { addition ~ (WHITESPACE* ~ op_shift ~ WHITESPACE* ~ addition)* }
+shift_no_block = { addition_no_block ~ (WHITESPACE* ~ op_shift ~ WHITESPACE* ~ addition_no_block)* }
 op_add        = { "+" | "-" }
-addition      = { multiplication ~ (op_add ~ multiplication )* }
+addition      = { multiplication ~ (WHITESPACE* ~ op_add ~ WHITESPACE* ~ multiplication)* }
+addition_no_block = { multiplication_no_block ~ (WHITESPACE* ~ op_add ~ WHITESPACE* ~ multiplication_no_block)* }
 op_mul        = { "*" | ".*" | "/" | "./" | "\\" | "%" | ".%" }
-multiplication= { with_range ~ (op_mul ~ with_range)* }
-with_range    = { unary ~ (":" ~ unary ~ (":" ~ unary)?)? }
+multiplication= { with_range ~ (WHITESPACE* ~ op_mul ~ WHITESPACE* ~ with_range)* }
+multiplication_no_block = { with_range_no_block ~ (WHITESPACE* ~ op_mul ~ WHITESPACE* ~ with_range_no_block)* }
+with_range    = { unary ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary)?)? }
+with_range_no_block = { unary_no_block ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary_no_block ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary_no_block)?)? }
 op_unary      = { "-" | "~" | "*" | "&mut" | "&" | "!" | "some" }
 unary         = { op_unary? ~ cast_expr }
+unary_no_block = { op_unary? ~ cast_expr_no_block }
 cast_expr     = { post_fix ~ (WHITESPACE* ~ cast_tail)* }
+cast_expr_no_block = { post_fix_no_block ~ (WHITESPACE* ~ cast_tail)* }
 cast_tail     = { "as" ~ WHITESPACE+ ~ type }
 static_path_suffix = { "::" ~ identifier }
 field_suffix  = { "." ~ identifier }
 postfix_question = { "?" ~ !ASCII_ALPHANUMERIC ~ !"*" }
 postfix_bang = { "!" ~ !ASCII_ALPHANUMERIC ~ !"*" }
 post_fix      = { primary ~ (WHITESPACE* ~ (call_suffix | static_path_suffix | field_suffix | postfix_question | postfix_bang | ("[" ~ (expression ~ ","?)+ ~ "]")) )* }
+post_fix_no_block = { primary_no_block ~ (WHITESPACE* ~ (call_suffix | static_path_suffix | field_suffix | postfix_question | postfix_bang | ("[" ~ (expression ~ ","?)+ ~ "]")) )* }
 tuple_expr    = { "(" ~ expression ~ ("," ~ expression)+ ~ ","? ~ ")" }
 primary_struct = { identifier ~ type_args ~ struct_literal | identifier ~ struct_literal }
 primary       = { conditional | inline_conditional | primary_struct | unsafe_block | block | number | loop | match | function | literal | array_new | matrix | shader | tuple_expr | path_struct | static_path | identifier | "(" ~ expression ~ ")" }
+primary_no_block = { conditional | inline_conditional | unsafe_block | number | loop | match | function | literal_no_struct | array_new | matrix | shader | tuple_expr | static_path | identifier | "(" ~ expression ~ ")" }
 path_struct    = { identifier ~ ("::" ~ identifier)+ ~ struct_literal }
 static_path    = { identifier ~ type_args? ~ ("::" ~ identifier)+ }
 
 call_suffix   = { type_args ~ "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" | "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
 argument      = { (identifier ~ ":")? ~ expression }
 literal       = { integer | float | string | boolean | char | struct_literal }
+literal_no_struct = { integer | float | string | boolean | char }
 
 char          = @{ "'" ~ ( "\\" ~ ("'" | "\\" | "n" | "t" | "r" | "0" | "u" ~ "{" ~ ASCII_HEX_DIGIT+ ~ "}" ) | (!"\\" ~ !"'" ~ ANY) ) ~ "'" }
 
@@ -180,7 +196,7 @@ return_type   = { "->" ~ type}
 function_body = { expression | "{" ~ statement* ~ "}" }
 
 assignment_op = { "=" | "*=" | "/=" | "+=" | "-=" | ".*=" | "./=" | "\\=" }
-assignment    = { expression ~ assignment_op ~ expression }
+assignment    = { expression ~ WHITESPACE* ~ assignment_op ~ WHITESPACE* ~ expression }
 variable_decl = { identifier ~ (":" ~ type)? ~ ":=" ~ expression }
 
 shader        = { ("vert" | "frag" | "comp") ~ "{" ~ (const_decl | shader_field)* ~ "}" }

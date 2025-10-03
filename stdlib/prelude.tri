@@ -125,8 +125,8 @@ rem_i64 :: (a: i64, b: i64) -> i64 => 0
 # Small math helpers (replace with non-branching versions when xor, or, and, etc. added) (also generics when added)
 # Workaround for parser < bug: use negated >= or flipped comparisons
 abs_i64 :: (x: i64) -> i64 => { if ~(x >= 0) { -x } else { x } }
-min_i64 :: (a: i64, b: i64) -> i64 => { if b >= a { a } else { b } }
-max_i64 :: (a: i64, b: i64) -> i64 => { if a >= b { a } else { b } }
+min_i64 :: (a: i64, b: i64) -> i64 => { if ~(a > b) { a } else { b } }
+max_i64 :: (a: i64, b: i64) -> i64 => { if a > b { a } else { b } }
 
 # Extended math helpers
 # Workaround for parser < bug
