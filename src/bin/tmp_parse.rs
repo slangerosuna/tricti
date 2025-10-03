@@ -1,5 +1,6 @@
 use pest::Parser;
 use pest_derive::Parser;
+use std::env;
 
 #[derive(Parser)]
 #[grammar = "src/parser/grammar.pest"]
@@ -47,8 +48,27 @@ fn parse_const_decl_snippet(source: &str) {
 }
 
 fn main() {
-    let source = std::fs::read_to_string("tmp/debug_if_expr.tri").unwrap();
+    let path = env::args().nth(1).unwrap_or_else(|| "tmp/debug_if_expr.tri".to_string());
+    let source = std::fs::read_to_string(&path).expect("read source");
+    eprintln!("Parsing file: {}", path);
     parse_const_decl_snippet(&source);
+    let snippet = "if b >= a { a } else { b }";
+    match DebugParser::parse(Rule::conditional, snippet) {
+        Ok(_) => eprintln!("conditional snippet parsed successfully"),
+        Err(err) => eprintln!("conditional snippet failed: {}", err),
+    }
+    let block_snippet = "{ if b >= a { a } else { b } }";
+    match DebugParser::parse(Rule::block, block_snippet) {
+        Ok(mut pairs) => {
+            eprintln!("block snippet parsed successfully");
+            if let Some(block_pair) = pairs.next() {
+                for inner in block_pair.into_inner() {
+                    eprintln!("  block inner rule: {:?} -> {:?}", inner.as_rule(), inner.as_str());
+                }
+            }
+        }
+        Err(err) => eprintln!("block snippet failed: {}", err),
+    }
     let program = tricti::parser::parse(source);
     println!("parsed {} statements", program.statements.len());
     for (idx, stmt) in program.statements.iter().enumerate() {

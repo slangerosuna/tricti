@@ -186,11 +186,13 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
         Rule::assignment => parse_assignment(inner_pair),
         Rule::return_statement => parse_return_statement(inner_pair),
         Rule::break_statement => parse_break_statement(inner_pair),
+    Rule::continue_statement => parse_continue_statement(inner_pair),
         Rule::for_loop => parse_for_loop(inner_pair),
         Rule::use_statement => parse_use_statement(inner_pair),
         Rule::mod_decl => parse_mod_decl(inner_pair),
         Rule::impl_block => parse_impl_block(inner_pair),
         Rule::ifdef_statement => parse_ifdef_statement(inner_pair),
+        Rule::conditional => Statement::Expression(parse_if_expression(inner_pair)),
         Rule::expression => Statement::Expression(parse_expression(inner_pair)),
         _ => panic!("Unexpected statement rule: {:?}", inner_pair.as_rule()),
     }
@@ -945,10 +947,6 @@ fn parse_struct_literal_fields(pair: pest::iterators::Pair<Rule>) -> HashMap<Str
     let mut fields: HashMap<String, Expression> = HashMap::new();
     for field_pair in pair.into_inner() {
         match field_pair.as_rule() {
-            Rule::shorthand_field => {
-                let name = field_pair.into_inner().next().unwrap().as_str().to_string();
-                fields.insert(name.clone(), Expression::Identifier(name));
-            }
             Rule::full_field => {
                 let mut inner = field_pair.into_inner();
                 let name = inner.next().unwrap().as_str().to_string();
@@ -1422,6 +1420,10 @@ fn parse_break_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
         }
     }
     Statement::Break(expr)
+}
+
+fn parse_continue_statement(_pair: pest::iterators::Pair<Rule>) -> Statement {
+    Statement::Continue
 }
 
 fn parse_for_loop(pair: pest::iterators::Pair<Rule>) -> Statement {

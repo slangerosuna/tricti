@@ -15,7 +15,7 @@ pub struct SemanticContext {
     pub function_generics: HashMap<String, Vec<String>>,
     pub type_generics: HashMap<String, Vec<String>>,
     pub current_function_return_type: Option<Type>,
-    pub in_loop: bool,
+    pub loop_depth: usize,
     // Traits and impls
     pub traits: HashMap<String, TraitInfo>,
     pub trait_impls: HashMap<String, HashMap<String, ImplInfo>>, // trait -> (type -> impl)
@@ -76,6 +76,7 @@ pub enum SemanticError {
     },
     ReturnOutsideFunction,
     BreakOutsideLoop,
+    ContinueOutsideLoop,
     ArgumentCountMismatch {
         expected: usize,
         found: usize,
@@ -98,7 +99,7 @@ impl SemanticContext {
             function_generics: HashMap::new(),
             type_generics: HashMap::new(),
             current_function_return_type: None,
-            in_loop: false,
+            loop_depth: 0,
             traits: HashMap::new(),
             trait_impls: HashMap::new(),
             inherent_impls: HashMap::new(),
@@ -1204,8 +1205,14 @@ fn analyze_statement(
         }
 
         Statement::Break(_) => {
-            if !context.in_loop {
+            if context.loop_depth == 0 {
                 return Err(SemanticError::BreakOutsideLoop);
+            }
+        }
+
+        Statement::Continue => {
+            if context.loop_depth == 0 {
+                return Err(SemanticError::ContinueOutsideLoop);
             }
         }
 
@@ -1225,13 +1232,13 @@ fn analyze_statement(
 
             context.enter_scope();
             context.define_variable(variable.clone(), var_type);
-            context.in_loop = true;
+            context.loop_depth += 1;
 
             for stmt in body {
                 analyze_statement(stmt, context)?;
             }
 
-            context.in_loop = false;
+            context.loop_depth -= 1;
             context.exit_scope();
         }
 

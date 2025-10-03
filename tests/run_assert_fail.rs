@@ -10,6 +10,7 @@ fn log_if_identifiers(program: &tricti::ast::Program) {
         match expr {
             Expression::Identifier(name) if name == "if" => {
                 eprintln!("found identifier 'if' at {}", path.join(" > "));
+                eprintln!("  expr: {expr:#?}");
             }
             Expression::BinaryOp { left, right, .. } => {
                 path.push("binary_left".into());
@@ -207,6 +208,7 @@ fn log_if_identifiers(program: &tricti::ast::Program) {
             }
             Statement::Return(None)
             | Statement::Break(None)
+            | Statement::Continue
             | Statement::Use { .. }
             | Statement::ImplBlock { .. }
             | Statement::ImplMethod { .. }

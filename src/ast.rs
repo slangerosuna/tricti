@@ -28,6 +28,7 @@ pub enum Statement {
     Expression(Expression),
     Return(Option<Expression>),
     Break(Option<Expression>),
+    Continue,
     Use {
         is_public: bool,
         path: Vec<String>,
