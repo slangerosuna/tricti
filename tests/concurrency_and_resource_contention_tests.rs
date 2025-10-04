@@ -478,7 +478,7 @@ mod concurrency_resource_tests {
             function_generics: HashMap::new(),
             type_generics: HashMap::new(),
             current_function_return_type: None,
-            in_loop: false,
+            loop_depth: 0,
             traits: HashMap::new(),
             trait_impls: HashMap::new(),
             inherent_impls: HashMap::new(),

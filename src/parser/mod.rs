@@ -246,7 +246,7 @@ bar :: () -> none => {}
         PnParser::parse(Rule::program, comment_between_consts)
             .expect("failed to parse const declarations separated by comment");
 
-        let panic_only_const = r#"panic :: (msg: string) -> none => {
+        let panic_only_const = r#"panic :: (msg: string) => {
     println("Assertion failed:", msg)
     exit(1)
 }
@@ -285,6 +285,57 @@ assert :: (cond: bool, msg: string) -> none => {
             "two const declarations should not be parsed as a single statement",
         );
         PnParser::parse(Rule::program, src).expect("failed to parse assert block snippet");
+    }
+
+    #[test]
+    fn parses_optional_raw_pointer_cast() {
+        let source = "x := none as ?*raw T;";
+        PnParser::parse(Rule::program, source)
+            .expect("failed to parse optional raw pointer cast");
+    }
+
+    #[test]
+    fn parses_optional_raw_pointer_type() {
+        PnParser::parse(Rule::r#type, "?*raw T").expect("failed to parse optional raw pointer type");
+    }
+
+    #[test]
+    fn parses_optional_pointer_type() {
+        PnParser::parse(Rule::r#type, "?*T").expect("failed to parse optional owned pointer type");
+    }
+
+    #[test]
+    fn parses_optional_reference_type() {
+        PnParser::parse(Rule::r#type, "?&T").expect("failed to parse optional reference type");
+    }
+
+    #[test]
+    fn parses_optional_mutable_reference_type() {
+        PnParser::parse(Rule::r#type, "?&mut T")
+            .expect("failed to parse optional mutable reference type");
+    }
+
+    #[test]
+    fn parses_optional_scalar_type() {
+        PnParser::parse(Rule::r#type, "?i64").expect("failed to parse optional scalar type");
+    }
+
+    #[test]
+    fn parses_optional_raw_pointer_cast_tail() {
+        PnParser::parse(Rule::expression, "none as ?*raw T")
+            .expect("failed to parse expression with optional raw pointer cast");
+    }
+
+    #[test]
+    fn parses_optional_pointer_cast_tail() {
+        PnParser::parse(Rule::expression, "none as ?*T")
+            .expect("failed to parse expression with optional owned pointer cast");
+    }
+
+    #[test]
+    fn parses_optional_scalar_cast_tail() {
+        PnParser::parse(Rule::expression, "none as ?i64")
+            .expect("failed to parse expression with optional scalar cast");
     }
 }
 
@@ -1109,40 +1160,34 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
     }
 
     fn parse_pointer(p: pest::iterators::Pair<Rule>) -> Type {
+        let pointer_text = p.as_str();
         let mut it = p.into_inner();
-        // pointer = { "&mut " ~ type | "&" ~ type | "*" ~ type }
-        let first = it.next().unwrap();
-        match first.as_rule() {
-            Rule::r#type => {
-                // This happens when grammar flattens; fall back
-                Type::Pointer {
-                    is_mutable: false,
-                    pointee: Box::new(parse_type(first)),
-                }
+        let ty_pair = it.next().unwrap_or_else(|| panic!("pointer missing type"));
+        let pointee = parse_type(ty_pair);
+        let trimmed = pointer_text.trim_start();
+
+        if trimmed.starts_with("&mut") {
+            Type::Pointer {
+                is_mutable: true,
+                pointee: Box::new(pointee),
             }
-            _ => {
-                let text = first.as_str();
-                let ty_pair = it.next().unwrap_or_else(|| panic!("pointer missing type"));
-                if text.starts_with("&mut") {
-                    Type::Pointer {
-                        is_mutable: true,
-                        pointee: Box::new(parse_type(ty_pair)),
-                    }
-                } else if text.starts_with('&') {
-                    Type::Pointer {
-                        is_mutable: false,
-                        pointee: Box::new(parse_type(ty_pair)),
-                    }
-                } else if text.starts_with('*') {
-                    Type::RawPointer {
-                        pointee: Box::new(parse_type(ty_pair)),
-                    }
-                } else {
-                    Type::Pointer {
-                        is_mutable: false,
-                        pointee: Box::new(parse_type(ty_pair)),
-                    }
-                }
+        } else if trimmed.starts_with('&') {
+            Type::Pointer {
+                is_mutable: false,
+                pointee: Box::new(pointee),
+            }
+        } else if trimmed.starts_with("*raw") {
+            Type::RawPointer {
+                pointee: Box::new(pointee),
+            }
+        } else if trimmed.starts_with('*') {
+            Type::RawPointer {
+                pointee: Box::new(pointee),
+            }
+        } else {
+            Type::Pointer {
+                is_mutable: false,
+                pointee: Box::new(pointee),
             }
         }
     }
@@ -1395,21 +1440,52 @@ fn parse_if_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 }
 
 fn parse_inline_if_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
-    let mut inner = pair.into_inner();
-    let condition_pair = inner
-        .next()
-        .expect("inline if expression missing condition");
-    let then_pair = inner
-        .next()
-        .expect("inline if expression missing then branch");
-
-    let condition = parse_expression(condition_pair);
-    let then_expr = parse_expression(then_pair);
-    let else_expr = inner.next().map(parse_expression);
+    let inner_pairs: Vec<_> = pair.into_inner().collect();
+    
+    // Find the expressions by skipping keywords
+    let mut condition = None;
+    let mut then_expr = None;
+    let mut else_expr = None;
+    let mut i = 0;
+    
+    // Skip 'if' keyword
+    while i < inner_pairs.len() && inner_pairs[i].as_rule() == Rule::keyword_if {
+        i += 1;
+    }
+    
+    // Get condition
+    if i < inner_pairs.len() && 
+       inner_pairs[i].as_rule() != Rule::keyword_else &&
+       inner_pairs[i].as_str() != "then" {
+        condition = Some(parse_expression(inner_pairs[i].clone()));
+        i += 1;
+    }
+    
+    // Skip 'then' token 
+    while i < inner_pairs.len() && inner_pairs[i].as_str() == "then" {
+        i += 1;
+    }
+    
+    // Get then expression
+    if i < inner_pairs.len() && 
+       inner_pairs[i].as_rule() != Rule::keyword_else {
+        then_expr = Some(parse_expression(inner_pairs[i].clone()));
+        i += 1;
+    }
+    
+    // Skip 'else' keyword and get else expression if present
+    while i < inner_pairs.len() {
+        if inner_pairs[i].as_rule() == Rule::keyword_else {
+            i += 1;
+        } else {
+            else_expr = Some(parse_expression(inner_pairs[i].clone()));
+            break;
+        }
+    }
 
     Expression::IfExpr {
-        condition: Box::new(condition),
-        then_expr: Box::new(then_expr),
+        condition: Box::new(condition.expect("inline if missing condition")),
+        then_expr: Box::new(then_expr.expect("inline if missing then expression")),
         else_expr: else_expr.map(Box::new),
     }
 }

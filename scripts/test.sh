@@ -13,6 +13,17 @@ export RUSTFLAGS="-Awarnings"
 mkdir -p tmp
 trap 'echo "[tools] cleaning tmp artifacts"; rm -f tmp/output tests/tmp_*.o tests/tmp_*.out || true' EXIT
 
+# Array of stdlib test files
+stdlib_tests=(
+  "src/simple_test.tri"
+  "src/stdlib_tests.tri"
+  "src/test_traits_syntax.tri"
+  "src/minimal_parallel_test.tri"
+  "src/parallel_vec_test.tri"
+  "src/parallel_vec_comprehensive_test.tri"
+  "src/simple_parallel_test.tri"
+)
+
 TEST_TIMEOUT="${TEST_TIMEOUT:-30s}"
 
 # Argument parsing

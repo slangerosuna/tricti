@@ -204,14 +204,15 @@ shader_field  = { identifier ~ ":" ~ type ~ ","? }
 
 tuple_type    = { "(" ~ type ~ ("," ~ type)+ ~ ","? ~ ")" }
 matrix_type   = { "[" ~ type ~ (";" ~ (integer | identifier ~ ","?)* )? ~ "]" }
-type          = { struct | enum | trait_type | pointer | reference_type | optional | result | matrix_type | function_type | tuple_type | "none" | identifier ~ type_args? }
+type          = { optional | result | pointer | reference_type | base_type }
+base_type     = _{ struct | enum | trait_type | matrix_type | function_type | tuple_type | "none" | identifier ~ type_args? }
 reference_type = { ("&mut" | "&") ~ type }
 trait_type    = { "trait" ~ "{" ~ trait_items ~ "}" }
 trait_items   = _{ (trait_assoc | trait_method)* }
 trait_assoc   = { identifier ~ ":" ~ "type" ~ ","? }
 trait_method  = { identifier ~ ":" ~ function_type ~ ","? }
 
-pointer       = { "&mut" ~ type | "&" ~ type | "*" ~ type }
+pointer       = { "&mut" ~ WHITESPACE* ~ type | "&" ~ WHITESPACE* ~ type | "*raw" ~ WHITESPACE+ ~ type | "*" ~ WHITESPACE* ~ type }
 optional      = { "?" ~ type }
 result        = { "!" ~ type }
 

@@ -144,6 +144,85 @@ fn main() {
         Ok(_) => eprintln!("expression eq snippet parsed successfully"),
         Err(err) => eprintln!("expression eq snippet failed: {}", err),
     }
+    match DebugParser::parse(Rule::r#type, "?*T") {
+        Ok(mut pairs) => {
+            eprintln!("type '?*T' parsed successfully");
+            while let Some(pair) = pairs.next() {
+                eprintln!("  type pair: {:?} -> {:?}", pair.as_rule(), pair.as_str());
+                for inner in pair.clone().into_inner() {
+                    eprintln!("    inner: {:?} -> {:?}", inner.as_rule(), inner.as_str());
+                }
+            }
+        }
+        Err(err) => eprintln!("type '?*T' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::cast_tail, "as ?*T") {
+        Ok(_) => eprintln!("cast_tail 'as ?*T' parsed successfully"),
+        Err(err) => eprintln!("cast_tail 'as ?*T' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::cast_tail, "as i32") {
+        Ok(_) => eprintln!("cast_tail 'as i32' parsed successfully"),
+        Err(err) => eprintln!("cast_tail 'as i32' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::cast_expr, "x as i32") {
+        Ok(_) => eprintln!("cast_expr 'x as i32' parsed successfully"),
+        Err(err) => eprintln!("cast_expr 'x as i32' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::cast_expr, "none as ?*T") {
+        Ok(_) => eprintln!("cast_expr 'none as ?*T' parsed successfully"),
+        Err(err) => eprintln!("cast_expr 'none as ?*T' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::cast_expr, "none as ?*raw T") {
+        Ok(_) => eprintln!("cast_expr 'none as ?*raw T' parsed successfully"),
+        Err(err) => eprintln!("cast_expr 'none as ?*raw T' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::statement, "x := none as ?*raw T;") {
+        Ok(_) => eprintln!("statement 'x := none as ?*raw T;' parsed successfully"),
+        Err(err) => eprintln!("statement 'x := none as ?*raw T;' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::r#type, "?*raw T") {
+        Ok(mut pairs) => {
+            eprintln!("type '?*raw T' parsed successfully");
+            while let Some(pair) = pairs.next() {
+                eprintln!("  type pair: {:?} -> {:?}", pair.as_rule(), pair.as_str());
+                for inner in pair.clone().into_inner() {
+                    eprintln!("    inner: {:?} -> {:?}", inner.as_rule(), inner.as_str());
+                }
+            }
+        }
+        Err(err) => eprintln!("type '?*raw T' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::cast_tail, "as ?*raw T") {
+        Ok(_) => eprintln!("cast_tail 'as ?*raw T' parsed successfully"),
+        Err(err) => eprintln!("cast_tail 'as ?*raw T' failed: {:?}", err),
+    }
+    let pointer_input = "*raw T";
+    eprintln!(
+        "pointer input {:?} len {} bytes {:?}",
+        pointer_input,
+        pointer_input.len(),
+        pointer_input.as_bytes()
+    );
+    match DebugParser::parse(Rule::pointer, pointer_input) {
+        Ok(mut pairs) => {
+            eprintln!("pointer '*raw T' parsed successfully");
+            while let Some(pair) = pairs.next() {
+                eprintln!("  pointer pair: {:?} -> {:?}", pair.as_rule(), pair.as_str());
+                let bytes: Vec<u8> = pair.as_str().as_bytes().to_vec();
+                eprintln!("    bytes: {:?}", bytes);
+                for inner in pair.clone().into_inner() {
+                    eprintln!("    inner: {:?} -> {:?}", inner.as_rule(), inner.as_str());
+                    let inner_bytes: Vec<u8> = inner.as_str().as_bytes().to_vec();
+                    eprintln!("      bytes: {:?}", inner_bytes);
+                }
+            }
+        }
+        Err(err) => eprintln!("pointer '*raw T' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::program, "x := none as ?*raw T;") {
+        Ok(_) => eprintln!("program snippet parsed successfully"),
+        Err(err) => eprintln!("program snippet failed: {:?}", err),
+    }
     let program = tricti::parser::parse(source);
     println!("parsed {} statements", program.statements.len());
     for (idx, stmt) in program.statements.iter().enumerate() {

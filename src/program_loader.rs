@@ -31,7 +31,7 @@ pub fn parse_file_with_std(path: &Path, skip_std_flag: bool) -> std::io::Result<
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| cwd.clone());
-    let stdlib_path_buf = cwd.join("std.tri");
+    let stdlib_path_buf = cwd.join("stdlib").join("std.tri");
 
     let options = LoadOptions {
         skip_std_env: std::env::var("SKIP_STDLIB").unwrap_or_default() == "1",
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn includes_std_by_default() {
         let current_dir = std::env::current_dir().expect("cwd");
-        let stdlib_path = current_dir.join("std.tri");
+        let stdlib_path = current_dir.join("stdlib").join("std.tri");
         let options = LoadOptions {
             skip_std_env: false,
             skip_std_flag: false,
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn skips_std_with_attribute() {
         let current_dir = std::env::current_dir().expect("cwd");
-        let stdlib_path = current_dir.join("std.tri");
+        let stdlib_path = current_dir.join("stdlib").join("std.tri");
         let options = LoadOptions {
             skip_std_env: false,
             skip_std_flag: false,
