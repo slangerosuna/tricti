@@ -24,18 +24,21 @@ statement    = {
     ) ~ WHITESPACE*
 }
 simple_statement = _{
-        use_statement
-        | mod_decl
-        | variable_decl
-        | assignment
-        | impl_block
-        | for_loop
-        | return_statement
-        | break_statement
-        | continue_statement
-        | ifdef_statement
-        | conditional
-        | expression
+    use_statement
+    | mod_decl
+    | variable_decl
+    | assignment
+    | impl_block
+    | for_loop
+    | return_statement
+    | break_statement
+    | continue_statement
+    | ifdef_statement
+    | conditional
+    | enum
+    | struct
+    | trait_type
+    | expression
 }
 
 const_statement = { const_decl ~ (";" ~ WHITESPACE*)? }

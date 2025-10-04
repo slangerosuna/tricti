@@ -322,11 +322,11 @@ After cloning, run `make setup` once to initialize the project scripts.
 
 TriCTI was created to generalize multiple paradigms into a coherent language capable of:
 
-- Expressing **per-trigger DAGs** for deterministic reactive execution.
+- The language compiles the digraphs that correspond to each trigger for concurrently-scheduled reactive execution.
 - Supporting **array-language semantics** for vectorized operations and hardware acceleration.
 - Integrating relational abstractions for safe, efficient state management.
 
-While Rust macros could approximate much of this, they lack shared global state, making **static DAG analysis, query inspection, and safe concurrency heuristics** infeasible. GPGPU execution would require explicit management via libraries like **rust-gpu**, and dynamic scheduling would prevent full compile-time optimization. Implementing TriCTI as an **LLVM frontend** enables native expression of vectorized, GPU-aware operations and static scheduling analysis.
+While Rust macros could approximate much of this, they lack shared global state, making **static digraph analysis (acyclic with the exception of feedback edges), query inspection, and safe concurrency heuristics** infeasible. GPGPU execution would require explicit management via libraries like **rust-gpu**, and dynamic scheduling would prevent full compile-time optimization. Implementing TriCTI as an **LLVM frontend** enables native expression of vectorized, GPU-aware operations and static scheduling analysis.
 
 The design was inspired by practical experience with **Gnu Octave** (array and SIMD semantics), **Axum** (reactive programming), **SQL** via rusqlite (relational state management), and [a custom Bevy-inspired ECS](https://github.com/slangerosuna/klaus_of_death_again). Another key motivation was a personal interest in **learning compiler construction**.
 
