@@ -39,13 +39,6 @@ impl fmt::Display for CodegenError {
 
 impl Error for CodegenError {}
 
-fn type_name_str(ty: &Type) -> &str {
-    match ty {
-        Type::Identifier { name, .. } => name,
-        _ => panic!("Expected identifier type for impl"),
-    }
-}
-
 struct LoopContext<'ctx> {
     continue_bb: BasicBlock<'ctx>,
     break_bb: BasicBlock<'ctx>,
@@ -195,7 +188,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Call {
                 function,
-                type_args,
+                type_args: _,
                 ..
             } => {
                 if let Expression::Identifier(func_name) = &**function {
@@ -973,7 +966,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                             name: struct_name,
                             type_args: _,
                         }),
-                        Expression::StructLiteral { type_name, fields },
+                        Expression::StructLiteral {
+                            type_name: _,
+                            fields,
+                        },
                     ) = (type_annotation, expr)
                     {
                         let (st_copy, order_clone) =
@@ -1191,7 +1187,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                         name: struct_name,
                         type_args: _,
                     }),
-                    Expression::StructLiteral { type_name, fields },
+                    Expression::StructLiteral {
+                        type_name: _,
+                        fields,
+                    },
                 ) = (type_annotation, value)
                 {
                     // limit borrow scope and clone needed data
@@ -1406,7 +1405,6 @@ impl<'ctx> CodeGenerator<'ctx> {
                 body,
                 ..
             } => {
-                const KNOWN_SLICE_TYPES: [&str; 2] = ["slice_i64", "slice_bool"];
                 // Support: for i in N and for i in start:end[:step]; also iterate elements for 1D matrices (vectors)
                 // Try vector element iteration first
                 if let Expression::Matrix { rows } = iterable {
@@ -2463,6 +2461,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(loaded)
     }
 
+    #[allow(dead_code)]
     fn load_tuple_from_value(&mut self, value: BasicValueEnum<'ctx>) -> Option<StructValue<'ctx>> {
         if value.is_struct_value() {
             Some(value.into_struct_value())
@@ -2471,6 +2470,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
     }
 
+    #[allow(dead_code)]
     fn evaluate_tuple_pattern(
         &mut self,
         tuple_val: StructValue<'ctx>,
@@ -2502,6 +2502,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok((conds, bindings))
     }
 
+    #[allow(dead_code)]
     fn evaluate_tuple_pattern_inner(
         &mut self,
         tuple_val: StructValue<'ctx>,
@@ -2704,7 +2705,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         )
                     })?
                     .into_pointer_value();
-                let i64_ptr_ty = i64_ty.ptr_type(AddressSpace::default());
+                let i64_ptr_ty = self.context.ptr_type(AddressSpace::default());
                 let cast_ptr = self
                     .builder
                     .build_pointer_cast(raw_ptr, i64_ptr_ty, "array_ptr")
@@ -2969,10 +2970,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 else_expr,
             } => {
                 let mut then_branch = Vec::new();
-                then_branch.push(Statement::Expression((*then_expr.clone())));
+                then_branch.push(Statement::Expression(*then_expr.clone()));
                 let else_branch = else_expr
                     .as_ref()
-                    .map(|expr| vec![Statement::Expression((*expr.clone()))]);
+                    .map(|expr| vec![Statement::Expression(*expr.clone())]);
                 let synthetic_if = Expression::If {
                     condition: condition.clone(),
                     then_branch,
@@ -3365,7 +3366,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // Bind variables from pattern
                     if let Expression::Call {
                         function,
-                        type_args,
+                        type_args: _,
                         arguments,
                     } = &arm.pattern
                     {
@@ -3689,8 +3690,6 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::StaticPath { segments, .. } => {
                 // Static path like Vec::new or Option::Some
                 // Mangle to identifier and look up
-                let mangled_name = segments.join("_");
-
                 // Check if it's an enum variant (no call, just the tag)
                 if segments.len() >= 2 {
                     let type_name = &segments[0];
@@ -5970,7 +5969,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         };
                         let fmt = self
                             .builder
-                            .build_global_string_ptr("%lld\n", "fmti")
+                            .build_global_string_ptr("%lld", "fmti")
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                         let args: Vec<BasicValueEnum<'ctx>> =
                             vec![fmt.as_pointer_value().into(), widened];
@@ -6218,7 +6217,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 // Print as C string
                                 let fmt = self
                                     .builder
-                                    .build_global_string_ptr("%s\n", "fmts")
+                                    .build_global_string_ptr("%s", "fmts")
                                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                                 let args: Vec<BasicValueEnum<'ctx>> =
                                     vec![fmt.as_pointer_value().into(), value.into()];
@@ -6702,8 +6701,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 // If returning a struct and the body is a struct literal or a block whose last expr is a struct literal, build using known struct layout
                                 if let BasicTypeEnum::StructType(st_ret) = ret_ty {
                                     // Direct struct literal
-                                    if let Expression::StructLiteral { type_name, fields } =
-                                        expr.as_ref()
+                                    if let Expression::StructLiteral {
+                                        type_name: _,
+                                        fields,
+                                    } = expr.as_ref()
                                     {
                                         if let Some((struct_name, (st_known, order))) = self
                                             .struct_types
@@ -6739,7 +6740,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                                 let _ = self.generate_statement(s);
                                             }
                                             if let Statement::Expression(
-                                                Expression::StructLiteral { type_name, fields },
+                                                Expression::StructLiteral {
+                                                    type_name: _,
+                                                    fields,
+                                                },
                                             ) = last
                                             {
                                                 if let Some((struct_name, (st_known, order))) = self
@@ -6839,7 +6843,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             // If returning a struct and the last expr is a struct literal, build it using layout
                                             if let BasicTypeEnum::StructType(st_ret) = ret_ty {
                                                 if let Expression::StructLiteral {
-                                                    type_name,
+                                                    type_name: _,
                                                     fields,
                                                 } = expr
                                                 {

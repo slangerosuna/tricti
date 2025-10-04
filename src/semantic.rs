@@ -2368,7 +2368,7 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
                 name: found_name,
                 type_args: _,
             },
-        ) => {
+        ) if !matches!(found_name.as_str(), "i64" | "u64") => {
             if let Type::Identifier {
                 name: exp_name,
                 type_args: _,
@@ -2378,6 +2378,18 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             }
             false
         }
+        (
+            Type::Pointer { .. }
+            | Type::RawPointer { .. }
+            | Type::Reference { .. },
+            Type::Identifier { name, .. },
+        ) if matches!(name.as_str(), "i64" | "u64") => true,
+        (
+            Type::Identifier { name, .. },
+            Type::Pointer { .. }
+            | Type::RawPointer { .. }
+            | Type::Reference { .. },
+        ) if matches!(name.as_str(), "i64" | "u64") => true,
         (
             Type::Identifier {
                 name: a,
@@ -2404,6 +2416,18 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             }
             false
         }
+        (
+            Type::RawPointer { .. }
+            | Type::Pointer { .. }
+            | Type::Reference { .. },
+            Type::Identifier { name, .. },
+        )
+        | (
+            Type::Identifier { name, .. },
+            Type::RawPointer { .. }
+            | Type::Pointer { .. }
+            | Type::Reference { .. },
+        ) => matches!(name.as_str(), "i64" | "u64"),
         (Type::Tuple(exp_elems), Type::Tuple(found_elems)) => {
             if exp_elems.len() != found_elems.len() {
                 return false;
@@ -2466,42 +2490,107 @@ fn analyze_pattern(
             arguments,
         } => {
             // Destructuring: Color_Green(x)
-            if let Expression::Identifier(func_name) = &**function {
-                if func_name == "some" {
-                    if let Type::Optional { inner } = &resolved_scrutinee {
-                        if !type_args.is_empty() || arguments.len() != 1 {
-                            return Err(SemanticError::UndefinedVariable(
-                                "invalid pattern".to_string(),
-                            ));
-                        }
-                        let arg = &arguments[0];
-                        if arg.name.is_some() {
-                            return Err(SemanticError::UndefinedVariable(
-                                "named arg in pattern".to_string(),
-                            ));
-                        }
-                        match &arg.value {
-                            Expression::Identifier(var_name) => {
-                                if var_name != "_" {
-                                    context
-                                        .define_variable(var_name.clone(), inner.as_ref().clone());
-                                }
-                                return Ok(());
-                            }
-                            _ => {
+            match function.as_ref() {
+                Expression::Identifier(func_name) => {
+                    if func_name == "some" {
+                        if let Type::Optional { inner } = &resolved_scrutinee {
+                            if !type_args.is_empty() || arguments.len() != 1 {
                                 return Err(SemanticError::UndefinedVariable(
                                     "invalid pattern".to_string(),
                                 ));
                             }
+                            let arg = &arguments[0];
+                            if arg.name.is_some() {
+                                return Err(SemanticError::UndefinedVariable(
+                                    "named arg in pattern".to_string(),
+                                ));
+                            }
+                            match &arg.value {
+                                Expression::Identifier(var_name) => {
+                                    if var_name != "_" {
+                                        context
+                                            .define_variable(var_name.clone(), inner.as_ref().clone());
+                                    }
+                                    return Ok(());
+                                }
+                                _ => {
+                                    return Err(SemanticError::UndefinedVariable(
+                                        "invalid pattern".to_string(),
+                                    ));
+                                }
+                            }
                         }
                     }
+                    if let Some((_tname, vname)) = func_name.split_once('_') {
+                        if let Type::Enum { variants, .. } = &resolved_scrutinee {
+                            if let Some(payload_type_opt) = variants.get(vname) {
+                                if let Some(payload_type) = payload_type_opt {
+                                    // Bind each argument as a variable of payload_type
+                                    for arg in arguments {
+                                        if arg.name.is_some() {
+                                            return Err(SemanticError::UndefinedVariable(
+                                                "named arg in pattern".to_string(),
+                                            ));
+                                        }
+                                        match &arg.value {
+                                            Expression::Identifier(var_name) => {
+                                                if var_name == "_" {
+                                                    // Wildcard, no binding
+                                                } else {
+                                                    context
+                                                        .variables
+                                                        .insert(var_name.clone(), payload_type.clone());
+                                                }
+                                            }
+                                            _ => {
+                                                return Err(SemanticError::UndefinedVariable(
+                                                    "invalid pattern".to_string(),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    Ok(())
+                                } else {
+                                    if !arguments.is_empty() {
+                                        return Err(SemanticError::UndefinedVariable(
+                                            "invalid pattern".to_string(),
+                                        ));
+                                    }
+                                    Ok(())
+                                }
+                            } else {
+                                Err(SemanticError::UndefinedVariable(func_name.clone()))
+                            }
+                        } else {
+                            Err(SemanticError::TypeMismatch {
+                                expected: Type::None,
+                                found: scrutinee_type.clone(),
+                            })
+                        }
+                    } else {
+                        Err(SemanticError::UndefinedVariable(
+                            "invalid pattern".to_string(),
+                        ))
+                    }
                 }
-                if let Some((_tname, vname)) = func_name.split_once('_') {
+                Expression::StaticPath { segments, .. } => {
+                    if segments.len() < 2 {
+                        return Err(SemanticError::UndefinedVariable(
+                            "invalid pattern".to_string(),
+                        ));
+                    }
                     if let Type::Enum { variants, .. } = &resolved_scrutinee {
-                        if let Some(payload_type_opt) = variants.get(vname) {
-                            if let Some(payload_type) = payload_type_opt {
-                                // Bind each argument as a variable of payload_type
-                                for arg in arguments {
+                        let variant_name = &segments[1];
+                        if let Some(payload_type_opt) = variants.get(variant_name.as_str()) {
+                            match payload_type_opt {
+                                Some(payload_type) => {
+                                    if arguments.len() != 1 {
+                                        return Err(SemanticError::ArgumentCountMismatch {
+                                            expected: 1,
+                                            found: arguments.len(),
+                                        });
+                                    }
+                                    let arg = &arguments[0];
                                     if arg.name.is_some() {
                                         return Err(SemanticError::UndefinedVariable(
                                             "named arg in pattern".to_string(),
@@ -2509,31 +2598,30 @@ fn analyze_pattern(
                                     }
                                     match &arg.value {
                                         Expression::Identifier(var_name) => {
-                                            if var_name == "_" {
-                                                // Wildcard, no binding
-                                            } else {
-                                                // Bind variable
+                                            if var_name != "_" {
                                                 context
                                                     .variables
                                                     .insert(var_name.clone(), payload_type.clone());
                                             }
+                                            Ok(())
                                         }
-                                        _ => {
-                                            return Err(SemanticError::UndefinedVariable(
-                                                "invalid pattern".to_string(),
-                                            ))
-                                        }
+                                        _ => Err(SemanticError::UndefinedVariable(
+                                            "invalid pattern".to_string(),
+                                        )),
                                     }
                                 }
-                                Ok(())
-                            } else {
-                                Err(SemanticError::UndefinedVariable(format!(
-                                    "{} has no payload",
-                                    func_name
-                                )))
+                                None => {
+                                    if !arguments.is_empty() {
+                                        return Err(SemanticError::ArgumentCountMismatch {
+                                            expected: 0,
+                                            found: arguments.len(),
+                                        });
+                                    }
+                                    Ok(())
+                                }
                             }
                         } else {
-                            Err(SemanticError::UndefinedVariable(func_name.clone()))
+                            Err(SemanticError::UndefinedVariable(segments.join("::")))
                         }
                     } else {
                         Err(SemanticError::TypeMismatch {
@@ -2541,16 +2629,29 @@ fn analyze_pattern(
                             found: scrutinee_type.clone(),
                         })
                     }
-                } else {
-                    Err(SemanticError::UndefinedVariable(
-                        "invalid pattern".to_string(),
-                    ))
                 }
-            } else {
-                Err(SemanticError::UndefinedVariable(
+                _ => Err(SemanticError::UndefinedVariable(
                     "invalid pattern".to_string(),
-                ))
+                )),
             }
+        }
+        Expression::StaticPath { segments, .. } => {
+            if segments.len() < 2 {
+                return Err(SemanticError::UndefinedVariable(
+                    "invalid pattern".to_string(),
+                ));
+            }
+            if let Type::Enum { variants, .. } = &resolved_scrutinee {
+                let variant_name = &segments[1];
+                if variants.contains_key(variant_name.as_str()) {
+                    return Ok(());
+                }
+                return Err(SemanticError::UndefinedVariable(segments.join("::")));
+            }
+            Err(SemanticError::TypeMismatch {
+                expected: Type::None,
+                found: scrutinee_type.clone(),
+            })
         }
         _ => Err(SemanticError::UndefinedVariable(format!(
             "unknown pattern: {:?}",

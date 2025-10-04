@@ -10,7 +10,9 @@ fn clang_available() -> bool {
 
 fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
     let program = parser::parse(src.to_string());
+    dbg!(&program);
     let sem = semantic::analyze_program(&program).expect("semantic analysis");
+    dbg!(&sem.types);
 
     let context = Context::create();
     let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
@@ -26,7 +28,7 @@ fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
     gen.write_object_file(obj).expect("write obj");
 
     let status = Command::new("clang")
-        .args(["-o", exe, obj])
+        .args(["-no-pie", "-o", exe, obj])
         .status()
         .expect("link");
     assert!(status.success(), "link failed");

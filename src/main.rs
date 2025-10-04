@@ -6,6 +6,7 @@ pub mod codegen;
 pub mod computed_columns;
 pub mod error_propagation;
 pub mod event_loop_manager;
+#[allow(unused_variables, unused_assignments)]
 pub mod parser;
 pub mod program_loader;
 pub mod query;

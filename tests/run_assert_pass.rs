@@ -42,7 +42,7 @@ fn assert_passes() {
     gen.write_object_file(obj).expect("write obj");
 
     let status = Command::new("clang")
-        .args(["-o", exe, obj])
+        .args(["-no-pie", "-o", exe, obj])
         .status()
         .expect("link");
     assert!(status.success(), "link failed");

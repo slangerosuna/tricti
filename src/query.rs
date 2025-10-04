@@ -1210,7 +1210,7 @@ impl QueryPlan {
     }
 
     /// REAL join reordering - evaluates different join orders using statistics
-    fn apply_join_reordering(self, context: &OptimizationContext) -> Self {
+    pub fn apply_join_reordering(self, context: &OptimizationContext) -> Self {
         match self {
             QueryPlan::NestedLoopJoin {
                 left_input,

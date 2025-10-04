@@ -11,6 +11,7 @@ pub mod event_loop_manager;
 pub mod ffi_runtime;
 pub mod filesystem;
 pub mod package_manager;
+#[allow(unused_variables, unused_assignments)]
 pub mod parser;
 pub mod program_loader;
 pub mod query;
