@@ -186,24 +186,58 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 Err(CodegenError::UndefinedVariable(name.clone()))
             }
+            Expression::StaticPath { segments, .. } => {
+                if segments.len() >= 2 {
+                    let type_name = &segments[0];
+                    let variant_name = &segments[1];
+                    if let Some(Type::Enum { order, .. }) = self.semantic.types.get(type_name) {
+                        if let Some(idx) = order.iter().position(|s| s == variant_name) {
+                            return Ok(self.context.i64_type().const_int(idx as u64, false));
+                        }
+                    }
+                }
+                Err(CodegenError::UndefinedVariable(segments.join("::")))
+            }
             Expression::Call {
                 function,
                 type_args: _,
                 ..
             } => {
-                if let Expression::Identifier(func_name) = &**function {
-                    if func_name == "some" {
-                        return Ok(self.context.i64_type().const_int(1, false));
-                    }
-                    if let Some((tname, vname)) = func_name.split_once('_') {
-                        if let Some(Type::Enum { variants, order }) = self.semantic.types.get(tname)
-                        {
-                            if variants.contains_key(vname) {
-                                let idx = order.iter().position(|s| s == vname).unwrap_or(0) as u64;
-                                return Ok(self.context.i64_type().const_int(idx, false));
+                match function.as_ref() {
+                    Expression::Identifier(func_name) => {
+                        if func_name == "some" {
+                            return Ok(self.context.i64_type().const_int(1, false));
+                        }
+                        if let Some((tname, vname)) = func_name.split_once('_') {
+                            if let Some(Type::Enum { variants, order }) =
+                                self.semantic.types.get(tname)
+                            {
+                                if variants.contains_key(vname) {
+                                    let idx =
+                                        order.iter().position(|s| s == vname).unwrap_or(0) as u64;
+                                    return Ok(self.context.i64_type().const_int(idx, false));
+                                }
                             }
                         }
                     }
+                    Expression::StaticPath { segments, .. } => {
+                        if segments.len() >= 2 {
+                            let type_name = &segments[0];
+                            let variant_name = &segments[1];
+                            if let Some(Type::Enum { order, .. }) =
+                                self.semantic.types.get(type_name)
+                            {
+                                if let Some(idx) =
+                                    order.iter().position(|s| s == variant_name)
+                                {
+                                    return Ok(
+                                        self.context.i64_type().const_int(idx as u64, false),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 Err(CodegenError::CompilationError(
                     "Invalid pattern".to_string(),
@@ -308,7 +342,12 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             AstType::Struct { .. } | AstType::Trait { .. } | AstType::Function { .. } => None,
             AstType::Enum { .. } => Some(self.enum_struct.unwrap().into()),
-            AstType::Matrix { .. } => Some(self.context.ptr_type(AddressSpace::default()).into()),
+            AstType::Matrix { .. } => Some(
+                self.context
+                    .i64_type()
+                    .ptr_type(AddressSpace::default())
+                    .into(),
+            ),
             AstType::None => Some(self.context.i64_type().into()),
         }
     }
@@ -1240,6 +1279,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .build_store(alloca, value_result)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 self.variables.insert(name.clone(), (alloca, target_ty));
+                if type_annotation.is_none() {
+                    if let Some(inferred_ty) = self.semantic.get_variable_type(name) {
+                        self.local_types.insert(name.clone(), inferred_ty.clone());
+                    }
+                }
                 if let Some(ast_ty) = type_annotation {
                     self.local_types.insert(name.clone(), ast_ty.clone());
                 }
@@ -2680,11 +2724,19 @@ impl<'ctx> CodeGenerator<'ctx> {
                     });
                 }
                 let len_value = total_len.unwrap_or_else(|| i64_ty.const_zero());
-                // bytes = len * 8 (currently only i64 elements are supported)
+                let len_plus_one = self
+                    .builder
+                    .build_int_add(
+                        len_value,
+                        i64_ty.const_int(1, false),
+                        "array_len_plus_one",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                // bytes = (len + 1) * 8 (store logical length in slot 0, data follows)
                 let elem_size = i64_ty.const_int(8, false);
                 let size_bytes = self
                     .builder
-                    .build_int_mul(len_value, elem_size, "array_size_bytes")
+                    .build_int_mul(len_plus_one, elem_size, "array_size_bytes")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
                 let alloc_fn = self
@@ -2705,16 +2757,35 @@ impl<'ctx> CodeGenerator<'ctx> {
                         )
                     })?
                     .into_pointer_value();
-                let i64_ptr_ty = self.context.ptr_type(AddressSpace::default());
+                let i64_ptr_ty = self.context.i64_type().ptr_type(AddressSpace::default());
                 let cast_ptr = self
                     .builder
                     .build_pointer_cast(raw_ptr, i64_ptr_ty, "array_ptr")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                Ok(cast_ptr.into())
+
+                // Store logical length at slot 0
+                self.builder
+                    .build_store(cast_ptr, len_value)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                // Return pointer to first element (after header)
+                let one = i64_ty.const_int(1, false);
+                let data_ptr = unsafe {
+                    self.builder.build_in_bounds_gep(
+                        self.context.i64_type(),
+                        cast_ptr,
+                        &[one],
+                        "array_data_ptr",
+                    )
+                }
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                Ok(data_ptr.into())
             }
             Expression::Matrix { rows } => {
                 // Only support 1D vectors concretely; for multi-dim, return a null i64* placeholder to avoid invalid IR.
-                let i64_ptr_ty = self.context.ptr_type(AddressSpace::default());
+                let i64_ty = self.context.i64_type();
+                let i64_ptr_ty = i64_ty.ptr_type(AddressSpace::default());
                 if rows.len() > 1 {
                     // Multi-dimensional literal not yet lowered: return null pointer (printing uses placeholder path)
                     return Ok(i64_ptr_ty.const_null().into());
@@ -2722,46 +2793,65 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let empty: [Expression; 0] = [];
                 let row0: &[Expression] = rows.get(0).map(|v| v.as_slice()).unwrap_or(&empty);
                 let n = row0.len();
-                if n == 0 {
-                    // Empty vector literal -> null pointer; consumers must use tracked length 0 and avoid deref
-                    return Ok(i64_ptr_ty.const_null().into());
+                let len_val = i64_ty.const_int(n as u64, false);
+                let elems_plus_header = i64_ty.const_int((n as u64).saturating_add(1), false);
+                let elem_size = i64_ty.const_int(8, false);
+                let size_bytes = self
+                    .builder
+                    .build_int_mul(elems_plus_header, elem_size, "vec_bytes")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let alloc_fn = self
+                    .functions
+                    .get("alloc")
+                    .cloned()
+                    .ok_or_else(|| CodegenError::UndefinedFunction("alloc".to_string()))?;
+                let call = self
+                    .builder
+                    .build_call(alloc_fn, &[size_bytes.into()], "vec_alloc")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let raw_ptr = call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| {
+                        CodegenError::InvalidOperation(
+                            "alloc returned void when pointer expected".to_string(),
+                        )
+                    })?
+                    .into_pointer_value();
+                let cast_ptr = self
+                    .builder
+                    .build_pointer_cast(raw_ptr, i64_ptr_ty, "vec_ptr")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                // Store logical length at header slot 0
+                self.builder
+                    .build_store(cast_ptr, len_val)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let one = i64_ty.const_int(1, false);
+                let data_ptr = unsafe {
+                    self.builder
+                        .build_in_bounds_gep(i64_ty, cast_ptr, &[one], "vec_data")
                 }
-                let arr_ty = self.context.i64_type().array_type(n as u32);
-                let alloca = self.create_entry_block_alloca("vec", arr_ty.into())?;
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
                 // initialize each element
                 for (i, expr) in row0.iter().enumerate() {
                     let v = self.generate_expression(expr)?;
-                    let iv = self.cast_to_int(v, self.context.i64_type())?;
+                    let iv = self.cast_to_int(v, i64_ty)?;
+                    let offset = i64_ty.const_int((i + 1) as u64, false);
                     let elem_ptr = unsafe {
-                        self.builder.build_gep(
-                            arr_ty,
-                            alloca,
-                            &[
-                                self.context.i32_type().const_zero(),
-                                self.context.i32_type().const_int(i as u64, false),
-                            ],
-                            "elemp",
-                        )
+                        self.builder
+                            .build_in_bounds_gep(i64_ty, cast_ptr, &[offset], "elemp")
                     }
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     self.builder
                         .build_store(elem_ptr, iv)
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 }
-                // decay to pointer-to-first element
-                let first_elem_ptr = unsafe {
-                    self.builder.build_gep(
-                        arr_ty,
-                        alloca,
-                        &[
-                            self.context.i32_type().const_zero(),
-                            self.context.i32_type().const_zero(),
-                        ],
-                        "firstp",
-                    )
-                }
-                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                Ok(first_elem_ptr.into())
+
+                Ok(data_ptr.into())
             }
             Expression::Index { object, indices } => {
                 // Only support object being a 1D vector pointer and a single index
@@ -3370,71 +3460,91 @@ impl<'ctx> CodeGenerator<'ctx> {
                         arguments,
                     } = &arm.pattern
                     {
-                        if let Expression::Identifier(func_name) = &**function {
-                            let mut needs_payload = false;
-                            if func_name == "some" {
-                                needs_payload = true;
-                            } else if let Some((tname, vname)) = func_name.split_once('_') {
-                                if let Some(Type::Enum { variants, .. }) =
-                                    self.semantic.types.get(tname)
-                                {
-                                    if variants
-                                        .get(vname)
-                                        .map(|payload| payload.is_some())
-                                        .unwrap_or(false)
+                        let mut needs_payload = false;
+                        match function.as_ref() {
+                            Expression::Identifier(func_name) => {
+                                if func_name == "some" {
+                                    needs_payload = true;
+                                } else if let Some((tname, vname)) = func_name.split_once('_') {
+                                    if let Some(Type::Enum { variants, .. }) =
+                                        self.semantic.types.get(tname)
                                     {
-                                        needs_payload = true;
+                                        if variants
+                                            .get(vname)
+                                            .map(|payload| payload.is_some())
+                                            .unwrap_or(false)
+                                        {
+                                            needs_payload = true;
+                                        }
                                     }
                                 }
                             }
-
-                            if needs_payload {
-                                for arg in arguments.iter() {
-                                    if let Expression::Identifier(var_name) = &arg.value {
-                                        if var_name != "_" {
-                                            let payload_val: BasicValueEnum<'ctx> =
-                                                if let Some(enum_alloca) = temp_alloca {
-                                                    let payload_ptr = self
-                                                        .builder
-                                                        .build_struct_gep(
-                                                            self.enum_struct.unwrap(),
-                                                            enum_alloca,
-                                                            1,
-                                                            "payload_ptr",
-                                                        )
-                                                        .map_err(|e| {
-                                                            CodegenError::CompilationError(
-                                                                e.to_string(),
-                                                            )
-                                                        })?;
-                                                    self.builder
-                                                        .build_load(
-                                                            self.context.i64_type(),
-                                                            payload_ptr,
-                                                            "payload",
-                                                        )
-                                                        .map_err(|e| {
-                                                            CodegenError::CompilationError(
-                                                                e.to_string(),
-                                                            )
-                                                        })?
-                                                } else {
-                                                    self.context.i64_type().const_zero().into()
-                                                };
-                                            let payload_ty: BasicTypeEnum<'ctx> =
-                                                self.context.i64_type().into();
-                                            let var_alloca = self
-                                                .create_entry_block_alloca(var_name, payload_ty)?;
-                                            self.builder
-                                                .build_store(var_alloca, payload_val)
-                                                .map_err(|e| {
-                                                    CodegenError::CompilationError(e.to_string())
-                                                })?;
-                                            let previous = self
-                                                .variables
-                                                .insert(var_name.clone(), (var_alloca, payload_ty));
-                                            saved_bindings.push((var_name.clone(), previous));
+                            Expression::StaticPath { segments, .. } => {
+                                if segments.len() >= 2 {
+                                    let type_name = &segments[0];
+                                    let variant_name = &segments[1];
+                                    if let Some(Type::Enum { variants, .. }) =
+                                        self.semantic.types.get(type_name)
+                                    {
+                                        if variants
+                                            .get(variant_name)
+                                            .map(|payload| payload.is_some())
+                                            .unwrap_or(false)
+                                        {
+                                            needs_payload = true;
                                         }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+
+                        if needs_payload {
+                            for arg in arguments.iter() {
+                                if let Expression::Identifier(var_name) = &arg.value {
+                                    if var_name != "_" {
+                                        let payload_val: BasicValueEnum<'ctx> =
+                                            if let Some(enum_alloca) = temp_alloca {
+                                                let payload_ptr = self
+                                                    .builder
+                                                    .build_struct_gep(
+                                                        self.enum_struct.unwrap(),
+                                                        enum_alloca,
+                                                        1,
+                                                        "payload_ptr",
+                                                    )
+                                                    .map_err(|e| {
+                                                        CodegenError::CompilationError(
+                                                            e.to_string(),
+                                                        )
+                                                    })?;
+                                                self.builder
+                                                    .build_load(
+                                                        self.context.i64_type(),
+                                                        payload_ptr,
+                                                        "payload",
+                                                    )
+                                                    .map_err(|e| {
+                                                        CodegenError::CompilationError(
+                                                            e.to_string(),
+                                                        )
+                                                    })?
+                                            } else {
+                                                self.context.i64_type().const_zero().into()
+                                            };
+                                        let payload_ty: BasicTypeEnum<'ctx> =
+                                            self.context.i64_type().into();
+                                        let var_alloca = self
+                                            .create_entry_block_alloca(var_name, payload_ty)?;
+                                        self.builder
+                                            .build_store(var_alloca, payload_val)
+                                            .map_err(|e| {
+                                                CodegenError::CompilationError(e.to_string())
+                                            })?;
+                                        let previous = self
+                                            .variables
+                                            .insert(var_name.clone(), (var_alloca, payload_ty));
+                                        saved_bindings.push((var_name.clone(), previous));
                                     }
                                 }
                             }
@@ -4169,6 +4279,138 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Identifier(func_name) => {
                 if func_name == "println" {
                     return self.generate_println_call(arguments);
+                }
+
+                if func_name == "len" {
+                    if let Some(first) = arguments.get(0) {
+                        let is_string_arg = match &first.value {
+                            Expression::Literal(Literal::String(_)) => true,
+                            Expression::Identifier(name) => self
+                                .local_types
+                                .get(name)
+                                .or_else(|| self.semantic.get_variable_type(name))
+                                .map(|t| {
+                                    matches!(
+                                        t,
+                                        Type::Identifier { name: s, type_args: _ }
+                                            if s == "string" || s == "String" || s == "str"
+                                    )
+                                })
+                                .unwrap_or(false),
+                            _ => false,
+                        };
+
+                        if is_string_arg {
+                            let strlen_fn = self
+                                .functions
+                                .get("len")
+                                .cloned()
+                                .ok_or_else(|| {
+                                    CodegenError::UndefinedFunction("len".to_string())
+                                })?;
+                            let arg_val = self.generate_expression(&first.value)?;
+                            let call = self
+                                .builder
+                                .build_call(strlen_fn, &[arg_val.into()], "strlen_call")
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            if let Some(len_val) = call.try_as_basic_value().left() {
+                                return Ok(len_val);
+                            }
+                            return Ok(self.context.i64_type().const_zero().into());
+                        }
+
+                        if let Expression::Matrix { rows } = &first.value {
+                            if rows.len() <= 1 {
+                                let len = rows
+                                    .first()
+                                    .map(|r| r.len())
+                                    .unwrap_or(0) as u64;
+                                return Ok(self.context.i64_type().const_int(len, false).into());
+                            }
+                        }
+
+                        let arg_val = self.generate_expression(&first.value)?;
+                        if arg_val.is_pointer_value() {
+                            let ptr = arg_val.into_pointer_value();
+                            let is_null = self
+                                .builder
+                                .build_is_null(ptr, "len_is_null")
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let current_fn = self.current_function.ok_or_else(|| {
+                                CodegenError::CompilationError(
+                                    "len called outside of function".to_string(),
+                                )
+                            })?;
+                            let before_bb = self.builder.get_insert_block().unwrap();
+                            let non_null_bb =
+                                self.context.append_basic_block(current_fn, "len_non_null");
+                            let merge_bb =
+                                self.context.append_basic_block(current_fn, "len_merge");
+                            self.builder
+                                .build_conditional_branch(is_null, merge_bb, non_null_bb)
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                            // Non-null path: load length header stored immediately before data pointer
+                            self.builder.position_at_end(non_null_bb);
+                            let ptr_int = self
+                                .builder
+                                .build_ptr_to_int(
+                                    ptr,
+                                    self.context.i64_type(),
+                                    "len_ptr_int",
+                                )
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let header_offset = self.context.i64_type().const_int(8, false);
+                            let header_addr = self
+                                .builder
+                                .build_int_sub(ptr_int, header_offset, "len_header_int")
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let header_ptr = self
+                                .builder
+                                .build_int_to_ptr(
+                                    header_addr,
+                                    self.context
+                                        .i64_type()
+                                        .ptr_type(AddressSpace::default()),
+                                    "len_header_ptr",
+                                )
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let len_loaded = self
+                                .builder
+                                .build_load(self.context.i64_type(), header_ptr, "len_load")
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            self.builder
+                                .build_unconditional_branch(merge_bb)
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let non_null_end = self.builder.get_insert_block().unwrap();
+
+                            // Merge block with phi selecting 0 for null pointers
+                            self.builder.position_at_end(merge_bb);
+                            let phi = self
+                                .builder
+                                .build_phi(self.context.i64_type(), "len_phi")
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let zero_basic: BasicValueEnum<'ctx> =
+                                self.context.i64_type().const_zero().into();
+                            let len_basic: BasicValueEnum<'ctx> = len_loaded;
+                            phi.add_incoming(&[
+                                (
+                                    &zero_basic as &dyn inkwell::values::BasicValue<'ctx>,
+                                    before_bb,
+                                ),
+                                (
+                                    &len_basic as &dyn inkwell::values::BasicValue<'ctx>,
+                                    non_null_end,
+                                ),
+                            ]);
+                            return Ok(phi.as_basic_value());
+                        }
+
+                        // Fallback when not a pointer/string: return zero
+                        return Ok(self.context.i64_type().const_zero().into());
+                    }
+
+                    return Ok(self.context.i64_type().const_zero().into());
                 }
 
                 // Built-in slice helpers: slice_len(s: slice_i64) -> i64; slice_is_empty(s) -> bool
@@ -6359,12 +6601,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                 "generic",
                 "",
                 inkwell::OptimizationLevel::Default,
-                inkwell::targets::RelocMode::Default,
+                inkwell::targets::RelocMode::PIC,
                 inkwell::targets::CodeModel::Default,
             )
             .ok_or_else(|| {
                 CodegenError::CompilationError("Failed to create target machine".to_string())
             })?;
+
+    self.module.set_triple(&target_triple);
 
         target_machine
             .write_to_file(

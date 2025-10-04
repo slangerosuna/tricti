@@ -178,7 +178,9 @@ some_option_pattern = { "some" ~ pattern }
 none_option_pattern = { "none" }
 option_pattern = { some_option_pattern | none_option_pattern }
 bare_identifier_pattern = { identifier ~ !(WHITESPACE* ~ "::") }
-pattern       = { option_pattern | path_struct | static_path | literal | bare_identifier_pattern | "_" }
+pattern_argument_list = { pattern ~ ("," ~ pattern)* ~ ","? }
+enum_payload_pattern = { static_path ~ "(" ~ pattern_argument_list? ~ ")" }
+pattern       = { option_pattern | enum_payload_pattern | path_struct | static_path | literal | bare_identifier_pattern | "_" }
 
 match         = { "match" ~ expression ~ "{" ~ match_arm+ ~ ("," ~ WHITESPACE* ~ &"}")? ~ "}" }
 match_arm     = { pattern ~ "=>" ~ match_body ~ ("," ~ WHITESPACE* ~ !"}")? }
@@ -221,9 +223,9 @@ result        = { "!" ~ type }
 
 function_type = { "(" ~ type? ~ ("," ~ type)* ~ ","? ~ ")" ~ return_type ~ !"=>" }
 
-enum          = { "enum" ~ "{" ~ enum_variants ~ "}" }
-enum_variants = _{ (identifier ~ (":" ~ type)? ~ ","?)* }
+enum          = { "enum" ~ "{" ~ (enum_variant ~ ("," ~ enum_variant)*)? ~ ","? ~ "}" }
+enum_variant = { identifier ~ (":" ~ type)? }
 
-struct        = { ("struct" ~ WHITESPACE*)? ~ "{" ~ struct_fields? ~ "}" }
+struct        = { "struct" ~ WHITESPACE* ~ "{" ~ struct_fields? ~ "}" }
 struct_fields = _{ (identifier ~ ":" ~ type) ~ ("," ~ identifier ~ ":" ~ type)* ~ ","? }
 

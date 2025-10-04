@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 #[derive(Parser)]
 #[grammar = "src/parser/grammar.pest"]
-struct PnParser;
+pub struct PnParser;
 
 fn type_name_str(ty: &Type) -> String {
     match ty {
@@ -194,7 +194,11 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
         Rule::ifdef_statement => parse_ifdef_statement(inner_pair),
         Rule::conditional => Statement::Expression(parse_if_expression(inner_pair)),
         Rule::expression => Statement::Expression(parse_expression(inner_pair)),
-        _ => panic!("Unexpected statement rule: {:?}", inner_pair.as_rule()),
+        _ => panic!(
+            "Unexpected statement rule: {:?} -> {:?}",
+            inner_pair.as_rule(),
+            inner_pair.as_str()
+        ),
     }
 }
 
@@ -432,6 +436,8 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
                 };
                 let const_value = match body_pair.as_rule() {
                     Rule::r#type => ConstValue::Type(parse_type(body_pair)),
+                    Rule::r#struct => ConstValue::Type(parse_struct_type(body_pair)),
+                    Rule::r#enum => ConstValue::Type(parse_enum_type(body_pair)),
                     Rule::expression => ConstValue::Expression(parse_expression(body_pair)),
                     Rule::function => ConstValue::Expression(parse_function(body_pair)),
                     Rule::table_def => ConstValue::TableDef(parse_table_def(body_pair, &name)),
@@ -467,6 +473,12 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
             }
             Rule::db_def => {
                 value = Some(ConstValue::DatabaseDef(parse_db_def(pair)));
+            }
+            Rule::r#struct => {
+                value = Some(ConstValue::Type(parse_struct_type(pair)));
+            }
+            Rule::r#enum => {
+                value = Some(ConstValue::Type(parse_enum_type(pair)));
             }
             _ => {}
         }
@@ -940,6 +952,7 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 fn parse_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
     let inner = pair.into_inner().next().unwrap();
     match inner.as_rule() {
+        Rule::enum_payload_pattern => parse_enum_payload_pattern(inner),
         Rule::bare_identifier_pattern => {
             let ident = inner.into_inner().next().unwrap().as_str().to_string();
             Expression::Identifier(ident)
@@ -951,6 +964,43 @@ fn parse_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::option_pattern => parse_option_pattern(inner),
         _ if inner.as_str() == "_" => Expression::Identifier("_".to_string()),
         _ => panic!("Unexpected pattern rule: {:?}", inner.as_rule()),
+    }
+}
+
+fn parse_enum_payload_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let path_pair = inner
+        .next()
+        .expect("enum payload pattern missing variant path");
+    let function_expr = parse_static_path_expression(path_pair);
+
+    let mut arguments = Vec::new();
+    for argument_pair in inner {
+        match argument_pair.as_rule() {
+            Rule::pattern => {
+                arguments.push(Argument {
+                    name: None,
+                    value: parse_pattern(argument_pair),
+                });
+            }
+            Rule::pattern_argument_list => {
+                for pattern_pair in argument_pair.into_inner() {
+                    if pattern_pair.as_rule() == Rule::pattern {
+                        arguments.push(Argument {
+                            name: None,
+                            value: parse_pattern(pattern_pair),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Expression::Call {
+        function: Box::new(function_expr),
+        type_args: Vec::new(),
+        arguments,
     }
 }
 
@@ -1099,67 +1149,44 @@ fn parse_tuple_type(pair: pest::iterators::Pair<Rule>) -> Type {
     Type::Tuple(elements)
 }
 
+fn parse_struct_type(pair: pest::iterators::Pair<Rule>) -> Type {
+    let mut fields = HashMap::new();
+    let mut it = pair.into_inner();
+    while let Some(next) = it.next() {
+        if next.as_rule() == Rule::identifier {
+            let name = next.as_str().to_string();
+            let ty_pair = it.next().expect("struct field missing type");
+            let ty = parse_type(ty_pair);
+            fields.insert(name, ty);
+        }
+    }
+    Type::Struct { fields }
+}
+
+fn parse_enum_type(pair: pest::iterators::Pair<Rule>) -> Type {
+    let mut variants: HashMap<String, Option<Type>> = HashMap::new();
+    let mut order: Vec<String> = Vec::new();
+
+    for child in pair.into_inner() {
+        if child.as_rule() != Rule::enum_variant {
+            continue;
+        }
+
+        let mut inner = child.into_inner();
+        let name_pair = inner
+            .next()
+            .expect("enum_variant must start with identifier");
+        let name = name_pair.as_str().trim().to_string();
+        let payload = inner.next().map(parse_type);
+
+        variants.insert(name.clone(), payload);
+        order.push(name);
+    }
+
+    Type::Enum { variants, order }
+}
+
 fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
-    fn parse_struct(p: pest::iterators::Pair<Rule>) -> Type {
-        // Note: struct_fields is a silent rule, so we directly see identifier/type pairs here
-        let mut fields = HashMap::new();
-        let mut it = p.into_inner();
-        loop {
-            let Some(next) = it.next() else { break };
-            if next.as_rule() == Rule::identifier {
-                let name = next.as_str().to_string();
-                let ty_pair = it.next().expect("struct field missing type");
-                let ty = parse_type(ty_pair);
-                fields.insert(name, ty);
-            } else {
-                // ignore any unexpected tokens (commas are not emitted as pairs)
-            }
-        }
-        Type::Struct { fields }
-    }
-
-    fn parse_enum(p: pest::iterators::Pair<Rule>) -> Type {
-        // enum_variants is silent; we directly see identifier and optional type pairs
-        let mut variants: HashMap<String, Option<Type>> = HashMap::new();
-        let mut order: Vec<String> = Vec::new();
-        let mut it = p.into_inner().peekable();
-        // Skip "enum" and "{"
-        it.next();
-        it.next();
-        loop {
-            if let Some(cur) = it.next() {
-                if cur.as_rule() == Rule::identifier {
-                    let name = cur.as_str().to_string();
-                    let mut ty_opt: Option<Type> = None;
-                    // Check if next is ":"
-                    if let Some(next_ref) = it.peek() {
-                        if next_ref.as_str() == ":" {
-                            it.next(); // consume ":"
-                            if let Some(type_pair) = it.next() {
-                                if type_pair.as_rule() == Rule::r#type {
-                                    ty_opt = Some(parse_type(type_pair));
-                                }
-                            }
-                        }
-                    }
-                    variants.insert(name.clone(), ty_opt);
-                    order.push(name);
-                    // Skip optional ","
-                    if let Some(comma_ref) = it.peek() {
-                        if comma_ref.as_str() == "," {
-                            it.next();
-                        }
-                    }
-                } else if cur.as_str() == "}" {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-        Type::Enum { variants, order }
-    }
-
     fn parse_pointer(p: pest::iterators::Pair<Rule>) -> Type {
         let pointer_text = p.as_str();
         let mut it = p.into_inner();
@@ -1302,8 +1329,8 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
                 }
                 Type::Identifier { name, type_args }
             }
-            Rule::r#struct => parse_struct(inner_pair),
-            Rule::r#enum => parse_enum(inner_pair),
+            Rule::r#struct => parse_struct_type(inner_pair),
+            Rule::r#enum => parse_enum_type(inner_pair),
             Rule::pointer => parse_pointer(inner_pair),
             Rule::reference_type => parse_reference_type(inner_pair),
             Rule::optional => parse_optional(inner_pair),

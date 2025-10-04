@@ -31,11 +31,7 @@ div :: (x: i32, y: i32) -> !i32 => {
     x / y
 }
 
-# -------------------------------
-# Compile-time evaluation
-# -------------------------------
-@const
-PI_APPROX :: f32 := 3.14159
+PI_APPROX: f32 :: 3.14159
 
 # because of @par_const this evaluates to a section of .data in the binary
 # that is allocated to the heap at runtime
@@ -57,7 +53,21 @@ fib :: (n: i32) -> i32 => match n {
     n => fib(n - 1) + fib(n - 2),
 }
 
+# default_args(), default_args(42), or default_args(a: 5) are the allowed calls
 default_args :: (a: i32 = 17) => {}
+
+# variadic_args() or variadic_args(1, 2, 3, 4) are the allowed calls
+# you variadic args are always passed as a vec and can be empty
+# you can't have multiple variadic args in a function signature
+# and they must be the last argument
+variadic_args :: (...args: i32) => {
+    # args is of type [i32]
+}
+
+# you can even do default variadics!
+default_variadic_args :: (...args: i32 = [1 2 4 5]) => {
+    # args is of type [i32]
+}
 
 # -------------------------------
 # Structs, enums, references

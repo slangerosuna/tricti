@@ -4,45 +4,19 @@
 # Identity function
 id<T> :: (value: T) -> T => value
 
-# Basic math functions - simplified implementations
-clamp_i64 :: (value: i64, min: i64, max: i64) -> i64 => min
-
-sign_i64 :: (value: i64) -> i64 => -1
-
-is_even_i64 :: (value: i64) -> bool => true
-
-is_odd_i64 :: (value: i64) -> bool => true
-
-# Array utility functions
-array_map<T, U> :: (arr: [T], func: (T) -> U) -> [U] => {
-    # TODO: Implement when array operations are supported
-    arr
-}
-
-array_all<T> :: (arr: [T], predicate: (T) -> bool) -> bool => {
-    # TODO: Implement when array operations are supported
-    true
-}
-
-array_any<T> :: (arr: [T], predicate: (T) -> bool) -> bool => {
-    # TODO: Implement when array operations are supported
-    true
-}
-
-array_fold<T, U> :: (arr: [T], initial: U, func: (U, T) -> U) -> U => {
-    # TODO: Implement when array operations are supported
-    initial
-}
-
-array_remove_at<T> :: (arr: [T], index: i64) -> [T] => {
-    # TODO: Implement when array operations are supported
-    arr
-}
-
 # String functions
 streq :: (a: string, b: string) -> bool => {
-    # TODO: Implement when string operations are supported
-    true
+        len_a := len(a)
+        if len_a ~= len(b) {
+                ret false
+        }
+
+        for i in 0:len_a {
+                if a[i] ~= b[i] {
+                        ret false
+                }
+        }
+        true
 }
 
 # Simple error message functions for immediate use
@@ -120,7 +94,19 @@ id :: (x: i64) -> i64 => x
 
 
 # Integer remainder until `%` operator is supported
-rem_i64 :: (a: i64, b: i64) -> i64 => 0
+rem_i64 :: (a: i64, b: i64) -> i64 => {
+        if b == 0 { ret 0 }
+
+        q := a / b
+        r := a - (q * b)
+
+        if r < 0 {
+                # Ensure remainder has the same sign as the divisor
+                r = r + b
+        }
+
+        r
+}
 
 # Small math helpers (replace with non-branching versions when xor, or, and, etc. added) (also generics when added)
 # Workaround for parser < bug: use negated >= or flipped comparisons
@@ -235,19 +221,19 @@ vec_len_i64 :: (v: *Vec_i64) -> i64 => { v.len }
 
 # Generic array helpers
 
-array_append<T> :: (items: &[T], value: T) -> [T] => {
-        new_len := items.len() + 1
+array_append<T> :: (items: [T], value: T) -> [T] => {
+        new_len := len(items) + 1
         output := new [T; new_len]
-        for i in 0:items.len() {
+        for i in 0:len(items) {
                 output[i] = items[i]
         }
         output[new_len - 1] = value
         output
 }
 
-array_set_at<T> :: (items: &[T], idx: i64, value: T) -> [T] => {
-        output := new [T; items.len()]
-        for i in 0:items.len() {
+array_set_at<T> :: (items: [T], idx: i64, value: T) -> [T] => {
+        output := new [T; len(items)]
+        for i in 0:len(items) {
                 if i == idx {
                         output[i] = value
                 } else {
@@ -257,8 +243,8 @@ array_set_at<T> :: (items: &[T], idx: i64, value: T) -> [T] => {
         output
 }
 
-array_remove_at<T> :: (items: &[T], remove_idx: i64) -> [T] => {
-        len := items.len()
+array_remove_at<T> :: (items: [T], remove_idx: i64) -> [T] => {
+        len := len(items)
         if len == 0 {
                 ret new [T; 0]
         }
@@ -289,9 +275,9 @@ array_remove_at<T> :: (items: &[T], remove_idx: i64) -> [T] => {
         output
 }
 
-array_remove_where<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
+array_remove_where<T> :: (items: [T], predicate: (T) -> bool) -> [T] => {
         keep_count := 0
-        for i in 0:items.len() {
+        for i in 0:len(items) {
                 if ~predicate(items[i]) {
                         keep_count = keep_count + 1
                 }
@@ -303,7 +289,7 @@ array_remove_where<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
 
         output := new [T; keep_count]
         out_idx := 0
-        for i in 0:items.len() {
+        for i in 0:len(items) {
                 item := items[i]
                 if predicate(item) {
                         continue
@@ -314,7 +300,7 @@ array_remove_where<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
         output
 }
 
-array_filter<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
+array_filter<T> :: (items: [T], predicate: (T) -> bool) -> [T] => {
         match array_find_index(items, predicate) {
                 none => ret new [T; 0]
                 _ => {}
@@ -322,7 +308,7 @@ array_filter<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
 
         # Collect matches
         count := 0
-        for i in 0:items.len() {
+        for i in 0:len(items) {
                 if predicate(items[i]) {
                         count = count + 1
                 }
@@ -330,7 +316,7 @@ array_filter<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
 
         output := new [T; count]
         out_idx := 0
-        for i in 0:items.len() {
+        for i in 0:len(items) {
                 item := items[i]
                 if predicate(item) {
                         output[out_idx] = item
@@ -340,8 +326,8 @@ array_filter<T> :: (items: &[T], predicate: (T) -> bool) -> [T] => {
         output
 }
 
-array_find_index<T> :: (items: &[T], predicate: (T) -> bool) -> ?i64 => {
-        for i in 0:items.len() {
+array_find_index<T> :: (items: [T], predicate: (T) -> bool) -> ?i64 => {
+        for i in 0:len(items) {
                 if predicate(items[i]) {
                         ret some i
                 }
@@ -349,10 +335,10 @@ array_find_index<T> :: (items: &[T], predicate: (T) -> bool) -> ?i64 => {
         none
 }
 
-array_contains<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
+array_contains<T> :: (items: [T], predicate: (T) -> bool) -> bool => {
         result := array_find_index(items, predicate)
         # Check if result is some using a workaround
-        for i in 0:items.len() {
+        for i in 0:len(items) {
                 if predicate(items[i]) {
                         ret true
                 }
@@ -360,20 +346,19 @@ array_contains<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
         ret false
 }
 
-array_map<T> :: (items: &[T], transform: (T) -> T) -> [T] => {
-        if items.len() == 0 {
+array_map<T> :: (items: [T], transform: (T) -> T) -> [T] => {
+        if len(items) == 0 {
                 ret new [T; 0]
         }
-
-        output := new [T; items.len()]
-        for i in 0:items.len() {
+        output := new [T; len(items)]
+        for i in 0:len(items) {
                 output[i] = transform(items[i])
         }
         output
 }
 
-array_all<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
-        for i in 0:items.len() {
+array_all<T> :: (items: [T], predicate: (T) -> bool) -> bool => {
+        for i in 0:len(items) {
                 if ~predicate(items[i]) {
                         ret false
                 }
@@ -381,9 +366,9 @@ array_all<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
         true
 }
 
-array_any<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
+array_any<T> :: (items: [T], predicate: (T) -> bool) -> bool => {
         # Check if any item matches the predicate
-        for i in 0:items.len() {
+        for i in 0:len(items) {
                 if predicate(items[i]) {
                         ret true
                 }
@@ -391,9 +376,9 @@ array_any<T> :: (items: &[T], predicate: (T) -> bool) -> bool => {
         ret false
 }
 
-array_fold<T> :: (items: &[T], initial: T, reducer: (T, T) -> T) -> T => {
+array_fold<T> :: (items: [T], initial: T, reducer: (T, T) -> T) -> T => {
         acc := initial
-        for i in 0:items.len() {
+        for i in 0:len(items) {
                 acc = reducer(acc, items[i])
         }
         acc
