@@ -227,12 +227,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                             if let Some(Type::Enum { order, .. }) =
                                 self.semantic.types.get(type_name)
                             {
-                                if let Some(idx) =
-                                    order.iter().position(|s| s == variant_name)
-                                {
-                                    return Ok(
-                                        self.context.i64_type().const_int(idx as u64, false),
-                                    );
+                                if let Some(idx) = order.iter().position(|s| s == variant_name) {
+                                    return Ok(self
+                                        .context
+                                        .i64_type()
+                                        .const_int(idx as u64, false));
                                 }
                             }
                         }
@@ -2709,10 +2708,20 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                 Ok(aggregate.as_basic_value_enum())
             }
-            Expression::ArrayNew { dimensions, .. } => {
+            Expression::VecNew {
+                length,
+                fill,
+                additional_dimensions,
+                ..
+            } => {
                 let i64_ty = self.context.i64_type();
                 let mut total_len: Option<IntValue<'ctx>> = None;
-                for (idx, dim_expr) in dimensions.iter().enumerate() {
+                if let Some(len_expr) = length.as_ref() {
+                    let dim_val = self.generate_expression(len_expr.as_ref())?;
+                    let dim_i64 = self.cast_to_int(dim_val, i64_ty)?;
+                    total_len = Some(dim_i64);
+                }
+                for (idx, dim_expr) in additional_dimensions.iter().enumerate() {
                     let dim_val = self.generate_expression(dim_expr)?;
                     let dim_i64 = self.cast_to_int(dim_val, i64_ty)?;
                     total_len = Some(match total_len {
@@ -2726,11 +2735,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let len_value = total_len.unwrap_or_else(|| i64_ty.const_zero());
                 let len_plus_one = self
                     .builder
-                    .build_int_add(
-                        len_value,
-                        i64_ty.const_int(1, false),
-                        "array_len_plus_one",
-                    )
+                    .build_int_add(len_value, i64_ty.const_int(1, false), "array_len_plus_one")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 // bytes = (len + 1) * 8 (store logical length in slot 0, data follows)
                 let elem_size = i64_ty.const_int(8, false);
@@ -2779,6 +2784,72 @@ impl<'ctx> CodeGenerator<'ctx> {
                     )
                 }
                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                if let Some(fill_expr) = fill.as_ref() {
+                    let _ = self.generate_expression(fill_expr.as_ref())?;
+                }
+
+                Ok(data_ptr.into())
+            }
+            Expression::VecLiteral { elements } => {
+                let i64_ty = self.context.i64_type();
+                let i64_ptr_ty = i64_ty.ptr_type(AddressSpace::default());
+                let n = elements.len();
+                let len_val = i64_ty.const_int(n as u64, false);
+                let elems_plus_header = i64_ty.const_int((n as u64).saturating_add(1), false);
+                let elem_size = i64_ty.const_int(8, false);
+                let size_bytes = self
+                    .builder
+                    .build_int_mul(elems_plus_header, elem_size, "vec_literal_bytes")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let alloc_fn = self
+                    .functions
+                    .get("alloc")
+                    .cloned()
+                    .ok_or_else(|| CodegenError::UndefinedFunction("alloc".to_string()))?;
+                let call = self
+                    .builder
+                    .build_call(alloc_fn, &[size_bytes.into()], "vec_literal_alloc")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let raw_ptr = call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| {
+                        CodegenError::InvalidOperation(
+                            "alloc returned void when pointer expected".to_string(),
+                        )
+                    })?
+                    .into_pointer_value();
+                let cast_ptr = self
+                    .builder
+                    .build_pointer_cast(raw_ptr, i64_ptr_ty, "vec_literal_ptr")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                self.builder
+                    .build_store(cast_ptr, len_val)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let one = i64_ty.const_int(1, false);
+                let data_ptr = unsafe {
+                    self.builder
+                        .build_in_bounds_gep(i64_ty, cast_ptr, &[one], "vec_literal_data")
+                }
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                for (i, expr) in elements.iter().enumerate() {
+                    let v = self.generate_expression(expr)?;
+                    let iv = self.cast_to_int(v, i64_ty)?;
+                    let offset = i64_ty.const_int((i + 1) as u64, false);
+                    let elem_ptr = unsafe {
+                        self.builder
+                            .build_in_bounds_gep(i64_ty, cast_ptr, &[offset], "vec_lit_elem")
+                    }
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    self.builder
+                        .build_store(elem_ptr, iv)
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                }
 
                 Ok(data_ptr.into())
             }
@@ -3534,13 +3605,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             };
                                         let payload_ty: BasicTypeEnum<'ctx> =
                                             self.context.i64_type().into();
-                                        let var_alloca = self
-                                            .create_entry_block_alloca(var_name, payload_ty)?;
-                                        self.builder
-                                            .build_store(var_alloca, payload_val)
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?;
+                                        let var_alloca =
+                                            self.create_entry_block_alloca(var_name, payload_ty)?;
+                                        self.builder.build_store(var_alloca, payload_val).map_err(
+                                            |e| CodegenError::CompilationError(e.to_string()),
+                                        )?;
                                         let previous = self
                                             .variables
                                             .insert(var_name.clone(), (var_alloca, payload_ty));
@@ -4301,11 +4370,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                         };
 
                         if is_string_arg {
-                            let strlen_fn = self
-                                .functions
-                                .get("len")
-                                .cloned()
-                                .ok_or_else(|| {
+                            let strlen_fn =
+                                self.functions.get("len").cloned().ok_or_else(|| {
                                     CodegenError::UndefinedFunction("len".to_string())
                                 })?;
                             let arg_val = self.generate_expression(&first.value)?;
@@ -4321,10 +4387,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                         if let Expression::Matrix { rows } = &first.value {
                             if rows.len() <= 1 {
-                                let len = rows
-                                    .first()
-                                    .map(|r| r.len())
-                                    .unwrap_or(0) as u64;
+                                let len = rows.first().map(|r| r.len()).unwrap_or(0) as u64;
                                 return Ok(self.context.i64_type().const_int(len, false).into());
                             }
                         }
@@ -4344,8 +4407,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             let before_bb = self.builder.get_insert_block().unwrap();
                             let non_null_bb =
                                 self.context.append_basic_block(current_fn, "len_non_null");
-                            let merge_bb =
-                                self.context.append_basic_block(current_fn, "len_merge");
+                            let merge_bb = self.context.append_basic_block(current_fn, "len_merge");
                             self.builder
                                 .build_conditional_branch(is_null, merge_bb, non_null_bb)
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -4354,11 +4416,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             self.builder.position_at_end(non_null_bb);
                             let ptr_int = self
                                 .builder
-                                .build_ptr_to_int(
-                                    ptr,
-                                    self.context.i64_type(),
-                                    "len_ptr_int",
-                                )
+                                .build_ptr_to_int(ptr, self.context.i64_type(), "len_ptr_int")
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                             let header_offset = self.context.i64_type().const_int(8, false);
                             let header_addr = self
@@ -4369,9 +4427,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 .builder
                                 .build_int_to_ptr(
                                     header_addr,
-                                    self.context
-                                        .i64_type()
-                                        .ptr_type(AddressSpace::default()),
+                                    self.context.i64_type().ptr_type(AddressSpace::default()),
                                     "len_header_ptr",
                                 )
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -6608,7 +6664,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 CodegenError::CompilationError("Failed to create target machine".to_string())
             })?;
 
-    self.module.set_triple(&target_triple);
+        self.module.set_triple(&target_triple);
 
         target_machine
             .write_to_file(

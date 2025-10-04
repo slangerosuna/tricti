@@ -542,7 +542,8 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::cast_expr | Rule::cast_expr_no_block => parse_cast_expression(pair),
         Rule::post_fix | Rule::post_fix_no_block => parse_postfix_expression(pair),
         Rule::primary | Rule::primary_no_block => parse_primary_expression(pair),
-        Rule::array_new => parse_array_new(pair),
+        Rule::vec_new => parse_vec_new(pair),
+        Rule::vec_literal => parse_vec_literal(pair),
         Rule::function => parse_function(pair),
         Rule::literal | Rule::literal_no_struct => parse_literal(pair),
         Rule::identifier => Expression::Identifier(pair.as_str().to_string()),
@@ -881,22 +882,37 @@ fn parse_static_path_expression(pair: pest::iterators::Pair<Rule>) -> Expression
     }
 }
 
-fn parse_array_new(pair: pest::iterators::Pair<Rule>) -> Expression {
+fn parse_vec_new(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut inner = pair.into_inner();
     let element_type_pair = inner
         .next()
-        .unwrap_or_else(|| panic!("array new missing element type"));
+        .unwrap_or_else(|| panic!("vec new missing element type"));
     let element_type = parse_type(element_type_pair);
-    let mut dimensions: Vec<Expression> = Vec::new();
-    for dim in inner {
-        if dim.as_rule() == Rule::expression {
-            dimensions.push(parse_expression(dim));
-        }
-    }
-    Expression::ArrayNew {
+    let arguments: Vec<Expression> = inner
+        .filter(|dim| dim.as_rule() == Rule::expression)
+        .map(parse_expression)
+        .collect();
+
+    let mut iter = arguments.into_iter();
+    let length = iter.next().map(|expr| Box::new(expr));
+    let fill = iter.next().map(|expr| Box::new(expr));
+    let additional_dimensions: Vec<Expression> = iter.collect();
+
+    Expression::VecNew {
         element_type,
-        dimensions,
+        length,
+        fill,
+        additional_dimensions,
     }
+}
+
+fn parse_vec_literal(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let elements: Vec<Expression> = pair
+        .into_inner()
+        .filter(|inner| inner.as_rule() == Rule::expression)
+        .map(parse_expression)
+        .collect();
+    Expression::VecLiteral { elements }
 }
 
 fn parse_matrix(pair: pest::iterators::Pair<Rule>) -> Expression {

@@ -160,9 +160,14 @@ pub enum Expression {
         type_name: Option<String>,
         fields: HashMap<String, Expression>,
     },
-    ArrayNew {
+    VecLiteral {
+        elements: Vec<Expression>,
+    },
+    VecNew {
         element_type: Type,
-        dimensions: Vec<Expression>,
+        length: Option<Box<Expression>>,
+        fill: Option<Box<Expression>>,
+        additional_dimensions: Vec<Expression>,
     },
     Matrix {
         rows: Vec<Vec<Expression>>,

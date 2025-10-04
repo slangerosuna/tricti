@@ -168,8 +168,24 @@ impl DependencyGraph {
                     Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
                 }
             }
-            Expression::ArrayNew { dimensions, .. } => {
-                for expr in dimensions {
+            Expression::VecNew {
+                length,
+                fill,
+                additional_dimensions,
+                ..
+            } => {
+                if let Some(len_expr) = length {
+                    Self::extract_dependencies_recursive(len_expr, dependencies, column_names)?;
+                }
+                if let Some(fill_expr) = fill {
+                    Self::extract_dependencies_recursive(fill_expr, dependencies, column_names)?;
+                }
+                for expr in additional_dimensions {
+                    Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
+                }
+            }
+            Expression::VecLiteral { elements } => {
+                for expr in elements {
                     Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
                 }
             }

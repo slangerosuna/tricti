@@ -147,10 +147,32 @@ fn log_if_identifiers(program: &tricti::ast::Program) {
                     path.pop();
                 }
             }
-            Expression::ArrayNew { dimensions, .. } => {
-                for (idx, dim) in dimensions.iter().enumerate() {
-                    path.push(format!("array_dim[{idx}]"));
+            Expression::VecNew {
+                length,
+                fill,
+                additional_dimensions,
+                ..
+            } => {
+                if let Some(len_expr) = length {
+                    path.push("vec_length".into());
+                    walk_expr(len_expr, path);
+                    path.pop();
+                }
+                if let Some(fill_expr) = fill {
+                    path.push("vec_fill".into());
+                    walk_expr(fill_expr, path);
+                    path.pop();
+                }
+                for (idx, dim) in additional_dimensions.iter().enumerate() {
+                    path.push(format!("vec_dim[{idx}]"));
                     walk_expr(dim, path);
+                    path.pop();
+                }
+            }
+            Expression::VecLiteral { elements } => {
+                for (idx, elem) in elements.iter().enumerate() {
+                    path.push(format!("vec_literal[{idx}]"));
+                    walk_expr(elem, path);
                     path.pop();
                 }
             }

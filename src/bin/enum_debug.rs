@@ -24,7 +24,9 @@ fn main() {
     for stmt in program.statements {
         if let tricti::ast::Statement::ConstDecl { name, value, .. } = stmt {
             println!("const {} => {:?}", name, value);
-            if let tricti::ast::ConstValue::Type(tricti::ast::Type::Enum { variants, order }) = value {
+            if let tricti::ast::ConstValue::Type(tricti::ast::Type::Enum { variants, order }) =
+                value
+            {
                 println!("variants count {} order {:?}", variants.len(), order);
                 for key in order {
                     println!("  variant {} -> {:?}", key, variants.get(&key));

@@ -164,7 +164,7 @@ fn parse_attribute_with_identifier_arguments() {
 }
 
 #[test]
-fn parse_new_array_expression() {
+fn parse_new_vec_expression() {
     let src = r#"
         output := new [i64; 0]
     "#
@@ -174,23 +174,29 @@ fn parse_new_array_expression() {
     assert_eq!(program.statements.len(), 1);
     match &program.statements[0] {
         Statement::VariableDecl { value, .. } => match value {
-            Expression::ArrayNew {
+            Expression::VecNew {
                 element_type,
-                dimensions,
+                length,
+                additional_dimensions,
+                ..
             } => {
                 match element_type {
                     Type::Identifier { name, .. } => assert_eq!(name, "i64"),
                     other => panic!("expected identifier type, got {:?}", other),
                 }
-                assert_eq!(dimensions.len(), 1);
-                match &dimensions[0] {
+                assert!(additional_dimensions.is_empty());
+                let len_expr = length
+                    .as_ref()
+                    .map(|expr| expr.as_ref())
+                    .expect("expected length expression");
+                match len_expr {
                     Expression::Literal(Literal::Integer(int_lit)) => {
                         assert_eq!(int_lit.value, 0);
                     }
                     other => panic!("expected integer literal dimension, got {:?}", other),
                 }
             }
-            other => panic!("expected array_new expression, got {:?}", other),
+            other => panic!("expected vec_new expression, got {:?}", other),
         },
         other => panic!("expected variable declaration, got {:?}", other),
     }

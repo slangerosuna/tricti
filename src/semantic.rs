@@ -2052,12 +2052,18 @@ fn infer_expression_type(
                 type_args: vec![],
             })
         }
-        Expression::ArrayNew {
+        Expression::VecNew {
             element_type,
-            dimensions,
+            length,
+            fill,
+            additional_dimensions,
         } => {
             let mut recorded_dims: Vec<usize> = Vec::new();
-            for dim_expr in dimensions {
+
+            let validate_dimension = |dim_expr: &Expression,
+                                      recorded_dims: &mut Vec<usize>,
+                                      context: &mut SemanticContext|
+             -> Result<(), SemanticError> {
                 let dim_ty = infer_expression_type(dim_expr, context)?;
                 if !is_numeric_type(&dim_ty) {
                     return Err(SemanticError::TypeMismatch {
@@ -2073,10 +2079,75 @@ fn infer_expression_type(
                         recorded_dims.push(int_lit.value as usize);
                     }
                 }
+                Ok(())
+            };
+
+            if let Some(len_expr) = length.as_ref() {
+                validate_dimension(len_expr.as_ref(), &mut recorded_dims, context)?;
             }
+            for dim_expr in additional_dimensions.iter() {
+                validate_dimension(dim_expr, &mut recorded_dims, context)?;
+            }
+
+            if let Some(fill_expr) = fill.as_ref() {
+                let fill_ty = infer_expression_type(fill_expr.as_ref(), context)?;
+                let expected = (*element_type).clone();
+                if !types_compatible(&expected, &fill_ty) {
+                    return Err(SemanticError::TypeMismatch {
+                        expected,
+                        found: fill_ty,
+                    });
+                }
+            }
+
             Ok(Type::Matrix {
                 element_type: Box::new((*element_type).clone()),
                 dimensions: recorded_dims,
+            })
+        }
+        Expression::VecLiteral { elements } => {
+            let mut has_float = false;
+            let mut has_bool = false;
+            let mut has_non_bool = false;
+
+            for e in elements {
+                if let Ok(t) = infer_expression_type(e, context) {
+                    match t {
+                        Type::Identifier { name, type_args: _ }
+                            if name == "f32" || name == "f64" =>
+                        {
+                            has_float = true;
+                        }
+                        Type::Identifier { name, type_args: _ } if name == "bool" => {
+                            has_bool = true;
+                        }
+                        _ => {
+                            has_non_bool = true;
+                        }
+                    }
+                }
+            }
+
+            let elem = if has_float {
+                Type::Identifier {
+                    name: "f64".to_string(),
+                    type_args: vec![],
+                }
+            } else if has_bool && !has_non_bool {
+                Type::Identifier {
+                    name: "bool".to_string(),
+                    type_args: vec![],
+                }
+            } else {
+                Type::Identifier {
+                    name: "i64".to_string(),
+                    type_args: vec![],
+                }
+            };
+
+            Ok(Type::Matrix {
+                element_type: Box::new(elem),
+                dimensions: vec![elements.len()],
             })
         }
         Expression::Matrix { rows } => {
@@ -2187,7 +2258,6 @@ fn infer_expression_type(
         }
     }
 }
-
 fn peel_to_identifier_name(t: &Type) -> Option<String> {
     let mut cur = t;
     loop {
@@ -2379,16 +2449,12 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             false
         }
         (
-            Type::Pointer { .. }
-            | Type::RawPointer { .. }
-            | Type::Reference { .. },
+            Type::Pointer { .. } | Type::RawPointer { .. } | Type::Reference { .. },
             Type::Identifier { name, .. },
         ) if matches!(name.as_str(), "i64" | "u64") => true,
         (
             Type::Identifier { name, .. },
-            Type::Pointer { .. }
-            | Type::RawPointer { .. }
-            | Type::Reference { .. },
+            Type::Pointer { .. } | Type::RawPointer { .. } | Type::Reference { .. },
         ) if matches!(name.as_str(), "i64" | "u64") => true,
         (
             Type::Identifier {
@@ -2417,16 +2483,12 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             false
         }
         (
-            Type::RawPointer { .. }
-            | Type::Pointer { .. }
-            | Type::Reference { .. },
+            Type::RawPointer { .. } | Type::Pointer { .. } | Type::Reference { .. },
             Type::Identifier { name, .. },
         )
         | (
             Type::Identifier { name, .. },
-            Type::RawPointer { .. }
-            | Type::Pointer { .. }
-            | Type::Reference { .. },
+            Type::RawPointer { .. } | Type::Pointer { .. } | Type::Reference { .. },
         ) => matches!(name.as_str(), "i64" | "u64"),
         (Type::Tuple(exp_elems), Type::Tuple(found_elems)) => {
             if exp_elems.len() != found_elems.len() {
@@ -2508,8 +2570,10 @@ fn analyze_pattern(
                             match &arg.value {
                                 Expression::Identifier(var_name) => {
                                     if var_name != "_" {
-                                        context
-                                            .define_variable(var_name.clone(), inner.as_ref().clone());
+                                        context.define_variable(
+                                            var_name.clone(),
+                                            inner.as_ref().clone(),
+                                        );
                                     }
                                     return Ok(());
                                 }
@@ -2537,9 +2601,10 @@ fn analyze_pattern(
                                                 if var_name == "_" {
                                                     // Wildcard, no binding
                                                 } else {
-                                                    context
-                                                        .variables
-                                                        .insert(var_name.clone(), payload_type.clone());
+                                                    context.variables.insert(
+                                                        var_name.clone(),
+                                                        payload_type.clone(),
+                                                    );
                                                 }
                                             }
                                             _ => {
@@ -2904,8 +2969,24 @@ fn extract_column_references_recursive(
                 extract_column_references_recursive(expr, references, column_names);
             }
         }
-        Expression::ArrayNew { dimensions, .. } => {
-            for expr in dimensions {
+        Expression::VecNew {
+            length,
+            fill,
+            additional_dimensions,
+            ..
+        } => {
+            if let Some(len_expr) = length {
+                extract_column_references_recursive(len_expr, references, column_names);
+            }
+            if let Some(fill_expr) = fill {
+                extract_column_references_recursive(fill_expr, references, column_names);
+            }
+            for expr in additional_dimensions {
+                extract_column_references_recursive(expr, references, column_names);
+            }
+        }
+        Expression::VecLiteral { elements } => {
+            for expr in elements {
                 extract_column_references_recursive(expr, references, column_names);
             }
         }
