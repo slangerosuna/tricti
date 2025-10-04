@@ -18,22 +18,12 @@ fn parse_const_decl_snippet(source: &str) {
             Err(e) => {
                 println!("chunk {}: const_decl parse failed: {}", idx, e);
                 match DebugParser::parse(Rule::statement, trimmed) {
-                    Ok(_) => println!(
-                        "  statement(parse) succeeded without leading newline"
-                    ),
-                    Err(se) => println!(
-                        "  statement parse failed (no leading newline): {}",
-                        se
-                    ),
+                    Ok(_) => println!("  statement(parse) succeeded without leading newline"),
+                    Err(se) => println!("  statement parse failed (no leading newline): {}", se),
                 }
                 match DebugParser::parse(Rule::statement, &with_leading_newline) {
-                    Ok(_) => println!(
-                        "  statement parse succeeded with leading newline"
-                    ),
-                    Err(se) => println!(
-                        "  statement parse failed with leading newline: {}",
-                        se
-                    ),
+                    Ok(_) => println!("  statement parse succeeded with leading newline"),
+                    Err(se) => println!("  statement parse failed with leading newline: {}", se),
                 }
             }
         }
@@ -48,7 +38,9 @@ fn parse_const_decl_snippet(source: &str) {
 }
 
 fn main() {
-    let path = env::args().nth(1).unwrap_or_else(|| "tmp/debug_if_expr.tri".to_string());
+    let path = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "tmp/debug_if_expr.tri".to_string());
     let source = std::fs::read_to_string(&path).expect("read source");
     eprintln!("Parsing file: {}", path);
     parse_const_decl_snippet(&source);
@@ -71,7 +63,11 @@ fn main() {
         Ok(mut pairs) => {
             eprintln!("comparison snippet parsed successfully");
             if let Some(pair) = pairs.next() {
-                eprintln!("  comparison top rule: {:?} -> {:?}", pair.as_rule(), pair.as_str());
+                eprintln!(
+                    "  comparison top rule: {:?} -> {:?}",
+                    pair.as_rule(),
+                    pair.as_str()
+                );
                 for inner in pair.clone().into_inner() {
                     eprintln!("    inner: {:?} -> {:?}", inner.as_rule(), inner.as_str());
                 }
@@ -84,7 +80,11 @@ fn main() {
         Ok(mut pairs) => {
             eprintln!("simple comparison snippet parsed successfully");
             if let Some(pair) = pairs.next() {
-                eprintln!("  simple comparison top rule: {:?} -> {:?}", pair.as_rule(), pair.as_str());
+                eprintln!(
+                    "  simple comparison top rule: {:?} -> {:?}",
+                    pair.as_rule(),
+                    pair.as_str()
+                );
                 for inner in pair.clone().into_inner() {
                     eprintln!("    inner: {:?} -> {:?}", inner.as_rule(), inner.as_str());
                 }
@@ -128,7 +128,11 @@ fn main() {
             eprintln!("block snippet parsed successfully");
             if let Some(block_pair) = pairs.next() {
                 for inner in block_pair.into_inner() {
-                    eprintln!("  block inner rule: {:?} -> {:?}", inner.as_rule(), inner.as_str());
+                    eprintln!(
+                        "  block inner rule: {:?} -> {:?}",
+                        inner.as_rule(),
+                        inner.as_str()
+                    );
                 }
             }
         }
@@ -207,7 +211,11 @@ fn main() {
         Ok(mut pairs) => {
             eprintln!("pointer '*raw T' parsed successfully");
             while let Some(pair) = pairs.next() {
-                eprintln!("  pointer pair: {:?} -> {:?}", pair.as_rule(), pair.as_str());
+                eprintln!(
+                    "  pointer pair: {:?} -> {:?}",
+                    pair.as_rule(),
+                    pair.as_str()
+                );
                 let bytes: Vec<u8> = pair.as_str().as_bytes().to_vec();
                 eprintln!("    bytes: {:?}", bytes);
                 for inner in pair.clone().into_inner() {

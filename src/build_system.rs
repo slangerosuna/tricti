@@ -2,7 +2,6 @@
 use crate::filesystem::FileSystem;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
 #[derive(Debug, Clone)]
 pub struct BuildTarget {
@@ -71,7 +70,7 @@ impl BuildSystem {
 
     /// Build all targets
     pub fn build_all(&self) -> Result<(), BuildError> {
-        let mut build_order = self.resolve_dependencies()?;
+        let build_order = self.resolve_dependencies()?;
 
         for target_name in build_order {
             self.build_target(&target_name)?;
@@ -81,7 +80,7 @@ impl BuildSystem {
     }
 
     /// Compile a single file
-    fn compile_file(&self, source_file: &Path, target: &BuildTarget) -> Result<(), BuildError> {
+    fn compile_file(&self, source_file: &Path, _target: &BuildTarget) -> Result<(), BuildError> {
         let source_content = FileSystem::read_file(source_file.to_str().unwrap())
             .map_err(|e| BuildError::IoError(e))?;
 

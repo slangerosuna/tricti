@@ -1,7 +1,7 @@
-use crate::ast::{Expression, ResourceAccess, Statement, SystemDef, SystemParameter, Type};
+use crate::ast::{Expression, ResourceAccess, Statement, SystemDef, SystemParameter};
 use crate::async_runtime::{AsyncExecutionError, SystemExecutionResult, TaskId, YieldPoint};
 use crate::semantic::SemanticContext;
-use crate::table_runtime::{ColumnValue, RowId, TableError, TableRuntime};
+use crate::table_runtime::{ColumnValue, RowId, TableRuntime};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -130,7 +130,7 @@ impl SystemStateMachineBuilder {
         parameters: HashMap<String, ColumnValue>,
     ) -> Result<SystemStateMachine, AsyncExecutionError> {
         let mut states = Vec::new();
-        let mut current_state = 0;
+        let current_state = 0;
 
         // Extract resources that need to be acquired
         let resources_to_acquire = self.extract_required_resources(system_def);
@@ -225,11 +225,7 @@ impl SystemStateMachineBuilder {
                         *state_index += 1;
                         Ok(StateLoweringResult::YieldPoint(state))
                     }
-                    Expression::Call {
-                        function,
-                        arguments,
-                        ..
-                    } => {
+                    Expression::Call { function, .. } => {
                         // Check if this is an async function call
                         if let Expression::Identifier(func_name) = function.as_ref() {
                             if self.is_async_function(func_name) {
@@ -593,6 +589,7 @@ impl SystemStateMachineExecutor {
                 where_clause,
             } => {
                 // Simplified query execution - return count for now
+                let _ = (columns, where_clause);
                 let all_rows = table.scan_all();
                 Ok(ColumnValue::U64(all_rows.len() as u64))
             }

@@ -445,6 +445,18 @@ impl AsyncSystemScheduler {
             .or_insert_with(Vec::new)
             .push(task_id);
 
+        if let Some(tasks) = graph.system_tasks.get(&request.system_def.name) {
+            if tasks.len() >= 2 {
+                if let Some(&previous_task) = tasks.iter().rev().nth(1) {
+                    graph.ordering_constraints.push(OrderingConstraint {
+                        before_task: previous_task,
+                        after_task: task_id,
+                        constraint_type: ConstraintType::CausalDependency,
+                    });
+                }
+            }
+        }
+
         // Initialize dependencies
         graph.task_dependencies.insert(task_id, HashSet::new());
 

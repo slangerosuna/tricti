@@ -116,7 +116,10 @@ impl PackageManager {
     }
 
     fn download_package(&self, name: &str, version: &str) -> Result<Package, PackageError> {
-        println!("Downloading {}@{} from registry", name, version);
+        println!(
+            "Downloading {}@{} from registry {}",
+            name, version, self.registry_url
+        );
 
         // Simulate downloading from registry
         // In a real implementation, this would make HTTP requests

@@ -30,7 +30,7 @@ pub struct ErrorHandlingConfig {
 }
 
 /// Error handler definition (simplified for compilation)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ErrorHandler {
     pub handler_id: String,
     pub error_pattern: ErrorPattern,
@@ -263,9 +263,36 @@ impl ErrorPropagationManager {
     }
 
     /// Find error handlers matching the error
-    async fn find_matching_handlers(&self, _error: &AsyncExecutionError) -> Vec<ErrorHandler> {
-        // Simplified for compilation - would return actual matching handlers
-        Vec::new()
+    async fn find_matching_handlers(&self, error: &AsyncExecutionError) -> Vec<ErrorHandler> {
+        let handlers = self.error_handlers.read().unwrap();
+        let error_type = self.error_type_name(error);
+        let mut matching = Vec::new();
+
+        if let Some(handler_list) = handlers.get(&error_type) {
+            matching.extend(
+                handler_list
+                    .iter()
+                    .filter(|handler| self.matches_error_pattern(&handler.error_pattern, error))
+                    .cloned(),
+            );
+        }
+
+        for (pattern_key, handler_list) in handlers.iter() {
+            if pattern_key == &error_type {
+                continue;
+            }
+
+            matching.extend(
+                handler_list
+                    .iter()
+                    .filter(|handler| self.matches_error_pattern(&handler.error_pattern, error))
+                    .cloned(),
+            );
+        }
+
+        matching.sort_by(|a, b| b.priority.cmp(&a.priority));
+        matching.dedup_by(|a, b| a.handler_id == b.handler_id);
+        matching
     }
 
     /// Check if error matches a pattern

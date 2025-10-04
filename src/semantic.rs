@@ -1,6 +1,5 @@
 use crate::ast::*;
 use std::collections::HashMap;
-use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct SemanticContext {
@@ -1438,13 +1437,6 @@ fn analyze_statement(
     Ok(())
 }
 
-fn type_name_str(ty: &Type) -> &str {
-    match ty {
-        Type::Identifier { name, .. } => name,
-        _ => panic!("Expected identifier type for impl"),
-    }
-}
-
 fn mangle_method_name(trait_name: Option<&str>, type_name: &str, method_name: &str) -> String {
     match trait_name {
         Some(tn) => format!("{}_{}_{}", tn, type_name, method_name),
@@ -2167,7 +2159,7 @@ fn infer_expression_type(
             // Check if it's an enum variant
             if segments.len() >= 2 {
                 let type_name = &segments[0];
-                let variant_name = &segments[1];
+                let _variant_name = &segments[1];
                 if let Some(ty) = context.types.get(type_name).cloned() {
                     if let Type::Enum { .. } = ty {
                         // It's an enum variant - return i64 for tag
@@ -2803,7 +2795,10 @@ fn extract_column_references_recursive(
                 extract_column_references_recursive(&arm.body, references, column_names);
             }
         }
-        Expression::StructLiteral { type_name, fields } => {
+        Expression::StructLiteral {
+            type_name: _,
+            fields,
+        } => {
             for expr in fields.values() {
                 extract_column_references_recursive(expr, references, column_names);
             }

@@ -1,14 +1,14 @@
-use crate::ast::{ResourceAccess, SystemDef, SystemParameter};
+use crate::ast::SystemDef;
 use crate::async_runtime::{
-    AsyncExecutionError, AsyncSystemRuntime, RuntimeConfig, SystemExecutionResult,
-    SystemExecutionState, SystemFuture, TaskId, TaskPriority, YieldPoint,
+    AsyncExecutionError, RuntimeConfig, SystemExecutionResult, SystemFuture, TaskId, TaskPriority,
+    YieldPoint,
 };
 use crate::async_scheduler_integration::{AsyncSystemScheduler, SystemExecutionRequest};
 use crate::semantic::SemanticContext;
 use crate::system_executor::{ExecutionStepResult, SystemStateMachine, SystemStateMachineExecutor};
 use crate::table_runtime::{ColumnValue, TableRuntime};
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
+use std::collections::{BinaryHeap, HashMap, VecDeque};
 use std::sync::{mpsc, Arc, Condvar, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -254,6 +254,9 @@ impl EventLoopManager {
             }
             state.is_running = true;
         }
+
+        let worker_count = self.executor_pool.worker_count();
+        debug_assert!(worker_count > 0);
 
         // Start the main event loop
         self.run_event_loop()
@@ -535,6 +538,7 @@ impl EventLoopManager {
     ) -> Result<(), AsyncExecutionError> {
         // This would integrate with the state machine builder and executor
         // For now, just update statistics
+        let _ = (&task_id, system_def, parameters, priority);
         {
             let mut state = self.state.write().unwrap();
             state.active_systems += 1;
@@ -549,6 +553,7 @@ impl EventLoopManager {
         task_id: TaskId,
         result: Result<SystemExecutionResult, AsyncExecutionError>,
     ) -> Result<(), AsyncExecutionError> {
+        let _ = (&task_id, &result);
         {
             let mut state = self.state.write().unwrap();
             state.active_systems = state.active_systems.saturating_sub(1);
@@ -572,7 +577,7 @@ impl EventLoopManager {
                 let resume_event = SystemEvent::SystemResume { task_id };
                 self.schedule_timer(task_id, duration, resume_event)?;
             }
-            YieldPoint::AwaitingResource { resource_name, .. } => {
+            YieldPoint::AwaitingResource { .. } => {
                 // Add to resource wait queue
                 // This would be handled by the resource tracker
             }
@@ -588,6 +593,7 @@ impl EventLoopManager {
     fn handle_system_resume(&self, task_id: TaskId) -> Result<(), AsyncExecutionError> {
         // Resume system execution
         // This would involve re-scheduling the system for execution
+        let _ = task_id;
         Ok(())
     }
 
@@ -598,6 +604,7 @@ impl EventLoopManager {
         available_for: Vec<TaskId>,
     ) -> Result<(), AsyncExecutionError> {
         // Resume systems waiting for this resource
+        let _ = &resource_name;
         for task_id in available_for {
             self.enqueue_event(SystemEvent::SystemResume { task_id }, TaskPriority::Normal)?;
         }
@@ -612,6 +619,7 @@ impl EventLoopManager {
         task_id: TaskId,
     ) -> Result<(), AsyncExecutionError> {
         // Timer has expired, this is usually handled by the specific timer event
+        let _ = (timer_id, task_id);
         Ok(())
     }
 
@@ -621,6 +629,7 @@ impl EventLoopManager {
         task_id: TaskId,
         reason: String,
     ) -> Result<(), AsyncExecutionError> {
+        let _ = (task_id, reason);
         {
             let mut state = self.state.write().unwrap();
             state.active_systems = state.active_systems.saturating_sub(1);
@@ -752,7 +761,6 @@ impl ExecutorPool {
         let work_receiver = Arc::new(Mutex::new(work_receiver));
 
         let mut workers = Vec::with_capacity(config.max_executor_threads);
-
         for id in 0..config.max_executor_threads {
             workers.push(Worker::new(id, Arc::clone(&work_receiver)));
         }
@@ -772,6 +780,11 @@ impl ExecutorPool {
                 system: "executor_pool".to_string(),
                 message: "Failed to submit work to executor pool".to_string(),
             })
+    }
+
+    pub fn worker_count(&self) -> usize {
+        debug_assert!(Arc::strong_count(&self.work_receiver) >= 1);
+        self.workers.len()
     }
 }
 
@@ -811,6 +824,7 @@ impl Worker {
                 mut executor,
             } => {
                 // Execute one step of the state machine
+                let _ = &task_id;
                 let result = executor.execute_step(&mut state_machine)?;
 
                 match result {
@@ -819,14 +833,17 @@ impl Worker {
                     }
                     ExecutionStepResult::Yield(yield_point) => {
                         // Handle yield point
+                        let _ = yield_point;
                     }
-                    ExecutionStepResult::Completed(_result) => {
+                    ExecutionStepResult::Completed(result) => {
                         // System completed
+                        let _ = result;
                     }
                 }
             }
             WorkItem::ProcessEvent { event } => {
                 // Process event
+                let _ = event;
             }
             WorkItem::Shutdown => {
                 // Shutdown worker
@@ -834,6 +851,23 @@ impl Worker {
         }
 
         Ok(())
+    }
+}
+
+impl Drop for ExecutorPool {
+    fn drop(&mut self) {
+        for _ in 0..self.config.max_executor_threads {
+            let _ = self.work_sender.send(WorkItem::Shutdown);
+        }
+
+        for worker in &mut self.workers {
+            let worker_id = worker.id;
+            if let Some(handle) = worker.thread.take() {
+                if handle.join().is_err() {
+                    eprintln!("Worker {} did not shut down cleanly", worker_id);
+                }
+            }
+        }
     }
 }
 

@@ -115,6 +115,7 @@ impl ColumnData {
         }
     }
 
+    #[allow(dead_code)]
     fn push_value(&mut self, value: ColumnValue) -> Result<(), TableError> {
         match (self, value) {
             (ColumnData::U64(vec), ColumnValue::U64(v)) => vec.push(Some(v)),
@@ -1187,7 +1188,7 @@ impl TableRuntime {
             }
             PredicateResult::FullScan => {
                 // Fall back to original filtered scan
-                Ok(self.scan_filtered(|row| {
+                Ok(self.scan_filtered(|_row| {
                     // This should be replaced with proper predicate evaluation
                     true // Placeholder
                 }))

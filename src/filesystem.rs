@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self};
 use std::path::{Path, PathBuf};
 
 pub struct FileSystem;

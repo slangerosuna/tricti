@@ -755,7 +755,7 @@ impl AsyncSystemRuntime {
                         });
                     }
                 }
-                SystemParameter::Resource { name, .. } => {
+                SystemParameter::Resource { .. } => {
                     // Resource validation is handled by the SystemStateMachineExecutor
                     // during execution, not during submission. Resources are provided
                     // through table_runtimes, not parameters.

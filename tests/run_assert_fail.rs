@@ -2,8 +2,8 @@ use inkwell::context::Context;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tricti::{codegen, parser, semantic};
 use tricti::ast::{Expression, Statement};
+use tricti::{codegen, parser, semantic};
 
 fn log_if_identifiers(program: &tricti::ast::Program) {
     fn walk_expr(expr: &Expression, path: &mut Vec<String>) {
@@ -30,7 +30,11 @@ fn log_if_identifiers(program: &tricti::ast::Program) {
                 walk_expr(value, path);
                 path.pop();
             }
-            Expression::Call { function, arguments, .. } => {
+            Expression::Call {
+                function,
+                arguments,
+                ..
+            } => {
                 path.push("call_fn".into());
                 walk_expr(function, path);
                 path.pop();
@@ -55,7 +59,11 @@ fn log_if_identifiers(program: &tricti::ast::Program) {
                     path.pop();
                 }
             }
-            Expression::If { condition, then_branch, else_branch } => {
+            Expression::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 path.push("if_cond".into());
                 walk_expr(condition, path);
                 path.pop();
@@ -72,7 +80,11 @@ fn log_if_identifiers(program: &tricti::ast::Program) {
                     }
                 }
             }
-            Expression::IfExpr { condition, then_expr, else_expr } => {
+            Expression::IfExpr {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
                 path.push("ifexpr_cond".into());
                 walk_expr(condition, path);
                 path.pop();
@@ -164,8 +176,7 @@ fn log_if_identifiers(program: &tricti::ast::Program) {
                     path.pop();
                 }
             }
-            Expression::Question(inner)
-            | Expression::Unwrap(inner) => {
+            Expression::Question(inner) | Expression::Unwrap(inner) => {
                 path.push("question_inner".into());
                 walk_expr(inner, path);
                 path.pop();

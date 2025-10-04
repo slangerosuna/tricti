@@ -1,8 +1,7 @@
-use crate::ast::{ResourceAccess, SystemDef};
+use crate::ast::ResourceAccess;
 use crate::async_runtime::{AsyncExecutionError, TaskId};
-use crate::scheduler::SchedulerError;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 /// Resource lifecycle manager for async context with borrow safety
@@ -95,6 +94,7 @@ pub enum AcquisitionResult {
     WaitRequired {
         estimated_wait_time: Duration,
         blocking_tasks: Vec<TaskId>,
+        reason: String,
     },
     Denied {
         reason: String,
@@ -329,10 +329,17 @@ impl ResourceLifecycleManager {
             Ok(AcquisitionResult::WaitRequired {
                 estimated_wait_time: remaining_time,
                 blocking_tasks: vec![existing_lease.task_id],
+                reason: format!(
+                    "Resource {} is currently locked with {:?} access (requested {:?})",
+                    resource_name, existing_lease.access_type, access_type
+                ),
             })
         } else {
             Ok(AcquisitionResult::Denied {
-                reason: "Resource unavailable".to_string(),
+                reason: format!(
+                    "Resource {} unavailable for {:?} access",
+                    resource_name, access_type
+                ),
                 retry_after: Some(Duration::from_secs(1)),
             })
         }
@@ -392,7 +399,7 @@ impl ResourceLifecycleManager {
     async fn update_resource_dependencies(
         &self,
         resource_name: &str,
-        task_id: TaskId,
+        _task_id: TaskId,
     ) -> Result<(), AsyncExecutionError> {
         let mut graph = self.resource_graph.write().unwrap();
 
@@ -425,6 +432,16 @@ impl ResourceLifecycleManager {
         // Remove from dependents
         for dependents in graph.dependents.values_mut() {
             dependents.remove(resource_name);
+        }
+
+        drop(graph);
+
+        {
+            let mut pools = self.resource_pools.write().unwrap();
+            for pool in pools.values_mut() {
+                pool.allocated_resources
+                    .retain(|_, holder| *holder != task_id);
+            }
         }
 
         Ok(())
@@ -463,10 +480,11 @@ impl ResourceLifecycleManager {
     pub fn get_resource_stats(&self) -> ResourceStats {
         let leases = self.active_leases.read().unwrap();
         let graph = self.resource_graph.read().unwrap();
+        let pools = self.resource_pools.read().unwrap();
 
         ResourceStats {
             active_leases: leases.len(),
-            total_resources: graph.dependencies.len(),
+            total_resources: graph.dependencies.len() + pools.len(),
             average_lease_duration: self.calculate_average_lease_duration(&leases),
             resource_contention_count: self.calculate_contention_count(&leases),
         }
@@ -493,6 +511,7 @@ impl ResourceLifecycleManager {
     fn calculate_contention_count(&self, leases: &HashMap<String, ResourceLease>) -> usize {
         // This would count resources with multiple waiting tasks
         // Simplified for now
+        let _ = leases;
         0
     }
 }
@@ -514,9 +533,12 @@ impl ResourceDependencyGraph {
             .insert(dependency.clone());
 
         self.dependents
-            .entry(dependency)
+            .entry(dependency.clone())
             .or_insert_with(HashSet::new)
-            .insert(resource);
+            .insert(resource.clone());
+
+        self.levels.entry(resource).or_insert(0);
+        self.levels.entry(dependency).or_insert(0);
     }
 
     /// Remove a dependency relationship

@@ -96,11 +96,7 @@ impl DependencyGraph {
             Expression::UnaryOp { operand, .. } => {
                 Self::extract_dependencies_recursive(operand, dependencies, column_names)?;
             }
-            Expression::Call {
-                function,
-                arguments,
-                ..
-            } => {
+            Expression::Call { arguments, .. } => {
                 // For function calls, don't recurse into the function identifier (it's not a column dependency)
                 // Only recurse into arguments to find column dependencies
                 for arg in arguments {
@@ -164,7 +160,10 @@ impl DependencyGraph {
                     Self::extract_dependencies_recursive(&arm.body, dependencies, column_names)?;
                 }
             }
-            Expression::StructLiteral { type_name, fields } => {
+            Expression::StructLiteral {
+                type_name: _,
+                fields,
+            } => {
                 for expr in fields.values() {
                     Self::extract_dependencies_recursive(expr, dependencies, column_names)?;
                 }

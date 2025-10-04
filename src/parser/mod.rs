@@ -186,7 +186,7 @@ fn parse_statement(pair: pest::iterators::Pair<Rule>) -> Statement {
         Rule::assignment => parse_assignment(inner_pair),
         Rule::return_statement => parse_return_statement(inner_pair),
         Rule::break_statement => parse_break_statement(inner_pair),
-    Rule::continue_statement => parse_continue_statement(inner_pair),
+        Rule::continue_statement => parse_continue_statement(inner_pair),
         Rule::for_loop => parse_for_loop(inner_pair),
         Rule::use_statement => parse_use_statement(inner_pair),
         Rule::mod_decl => parse_mod_decl(inner_pair),
@@ -290,13 +290,14 @@ assert :: (cond: bool, msg: string) -> none => {
     #[test]
     fn parses_optional_raw_pointer_cast() {
         let source = "x := none as ?*raw T;";
-        PnParser::parse(Rule::program, source)
+        PnParser::parse(Rule::statement, source)
             .expect("failed to parse optional raw pointer cast");
     }
 
     #[test]
     fn parses_optional_raw_pointer_type() {
-        PnParser::parse(Rule::r#type, "?*raw T").expect("failed to parse optional raw pointer type");
+        PnParser::parse(Rule::r#type, "?*raw T")
+            .expect("failed to parse optional raw pointer type");
     }
 
     #[test]
@@ -1441,38 +1442,38 @@ fn parse_if_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 
 fn parse_inline_if_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let inner_pairs: Vec<_> = pair.into_inner().collect();
-    
+
     // Find the expressions by skipping keywords
     let mut condition = None;
     let mut then_expr = None;
     let mut else_expr = None;
     let mut i = 0;
-    
+
     // Skip 'if' keyword
     while i < inner_pairs.len() && inner_pairs[i].as_rule() == Rule::keyword_if {
         i += 1;
     }
-    
+
     // Get condition
-    if i < inner_pairs.len() && 
-       inner_pairs[i].as_rule() != Rule::keyword_else &&
-       inner_pairs[i].as_str() != "then" {
+    if i < inner_pairs.len()
+        && inner_pairs[i].as_rule() != Rule::keyword_else
+        && inner_pairs[i].as_str() != "then"
+    {
         condition = Some(parse_expression(inner_pairs[i].clone()));
         i += 1;
     }
-    
-    // Skip 'then' token 
+
+    // Skip 'then' token
     while i < inner_pairs.len() && inner_pairs[i].as_str() == "then" {
         i += 1;
     }
-    
+
     // Get then expression
-    if i < inner_pairs.len() && 
-       inner_pairs[i].as_rule() != Rule::keyword_else {
+    if i < inner_pairs.len() && inner_pairs[i].as_rule() != Rule::keyword_else {
         then_expr = Some(parse_expression(inner_pairs[i].clone()));
         i += 1;
     }
-    
+
     // Skip 'else' keyword and get else expression if present
     while i < inner_pairs.len() {
         if inner_pairs[i].as_rule() == Rule::keyword_else {
@@ -1583,7 +1584,7 @@ fn parse_mod_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     let source = pair.as_str();
     let is_public = source.trim_start().starts_with("pub");
 
-    let mut it = pair.into_inner();
+    let it = pair.into_inner();
     let mut name = String::new();
     let mut items: Vec<Statement> = Vec::new();
 

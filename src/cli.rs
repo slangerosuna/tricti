@@ -1,4 +1,4 @@
-use crate::build_system::{BuildConfig, BuildSystem, BuildTarget, OptimizationLevel, OutputType};
+use crate::build_system::{BuildConfig, BuildSystem, OptimizationLevel};
 use crate::filesystem::FileSystem;
 use crate::package_manager::PackageManager;
 use clap::{Parser, Subcommand};
@@ -66,7 +66,7 @@ pub enum Commands {
 }
 
 pub struct CliHandler {
-    build_system: BuildSystem,
+    _build_system: BuildSystem,
     package_manager: PackageManager,
 }
 
@@ -88,7 +88,7 @@ impl CliHandler {
         );
 
         Self {
-            build_system,
+            _build_system: build_system,
             package_manager,
         }
     }
@@ -121,10 +121,14 @@ impl CliHandler {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let input_path = input.unwrap_or_else(|| PathBuf::from("."));
 
+        if let Some(ref target_triple) = target {
+            println!("Using target triple: {}", target_triple);
+        }
+
         if input_path.is_file() {
             self.compile_single_file(&input_path, output, opt_level, debug)?;
         } else {
-            self.compile_package(&input_path)?;
+            self.compile_package(&input_path, opt_level, debug)?;
         }
 
         Ok(())
@@ -138,6 +142,11 @@ impl CliHandler {
         debug: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         println!("Compiling file: {:?}", input);
+        println!(
+            "Build profile: {} (opt level: {})",
+            if debug { "debug" } else { "release" },
+            opt_level
+        );
 
         let content = FileSystem::read_file(input.to_str().unwrap())?;
         let program = crate::parser::parse(content);
@@ -155,7 +164,12 @@ impl CliHandler {
         Ok(())
     }
 
-    fn compile_package(&self, package_dir: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    fn compile_package(
+        &self,
+        package_dir: &PathBuf,
+        opt_level: u8,
+        debug: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let manifest_path = package_dir.join("Package.toml");
 
         if !manifest_path.exists() {
@@ -173,13 +187,13 @@ impl CliHandler {
         // Build library if present
         if let Some(lib) = &package.lib {
             let lib_path = package_dir.join(&lib.path);
-            self.compile_single_file(&lib_path, None, 0, false)?;
+            self.compile_single_file(&lib_path, None, opt_level, debug)?;
         }
 
         // Build binaries
         for bin in &package.bin {
             let bin_path = package_dir.join(&bin.path);
-            self.compile_single_file(&bin_path, None, 0, false)?;
+            self.compile_single_file(&bin_path, None, opt_level, debug)?;
         }
 
         Ok(())

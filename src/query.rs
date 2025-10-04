@@ -1360,12 +1360,19 @@ impl QueryPlan {
                     cpu_cost: row_count as f64 * 0.05,
                 }
             }
-            QueryPlan::IndexScan { table_name, .. } => CostEstimation {
-                estimated_rows: 1,
-                estimated_cost: 1.0,
-                io_cost: 1.0,
-                cpu_cost: 0.1,
-            },
+            QueryPlan::IndexScan { table_name, .. } => {
+                let row_count = context
+                    .table_stats
+                    .get(table_name)
+                    .map(|stats| stats.row_count)
+                    .unwrap_or(1000);
+                CostEstimation {
+                    estimated_rows: 1,
+                    estimated_cost: 1.0,
+                    io_cost: (row_count as f64 * 0.05).max(1.0),
+                    cpu_cost: 0.1,
+                }
+            }
             QueryPlan::RangeScan { table_name, .. } => {
                 let row_count = context
                     .table_stats

@@ -1,8 +1,7 @@
-use crate::ast::{self, *};
+use crate::ast::*;
 use crate::query::{
-    self, BuildSide, FieldProjection, JoinCondition, JoinType, OptimizationContext,
-    OptimizationHint, QueryError, QueryPlan, QueryResult, QueryStatistics, ResultColumn,
-    WhereClause,
+    BuildSide, FieldProjection, JoinCondition, JoinType, OptimizationContext, OptimizationHint,
+    QueryError, QueryPlan, QueryResult, QueryStatistics, ResultColumn, WhereClause,
 };
 use crate::table_runtime::*;
 use std::collections::{HashMap, HashSet};
@@ -95,15 +94,23 @@ impl QueryExecutor {
                 left_projection,
                 right_projection,
                 ..
-            } => QueryPlan::logical_join(
-                left_table,
-                right_table,
-                join_type,
-                join_condition,
-                left_projection,
-                right_projection,
-            )
-            .optimize_with_context(&self.optimization_context),
+            } => {
+                let optimized = QueryPlan::logical_join(
+                    left_table,
+                    right_table,
+                    join_type,
+                    join_condition,
+                    left_projection,
+                    right_projection,
+                )
+                .optimize_with_context(&self.optimization_context);
+
+                if self.optimization_context.enable_join_reordering {
+                    optimized.apply_join_reordering(&self.optimization_context)
+                } else {
+                    optimized
+                }
+            }
             other => other,
         }
     }
@@ -928,6 +935,7 @@ impl QueryExecutor {
         left_schema: &[ResultColumn],
         right_schema: &[ResultColumn],
     ) -> Result<Vec<ResultColumn>, QueryError> {
+        let _ = (left_schema, right_schema);
         let mut schema = Vec::new();
 
         for field_proj in left_projection {
@@ -963,6 +971,7 @@ impl QueryExecutor {
         left_schema: &[ResultColumn],
         right_table: &TableRuntime,
     ) -> Result<Vec<ResultColumn>, QueryError> {
+        let _ = left_schema;
         let mut schema = Vec::new();
 
         for field_proj in left_projection {
@@ -1030,6 +1039,7 @@ impl QueryExecutor {
     }
 
     /// Execute a SELECT query (legacy method for backward compatibility)
+    #[allow(dead_code)]
     fn execute_select(
         &self,
         table_name: String,
@@ -1078,6 +1088,7 @@ impl QueryExecutor {
     }
 
     /// Execute a JOIN query
+    #[allow(dead_code)]
     fn execute_join(
         &self,
         left_table_name: String,
@@ -1169,6 +1180,7 @@ impl QueryExecutor {
     }
 
     /// Execute a composed query with proper pipelining
+    #[allow(dead_code)]
     fn execute_composed(
         &self,
         operations: Vec<QueryPlan>,
@@ -1198,6 +1210,7 @@ impl QueryExecutor {
     }
 
     /// Execute optimized scan using indexes and filtering
+    #[allow(dead_code)]
     fn execute_optimized_scan(
         &self,
         table: &TableRuntime,
@@ -1268,6 +1281,7 @@ impl QueryExecutor {
     }
 
     /// Apply WHERE clause filtering
+    #[allow(dead_code)]
     fn apply_where_filter(
         &self,
         rows: &[(RowId, TableRow)],
@@ -1288,6 +1302,7 @@ impl QueryExecutor {
     }
 
     /// Evaluate a condition for a row
+    #[allow(dead_code)]
     fn evaluate_condition(
         &self,
         condition: &Expression,
@@ -1346,6 +1361,7 @@ impl QueryExecutor {
     }
 
     /// Evaluate expression as boolean
+    #[allow(dead_code)]
     fn evaluate_expression_as_bool(
         &self,
         expr: &Expression,
@@ -1373,6 +1389,7 @@ impl QueryExecutor {
     }
 
     /// Apply binary operator for boolean result
+    #[allow(dead_code)]
     fn apply_binary_operator(
         &self,
         left: &ColumnValue,
@@ -1444,6 +1461,7 @@ impl QueryExecutor {
     }
 
     /// Apply unary operator
+    #[allow(dead_code)]
     fn apply_unary_operator(
         &self,
         operator: &UnaryOperator,
@@ -1598,6 +1616,7 @@ impl QueryExecutor {
     }
 
     /// Execute inner join
+    #[allow(dead_code)]
     fn execute_inner_join(
         &self,
         left_rows: &[(RowId, TableRow)],
@@ -1607,6 +1626,7 @@ impl QueryExecutor {
         right_table: &TableRuntime,
         statistics: &mut QueryStatistics,
     ) -> Result<Vec<(RowId, RowId, TableRow, TableRow)>, QueryError> {
+        let _ = statistics;
         let mut joined_rows = Vec::new();
 
         for (left_row_id, left_row) in left_rows {
@@ -1632,6 +1652,7 @@ impl QueryExecutor {
     }
 
     /// Execute left outer join
+    #[allow(dead_code)]
     fn execute_left_outer_join(
         &self,
         left_rows: &[(RowId, TableRow)],
@@ -1641,6 +1662,7 @@ impl QueryExecutor {
         right_table: &TableRuntime,
         statistics: &mut QueryStatistics,
     ) -> Result<Vec<(RowId, RowId, TableRow, TableRow)>, QueryError> {
+        let _ = statistics;
         let mut joined_rows = Vec::new();
 
         for (left_row_id, left_row) in left_rows {
@@ -1680,6 +1702,7 @@ impl QueryExecutor {
     }
 
     /// Execute right outer join
+    #[allow(dead_code)]
     fn execute_right_outer_join(
         &self,
         left_rows: &[(RowId, TableRow)],
@@ -1689,6 +1712,7 @@ impl QueryExecutor {
         right_table: &TableRuntime,
         statistics: &mut QueryStatistics,
     ) -> Result<Vec<(RowId, RowId, TableRow, TableRow)>, QueryError> {
+        let _ = statistics;
         let mut joined_rows = Vec::new();
 
         for (right_row_id, right_row) in right_rows {
@@ -1728,6 +1752,7 @@ impl QueryExecutor {
     }
 
     /// Execute full outer join
+    #[allow(dead_code)]
     fn execute_full_outer_join(
         &self,
         left_rows: &[(RowId, TableRow)],
@@ -1767,6 +1792,7 @@ impl QueryExecutor {
     }
 
     /// Evaluate join condition
+    #[allow(dead_code)]
     fn evaluate_join_condition(
         &self,
         join_condition: &JoinCondition,
@@ -1795,6 +1821,7 @@ impl QueryExecutor {
     }
 
     /// Create a null row for outer joins
+    #[allow(dead_code)]
     fn create_null_row(&self, table: &TableRuntime) -> TableRow {
         let mut values = HashMap::new();
         for column in &table.schema.columns {
@@ -1816,6 +1843,7 @@ impl QueryExecutor {
     }
 
     /// Get optimized rows for join input - avoid full table scans where possible
+    #[allow(dead_code)]
     fn get_join_input_rows(
         &self,
         table: &TableRuntime,
@@ -1835,6 +1863,7 @@ impl QueryExecutor {
     }
 
     /// Apply an operation to existing query result (for composed queries)
+    #[allow(dead_code)]
     fn apply_operation_to_result(
         &self,
         mut result: QueryResult,
@@ -1871,6 +1900,7 @@ impl QueryExecutor {
     }
 
     /// Apply final projection to query result
+    #[allow(dead_code)]
     fn apply_final_projection(
         &self,
         mut result: QueryResult,
@@ -1884,7 +1914,7 @@ impl QueryExecutor {
                 let mut projected_values = HashMap::new();
 
                 for field_proj in &projection {
-                    let value = if let Some(ref transformation) = field_proj.transformation {
+                    let value = if let Some(ref _transformation) = field_proj.transformation {
                         // For transformations, we'd need proper expression evaluation
                         // For now, just copy the source column value
                         row.values

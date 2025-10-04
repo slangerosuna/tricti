@@ -1762,22 +1762,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     self.builder.build_store(elem_allo, loaded_elem).map_err(
                                         |e| CodegenError::CompilationError(e.to_string()),
                                     )?;
-                                        for s in body {
-                                            let _ = self.generate_statement(s);
+                                    for s in body {
+                                        let _ = self.generate_statement(s);
+                                    }
+                                    if let Some(current_block) = self.builder.get_insert_block() {
+                                        if current_block.get_terminator().is_none() {
+                                            self.builder
+                                                .build_unconditional_branch(inc_bb)
+                                                .map_err(|e| {
+                                                    CodegenError::CompilationError(e.to_string())
+                                                })?;
                                         }
-                                        if let Some(current_block) =
-                                            self.builder.get_insert_block()
-                                        {
-                                            if current_block.get_terminator().is_none() {
-                                                self.builder
-                                                    .build_unconditional_branch(inc_bb)
-                                                    .map_err(|e| {
-                                                        CodegenError::CompilationError(
-                                                            e.to_string(),
-                                                        )
-                                                    })?;
-                                            }
-                                        }
+                                    }
                                     // inc
                                     self.builder.position_at_end(inc_bb);
                                     let i64_bte4: BasicTypeEnum<'ctx> =
@@ -1966,8 +1962,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             |e| CodegenError::CompilationError(e.to_string()),
                                         )?;
                                         {
-                                            let _loop_scope =
-                                                LoopScope::new(&mut self.loop_stack, inc_bb, end_bb);
+                                            let _loop_scope = LoopScope::new(
+                                                &mut self.loop_stack,
+                                                inc_bb,
+                                                end_bb,
+                                            );
                                             for s in body {
                                                 let _ = self.generate_statement(s);
                                             }
@@ -2318,8 +2317,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // body
                     self.builder.position_at_end(body_bb);
                     {
-                        let _loop_scope =
-                            LoopScope::new(&mut self.loop_stack, inc_bb, end_bb);
+                        let _loop_scope = LoopScope::new(&mut self.loop_stack, inc_bb, end_bb);
                         for s in body {
                             let _ = self.generate_statement(s);
                         }
@@ -4737,16 +4735,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     self.builder.build_store(acc_alloca, step_val).map_err(
                                         |e| CodegenError::CompilationError(e.to_string()),
                                     )?;
-                                    if let Some(current_block) =
-                                        self.builder.get_insert_block()
-                                    {
+                                    if let Some(current_block) = self.builder.get_insert_block() {
                                         if current_block.get_terminator().is_none() {
                                             self.builder
                                                 .build_unconditional_branch(inc_bb)
                                                 .map_err(|e| {
-                                                    CodegenError::CompilationError(
-                                                        e.to_string(),
-                                                    )
+                                                    CodegenError::CompilationError(e.to_string())
                                                 })?;
                                         }
                                     }
