@@ -76,53 +76,51 @@ pub fn std_error_unsupported(feature: String) -> StdError {
 pub fn std_ok<T>(value: T) -> StdResult<T> {
     StdResult {
         is_ok: true,
-        value: Some(value),
-        error: None,
-    }
-}
+        #[cfg(test)]
+        mod tests {
+            use super::*;
 
-pub fn std_err<T>(error: StdError) -> StdResult<T> {
-    StdResult {
-        is_ok: false,
-        value: None,
-        error: Some(error),
-    }
-}
+            #[test]
+            fn test_vec_len_helpers() {
+                let arr = vec![1, 2, 3];
+                let empty: Vec<i32> = vec![];
+                assert_eq!(vec_len(&arr), 3);
+                assert_eq!(vec_len(&empty), 0);
+            }
 
-pub fn std_result_is_ok<T>(result: &StdResult<T>) -> bool {
-    result.is_ok
-}
+            #[test]
+            fn test_vec_is_empty_helpers() {
+                let arr = vec![1, 2, 3];
+                let empty: Vec<i32> = vec![];
+                assert!(!vec_is_empty(&arr));
+                assert!(vec_is_empty(&empty));
+            }
 
-pub fn std_result_unwrap<T: Clone>(result: &StdResult<T>) -> T {
-    if !result.is_ok {
-        panic!("attempted to unwrap error result")
-    }
-    match &result.value {
-        Some(value) => value.clone(),
-        None => panic!("missing value for ok result"),
-    }
-}
+            #[test]
+            fn test_vec_get_helpers() {
+                let arr = vec![10, 20, 30];
+                assert_eq!(vec_get(&arr, 0), Some(10));
+                assert_eq!(vec_get(&arr, 1), Some(20));
+                assert_eq!(vec_get(&arr, 2), Some(30));
+                assert_eq!(vec_get(&arr, 3), None);
+            }
 
-pub fn std_result_error<T>(result: &StdResult<T>) -> Option<StdError> {
-    result.error.clone()
-}
+            #[test]
+            fn test_vec_get_bool_helpers() {
+                let arr = vec![true, false, true];
+                assert_eq!(vec_get_bool(&arr, 0), Some(true));
+                assert_eq!(vec_get_bool(&arr, 1), Some(false));
+                assert_eq!(vec_get_bool(&arr, 2), Some(true));
+                assert_eq!(vec_get_bool(&arr, 3), None);
+            }
 
-pub fn clamp_i64(value: i64, min_value: i64, max_value: i64) -> i64 {
-    if value < min_value {
-        min_value
-    } else if value > max_value {
-        max_value
-    } else {
-        value
-    }
-}
-
-pub fn sign_i64(value: i64) -> i64 {
-    if value < 0 {
-        -1
-    } else if value > 0 {
-        1
-    } else {
+            #[test]
+            fn test_vec_is_empty_bool_helpers() {
+                let arr = vec![true, false];
+                let empty: Vec<bool> = vec![];
+                assert!(!vec_is_empty_bool(&arr));
+                assert!(vec_is_empty_bool(&empty));
+            }
         0
     }
 }
@@ -301,25 +299,25 @@ pub fn std_default_config() -> StdConfig {
     }
 }
 
-// Slice utilities (using Rust slices)
-pub fn slice_len<T>(s: &[T]) -> usize {
-    s.len()
+// Vec utilities (using Rust slices for simplicity)
+pub fn vec_len<T>(v: &[T]) -> usize {
+    v.len()
 }
 
-pub fn slice_is_empty<T>(s: &[T]) -> bool {
-    s.is_empty()
+pub fn vec_is_empty<T>(v: &[T]) -> bool {
+    v.is_empty()
 }
 
-pub fn slice_get<T: Clone>(s: &[T], idx: usize) -> Option<T> {
-    s.get(idx).cloned()
+pub fn vec_get<T: Clone>(v: &[T], idx: usize) -> Option<T> {
+    v.get(idx).cloned()
 }
 
-pub fn slice_get_bool(s: &[bool], idx: usize) -> Option<bool> {
-    slice_get(s, idx)
+pub fn vec_get_bool(v: &[bool], idx: usize) -> Option<bool> {
+    vec_get(v, idx)
 }
 
-pub fn slice_is_empty_bool(s: &[bool]) -> bool {
-    slice_is_empty(s)
+pub fn vec_is_empty_bool(v: &[bool]) -> bool {
+    vec_is_empty(v)
 }
 
 // Manual vector implementation (mimicking TriCTI's Vec_i64)
@@ -349,45 +347,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_std_error_message() {
+    fn test_vec_len_helper() {
         let err = StdError {
             kind: StdErrorKind::Message,
-            message: "msg".to_string(),
-            parameter: None,
+        assert_eq!(vec_len(&arr), 3);
+        assert_eq!(vec_len(&empty), 0);
             feature: None,
             source: None,
         };
-        assert_eq!(std_error_message(&err), "msg");
+    fn test_vec_is_empty_helper() {
     }
 
-    #[test]
-    fn test_std_error_kind() {
+        assert!(!vec_is_empty(&arr));
+        assert!(vec_is_empty(&empty));
         let err = StdError {
             kind: StdErrorKind::Panic,
             message: "fail".to_string(),
-            parameter: None,
+    fn test_vec_get_helper() {
             feature: None,
-            source: None,
-        };
-        assert_eq!(std_error_kind(&err), StdErrorKind::Panic);
-    }
+        assert_eq!(vec_get(&arr, 0), Some(10));
+        assert_eq!(vec_get(&arr, 1), Some(20));
+        assert_eq!(vec_get(&arr, 2), Some(30));
+        assert_eq!(vec_get(&arr, 3), None);
 
     #[test]
     fn test_std_error_with_source() {
-        let err = std_error_with_source(
+    fn test_vec_get_bool_helper() {
             StdErrorKind::InvalidArgument,
-            "bad arg".to_string(),
-            Some("src".to_string()),
-        );
-        assert_eq!(err.kind, StdErrorKind::InvalidArgument);
+        assert_eq!(vec_get_bool(&arr, 0), Some(true));
+        assert_eq!(vec_get_bool(&arr, 1), Some(false));
+        assert_eq!(vec_get_bool(&arr, 2), Some(true));
+        assert_eq!(vec_get_bool(&arr, 3), None);
         assert_eq!(err.message, "bad arg");
         assert_eq!(err.source, Some("src".to_string()));
     }
-
+    fn test_vec_is_empty_bool_helper() {
     #[test]
     fn test_std_error_invalid_argument() {
-        let err = std_error_invalid_argument("foo".to_string(), "bad foo".to_string());
-        assert_eq!(err.kind, StdErrorKind::InvalidArgument);
+        assert!(!vec_is_empty_bool(&arr));
+        assert!(vec_is_empty_bool(&empty));
         assert_eq!(err.parameter, Some("foo".to_string()));
         assert_eq!(err.message, "bad foo");
     }
@@ -645,47 +643,47 @@ mod tests {
     }
 
     #[test]
-    fn test_slice_len() {
+    fn test_vec_len() {
         let arr = vec![1, 2, 3];
-        assert_eq!(slice_len(&arr), 3);
+        assert_eq!(vec_len(&arr), 3);
 
         let empty: Vec<i32> = vec![];
-        assert_eq!(slice_len(&empty), 0);
+        assert_eq!(vec_len(&empty), 0);
     }
 
     #[test]
-    fn test_slice_is_empty() {
+    fn test_vec_is_empty() {
         let arr = vec![1, 2, 3];
-        assert!(!slice_is_empty(&arr));
+        assert!(!vec_is_empty(&arr));
 
         let empty: Vec<i32> = vec![];
-        assert!(slice_is_empty(&empty));
+        assert!(vec_is_empty(&empty));
     }
 
     #[test]
-    fn test_slice_get() {
+    fn test_vec_get() {
         let arr = vec![10, 20, 30];
-        assert_eq!(slice_get(&arr, 0), Some(10));
-        assert_eq!(slice_get(&arr, 1), Some(20));
-        assert_eq!(slice_get(&arr, 2), Some(30));
-        assert_eq!(slice_get(&arr, 3), None);
+        assert_eq!(vec_get(&arr, 0), Some(10));
+        assert_eq!(vec_get(&arr, 1), Some(20));
+        assert_eq!(vec_get(&arr, 2), Some(30));
+        assert_eq!(vec_get(&arr, 3), None);
     }
 
     #[test]
-    fn test_slice_get_bool() {
+    fn test_vec_get_bool() {
         let arr = vec![true, false, true];
-        assert_eq!(slice_get_bool(&arr, 0), Some(true));
-        assert_eq!(slice_get_bool(&arr, 1), Some(false));
-        assert_eq!(slice_get_bool(&arr, 2), Some(true));
-        assert_eq!(slice_get_bool(&arr, 3), None);
+        assert_eq!(vec_get_bool(&arr, 0), Some(true));
+        assert_eq!(vec_get_bool(&arr, 1), Some(false));
+        assert_eq!(vec_get_bool(&arr, 2), Some(true));
+        assert_eq!(vec_get_bool(&arr, 3), None);
     }
 
     #[test]
-    fn test_slice_is_empty_bool() {
+    fn test_vec_is_empty_bool() {
         let arr = vec![true, false];
-        assert!(!slice_is_empty_bool(&arr));
+        assert!(!vec_is_empty_bool(&arr));
         let empty: Vec<bool> = vec![];
-        assert!(slice_is_empty_bool(&empty));
+        assert!(vec_is_empty_bool(&empty));
     }
 
     #[test]

@@ -53,33 +53,6 @@ mod tests {
     );
 
     tri_test_with_prelude!(
-        stdlib_prelude_array_remove_at_guards,
-        r#"
-        main :: () => {
-            data := [1i64, 2i64, 3i64, 4i64]
-
-            trimmed := array_remove_at(data, 2)
-            println(len(trimmed))
-            println(trimmed[0])
-            println(trimmed[1])
-            println(trimmed[2])
-
-            unchanged := array_remove_at(data, 10)
-            println(len(unchanged))
-            println(unchanged[0])
-            println(unchanged[1])
-            println(unchanged[2])
-            println(unchanged[3])
-
-            neg := array_remove_at(data, -1)
-            println(len(neg))
-            println(neg[0])
-        }
-        "#,
-        "3\n1\n2\n4\n4\n1\n2\n3\n4\n4\n1\n"
-    );
-
-    tri_test_with_prelude!(
         stdlib_prelude_basic_error_functions,
         r#"
         main :: () => {

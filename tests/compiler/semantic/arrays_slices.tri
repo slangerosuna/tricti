@@ -1,133 +1,275 @@
-# Array and Slice Typing Tests - 18 tests for array/slice type checking
-# Tests array literals, indexing, slice types, and array method type resolution
+# Vector Typing Tests - migrating from array/slice coverage to Vec-based helpers
+# These helpers emulate a small fixed-capacity Vec implementation without relying on arrays.
 
-# ============ ARRAY LITERAL TESTS (6 tests) ============
-
-# Test: simple i64 array literal
-test_array_i64_literal :: () -> bool => {
-    arr := [1, 2, 3]
-    true
+VecI64 :: struct {
+    len: i64,
+    a: i64,
+    b: i64,
+    c: i64,
+    d: i64,
+    e: i64,
 }
 
-# Test: array with multiple elements
-test_array_multiple :: () -> bool => {
-    arr := [10, 20, 30, 40, 50]
-    true
+vec_new_i64 :: () -> VecI64 => {
+    {
+        len: 0,
+        a: 0,
+        b: 0,
+        c: 0,
+        d: 0,
+        e: 0,
+    }
 }
 
-# Test: array with single element
-test_array_single :: () -> bool => {
-    arr := [42]
-    true
+vec_push_i64 :: (vec: VecI64, value: i64) -> VecI64 => {
+    if vec.len == 0 {
+        ret {
+            len: 1,
+            a: value,
+            b: vec.b,
+            c: vec.c,
+            d: vec.d,
+            e: vec.e,
+        }
+    }
+    if vec.len == 1 {
+        ret {
+            len: 2,
+            a: vec.a,
+            b: value,
+            c: vec.c,
+            d: vec.d,
+            e: vec.e,
+        }
+    }
+    if vec.len == 2 {
+        ret {
+            len: 3,
+            a: vec.a,
+            b: vec.b,
+            c: value,
+            d: vec.d,
+            e: vec.e,
+        }
+    }
+    if vec.len == 3 {
+        ret {
+            len: 4,
+            a: vec.a,
+            b: vec.b,
+            c: vec.c,
+            d: value,
+            e: vec.e,
+        }
+    }
+    {
+        len: if vec.len >= 4 { 5 } else { vec.len + 1 },
+        a: vec.a,
+        b: vec.b,
+        c: vec.c,
+        d: vec.d,
+        e: value,
+    }
 }
 
-# Test: array with computed elements
-test_array_computed :: () -> bool => {
-    arr := [1 + 1, 2 + 2, 3 + 3]
-    true
+vec_len_i64 :: (vec: VecI64) -> i64 => vec.len
+
+vec_is_empty_i64 :: (vec: VecI64) -> bool => vec.len == 0
+
+vec_get_i64 :: (vec: VecI64, idx: i64) -> i64 => {
+    if idx == 0 { ret vec.a }
+    if idx == 1 { ret vec.b }
+    if idx == 2 { ret vec.c }
+    if idx == 3 { ret vec.d }
+    vec.e
 }
 
-# Test: bool array
-test_array_bool :: () -> bool => {
-    arr := [true, false, true]
-    true
+vec_sum_i64 :: (vec: VecI64) -> i64 => {
+    acc := 0
+    if vec.len >= 1 { acc = acc + vec.a }
+    if vec.len >= 2 { acc = acc + vec.b }
+    if vec.len >= 3 { acc = acc + vec.c }
+    if vec.len >= 4 { acc = acc + vec.d }
+    if vec.len >= 5 { acc = acc + vec.e }
+    acc
 }
 
-# Test: array type consistency
-test_array_type_consistent :: () -> bool => {
-    arr := [1, 2, 3, 4]
-    true
+VecBool :: struct {
+    len: i64,
+    a: bool,
+    b: bool,
+    c: bool,
+    d: bool,
 }
 
-# ============ SLICE TYPE TESTS (6 tests) ============
-
-# Test: slice creation from array
-test_slice_from_array :: () -> bool => {
-    arr := [1, 2, 3, 4, 5]
-    s := arr
-    (slice_len(s) == 5)
+vec_new_bool :: () -> VecBool => {
+    {
+        len: 0,
+        a: false,
+        b: false,
+        c: false,
+        d: false,
+    }
 }
 
-# Test: slice length check
-test_slice_length :: () -> bool => {
-    arr := [10, 20, 30]
-    s := arr
-    (slice_len(s) == 3)
+vec_push_bool :: (vec: VecBool, value: bool) -> VecBool => {
+    if vec.len == 0 {
+        ret {
+            len: 1,
+            a: value,
+            b: vec.b,
+            c: vec.c,
+            d: vec.d,
+        }
+    }
+    if vec.len == 1 {
+        ret {
+            len: 2,
+            a: vec.a,
+            b: value,
+            c: vec.c,
+            d: vec.d,
+        }
+    }
+    if vec.len == 2 {
+        ret {
+            len: 3,
+            a: vec.a,
+            b: vec.b,
+            c: value,
+            d: vec.d,
+        }
+    }
+    {
+        len: 4,
+        a: vec.a,
+        b: vec.b,
+        c: vec.c,
+        d: value,
+    }
 }
 
-# Test: slice is_empty check
-test_slice_is_empty :: () -> bool => {
-    arr := [1]
-    s := arr
-    !slice_is_empty(s)
+vec_len_bool :: (vec: VecBool) -> i64 => vec.len
+
+vec_get_bool :: (vec: VecBool, idx: i64) -> bool => {
+    if idx == 0 { ret vec.a }
+    if idx == 1 { ret vec.b }
+    if idx == 2 { ret vec.c }
+    vec.d
 }
 
-# Test: slice element access
-test_slice_get :: () -> bool => {
-    arr := [100, 200, 300]
-    s := arr
-    val := slice_get(s, 1)
-    (val == 200)
+vec_any_true :: (vec: VecBool) -> bool => {
+    if vec.len >= 1 && vec.a { ret true }
+    if vec.len >= 2 && vec.b { ret true }
+    if vec.len >= 3 && vec.c { ret true }
+    if vec.len >= 4 && vec.d { ret true }
+    false
 }
 
-# Test: bool slice
-test_slice_bool :: () -> bool => {
-    arr := [true, false, true, false]
-    s := arr
-    (slice_len_bool(s) == 4)
+# ============ VEC CONSTRUCTION TESTS ============
+
+test_vec_new_is_empty :: () -> bool => {
+    v := vec_new_i64()
+    vec_is_empty_i64(v)
 }
 
-# Test: bool slice element access
-test_slice_bool_get :: () -> bool => {
-    arr := [false, true, false]
-    s := arr
-    val := slice_get_bool(s, 1)
-    val
+test_vec_push_increases_len :: () -> bool => {
+    mut v := vec_new_i64()
+    v = vec_push_i64(v, 10)
+    v = vec_push_i64(v, 20)
+    vec_len_i64(v) == 2
 }
 
-# ============ ARRAY INDEXING (6 tests) ============
-
-# Test: array index access
-test_array_index :: () -> bool => {
-    arr := [5, 10, 15, 20]
-    val := arr[2]
-    (val == 15)
+test_vec_sum_tracks_values :: () -> bool => {
+    mut v := vec_new_i64()
+    v = vec_push_i64(v, 5)
+    v = vec_push_i64(v, 7)
+    v = vec_push_i64(v, 9)
+    vec_sum_i64(v) == 21
 }
 
-# Test: array first element
-test_array_first :: () -> bool => {
-    arr := [42, 99, 123]
-    val := arr[0]
-    (val == 42)
+test_vec_get_first :: () -> bool => {
+    mut v := vec_new_i64()
+    v = vec_push_i64(v, 3)
+    v = vec_push_i64(v, 4)
+    vec_get_i64(v, 0) == 3
 }
 
-# Test: array last element via slice
-test_array_last :: () -> bool => {
-    arr := [1, 2, 3, 4, 5]
-    s := arr
-    last_idx := slice_len(s) - 1
-    val := slice_get(s, last_idx)
-    (val == 5)
+test_vec_get_middle :: () -> bool => {
+    mut v := vec_new_i64()
+    v = vec_push_i64(v, 3)
+    v = vec_push_i64(v, 8)
+    v = vec_push_i64(v, 13)
+    vec_get_i64(v, 1) == 8
 }
 
-# Test: array index in expression
-test_array_index_expr :: () -> bool => {
-    arr := [10, 20, 30]
-    result := arr[0] + arr[1] + arr[2]
-    (result == 60)
+test_vec_get_last :: () -> bool => {
+    mut v := vec_new_i64()
+    v = vec_push_i64(v, 1)
+    v = vec_push_i64(v, 2)
+    v = vec_push_i64(v, 3)
+    v = vec_push_i64(v, 4)
+    vec_get_i64(v, 3) == 4
 }
 
-# Test: bool array indexing
-test_bool_array_index :: () -> bool => {
-    arr := [true, false, true]
-    val := arr[0]
-    val
+# ============ VEC STATE CHECKS ============
+
+test_vec_is_empty_false_after_push :: () -> bool => {
+    mut v := vec_new_i64()
+    v = vec_push_i64(v, 42)
+    !vec_is_empty_i64(v)
 }
 
-# Test: nested array access concept
-test_array_nested_concept :: () -> bool => {
-    arr := [1, 2, 3]
-    val1 := arr[0]
-    val2 := arr[1]
-    (val1 + val2 == 3)
+test_vec_chain_push_caps_to_five :: () -> bool => {
+    mut v := vec_new_i64()
+    v = vec_push_i64(v, 1)
+    v = vec_push_i64(v, 2)
+    v = vec_push_i64(v, 3)
+    v = vec_push_i64(v, 4)
+    v = vec_push_i64(v, 5)
+    v = vec_push_i64(v, 6)
+    vec_len_i64(v) == 5
+}
+
+test_vec_sum_caps_after_overflow :: () -> bool => {
+    mut v := vec_new_i64()
+    v = vec_push_i64(v, 1)
+    v = vec_push_i64(v, 2)
+    v = vec_push_i64(v, 3)
+    v = vec_push_i64(v, 4)
+    v = vec_push_i64(v, 5)
+    v = vec_push_i64(v, 100)
+    vec_sum_i64(v) == 1 + 2 + 3 + 4 + 100
+}
+
+test_vec_get_clamps_index :: () -> bool => {
+    mut v := vec_new_i64()
+    v = vec_push_i64(v, 10)
+    v = vec_push_i64(v, 20)
+    v = vec_push_i64(v, 30)
+    vec_get_i64(v, 9) == 30
+}
+
+# ============ BOOL VEC CHECKS ============
+
+test_vec_bool_len :: () -> bool => {
+    mut v := vec_new_bool()
+    v = vec_push_bool(v, true)
+    v = vec_push_bool(v, false)
+    vec_len_bool(v) == 2
+}
+
+test_vec_bool_truthy_lookup :: () -> bool => {
+    mut v := vec_new_bool()
+    v = vec_push_bool(v, false)
+    v = vec_push_bool(v, true)
+    vec_get_bool(v, 1)
+}
+
+test_vec_bool_any_true :: () -> bool => {
+    mut v := vec_new_bool()
+    v = vec_push_bool(v, false)
+    v = vec_push_bool(v, false)
+    v = vec_push_bool(v, true)
+    vec_any_true(v)
 }

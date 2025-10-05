@@ -497,7 +497,10 @@ fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
 }
 
 fn parse_assignment(pair: pest::iterators::Pair<Rule>) -> Statement {
-    let mut inner = pair.into_inner();
+    if pair.as_str().contains("output[") {
+        eprintln!("parser: raw assignment {}", pair.as_str());
+    }
+    let mut inner = pair.clone().into_inner();
     let target = parse_expression(inner.next().unwrap());
     let operator_pair = inner.next().unwrap();
     let operator_str = operator_pair.as_str();
@@ -750,7 +753,7 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
                 };
                 expr = Expression::StructLiteral { type_name, fields };
             }
-            _ if suffix_pair.as_str().starts_with("[") => {
+            Rule::index_suffix => {
                 // Indexing suffix: "[ expr (, expr)* ]" possibly repeated; grammar emits it as part of post_fix
                 // We'll parse indices from this suffix explicitly by iterating its inner expressions
                 let mut indices: Vec<Expression> = Vec::new();

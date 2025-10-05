@@ -4,34 +4,47 @@ use std::path::Path;
 use std::process::Command;
 use tricti::{codegen, parser, semantic};
 
+const VEC_HELPERS: &str = r#"
+vec_get_i64 :: (v: *Vec_i64, idx: i64) -> i64 => {
+    if ~(idx >= 0) { panic("vec index negative") }
+    if idx >= vec_len_i64(v) { panic("vec index out of bounds") }
+    v.ptr[idx]
+}
+
+vec_is_empty_i64 :: (v: *Vec_i64) -> bool => {
+    vec_len_i64(v) == 0
+}
+"#;
+
 fn clang_available() -> bool {
     Command::new("clang").arg("--version").output().is_ok()
 }
 
 #[test]
-fn user_defined_slice_bool_iteration() {
+fn user_defined_vec_bool_iteration() {
     if !clang_available() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let src = r#"
-        SliceBool := {
-            ptr: &bool,
-            len: i64,
-        }
-
-        v: [bool; 4] := [true, false, true, true]
-        s: SliceBool :: { ptr: v, len: 4 }
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
+    let user = r#"
+        v := new_vec_i64()
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 0)
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 1)
         acc := 0
-        for b in s {
-            if b { acc = acc + 1 }
+        len := vec_len_i64(&v)
+        for i in 0:len {
+            if vec_get_i64(&v, i) == 1 { acc = acc + 1 }
         }
         println(acc)
-        println(s.len)
+        println(vec_len_i64(&v))
     "#;
+    let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
 
     let stdout = compile_and_run(
-        src,
+        &src,
         "tests/tmp_slice_bool_user.o",
         "tests/tmp_slice_bool_user.out",
     );
@@ -66,47 +79,54 @@ fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
 }
 
 #[test]
-fn iterate_slice_i64() {
+fn iterate_vec_i64() {
     if !clang_available() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let src = r#"
-        slice_i64 := {
-            ptr: &i64,
-            len: i64,
-        }
-        v: [i64; 5] := [1,2,3,4,5]
-        s: slice_i64 :: { ptr: v, len: 5 }
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
+    let user = r#"
+        v := new_vec_i64()
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 2)
+        vec_push_i64(&v, 3)
+        vec_push_i64(&v, 4)
+        vec_push_i64(&v, 5)
         acc := 0
-        for x in s { acc = acc + x }
+        len := vec_len_i64(&v)
+        for i in 0:len {
+            acc = acc + vec_get_i64(&v, i)
+        }
         println(acc)
     "#;
-    let stdout = compile_and_run(src, "tests/tmp_slice.o", "tests/tmp_slice.out");
+    let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
+    let stdout = compile_and_run(&src, "tests/tmp_slice.o", "tests/tmp_slice.out");
     assert_eq!(stdout, "15\n");
 }
 
 #[test]
-fn slice_len_and_empty() {
+fn vec_len_and_empty() {
     if !clang_available() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let src = r#"
-        slice_i64 := {
-            ptr: &i64,
-            len: i64,
-        }
-        v: [i64; 5] := [1,2,3,4,5]
-        s: slice_i64 :: { ptr: v, len: 5 }
-        println(slice_len(s))
-        println(slice_is_empty(s))
-        e: slice_i64 :: { ptr: v, len: 0 }
-        println(slice_len(e))
-        println(slice_is_empty(e))
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
+    let user = r#"
+        v := new_vec_i64()
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 2)
+        vec_push_i64(&v, 3)
+        vec_push_i64(&v, 4)
+        vec_push_i64(&v, 5)
+        println(vec_len_i64(&v))
+        println(vec_is_empty_i64(&v))
+        e := new_vec_i64()
+        println(vec_len_i64(&e))
+        println(vec_is_empty_i64(&e))
     "#;
+    let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
     let stdout = compile_and_run(
-        src,
+        &src,
         "tests/tmp_slice_helpers.o",
         "tests/tmp_slice_helpers.out",
     );
@@ -114,49 +134,54 @@ fn slice_len_and_empty() {
 }
 
 #[test]
-fn slice_get_reads_elements() {
-    if !clang_available() {
-        eprintln!("clang not found; skipping");
-        return;
-    }
-    let src = r#"
-        slice_i64 := {
-            ptr: &i64,
-            len: i64,
-        }
-        v: [i64; 5] := [1,2,3,4,5]
-        s: slice_i64 :: { ptr: v, len: 5 }
-        println(slice_get(s, 0))
-        println(slice_get(s, 4))
-        println(slice_get(s, 2))
-    "#;
-    let stdout = compile_and_run(src, "tests/tmp_slice_get.o", "tests/tmp_slice_get.out");
-    assert_eq!(stdout, "1\n5\n3\n");
-}
-
-#[test]
-fn slice_i64_constructor_in_prelude() {
+fn vec_get_reads_elements() {
     if !clang_available() {
         eprintln!("clang not found; skipping");
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
-        slice_i64 := {
-            ptr: &i64,
-            len: i64,
-        }
+        v := new_vec_i64()
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 2)
+        vec_push_i64(&v, 3)
+        vec_push_i64(&v, 4)
+        vec_push_i64(&v, 5)
+        println(vec_get_i64(&v, 0))
+        println(vec_get_i64(&v, 4))
+        println(vec_get_i64(&v, 2))
+    "#;
+    let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
+    let stdout = compile_and_run(&src, "tests/tmp_slice_get.o", "tests/tmp_slice_get.out");
+    assert_eq!(stdout, "1\n5\n3\n");
+}
+
+#[test]
+fn vec_iteration_in_prelude() {
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
+    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
+    let user = r#"
         main :: () => {
-            v: [i64; 5] := [1,2,3,4,5]
-            s: slice_i64 := slice_i64_from(v, 5)
-            println(slice_len(s))
-            println(slice_get(s, 3))
+            v := new_vec_i64()
+            vec_push_i64(&v, 1)
+            vec_push_i64(&v, 2)
+            vec_push_i64(&v, 3)
+            vec_push_i64(&v, 4)
+            vec_push_i64(&v, 5)
+            println(vec_len_i64(&v))
+            println(vec_get_i64(&v, 3))
             acc := 0
-            for x in s { acc = acc + x }
+            len := vec_len_i64(&v)
+            for i in 0:len {
+                acc = acc + vec_get_i64(&v, i)
+            }
             println(acc)
         }
     "#;
-    let src = format!("{}\n{}", prelude, user);
+    let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
     let stdout = compile_and_run(&src, "tests/tmp_slice_new.o", "tests/tmp_slice_new.out");
     assert_eq!(stdout, "5\n4\n15\n");
 }

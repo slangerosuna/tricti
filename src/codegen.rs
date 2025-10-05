@@ -13,7 +13,7 @@ use inkwell::values::{
     StructValue,
 };
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 #[derive(Debug)]
@@ -38,6 +38,8 @@ impl fmt::Display for CodegenError {
 }
 
 impl Error for CodegenError {}
+
+const UNSIGNED_TYPE_NAMES: [&str; 4] = ["u8", "u16", "u32", "u64"];
 
 struct LoopContext<'ctx> {
     continue_bb: BasicBlock<'ctx>,
@@ -90,6 +92,7 @@ pub struct CodeGenerator<'ctx> {
     runtime_mode: bool,
     // Local variable types for current function
     local_types: HashMap<String, crate::ast::Type>,
+    unsigned_variables: HashSet<String>,
     // Struct type for enum representation { tag: i64, payload: i64 }
     enum_struct: Option<StructType<'ctx>>,
     loop_stack: Vec<LoopContext<'ctx>>,
@@ -116,6 +119,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             matrix_rank: HashMap::new(),
             runtime_mode: false,
             local_types: HashMap::new(),
+            unsigned_variables: HashSet::new(),
             enum_struct: None,
             loop_stack: Vec::new(),
         };
@@ -164,7 +168,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                 literal.raw
             )));
         }
-        Ok(self.context.i64_type().const_int(value as u64, false))
+        let bit_width = literal.bit_width();
+        let target_ty = if bit_width <= 8 {
+            self.context.i8_type()
+        } else if bit_width <= 16 {
+            self.context.i16_type()
+        } else if bit_width <= 32 {
+            self.context.i32_type()
+        } else {
+            self.context.i64_type()
+        };
+        Ok(target_ty.const_int(value as u64, false))
     }
 
     fn get_pattern_tag(
@@ -300,8 +314,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         use crate::ast::Type as AstType;
         match t {
             AstType::Identifier { name, type_args: _ } => match name.as_str() {
+                "i8" | "u8" => Some(self.context.i8_type().into()),
+                "i16" | "u16" => Some(self.context.i16_type().into()),
                 "i32" => Some(self.context.i32_type().into()),
+                "u32" => Some(self.context.i32_type().into()),
                 "i64" => Some(self.context.i64_type().into()),
+                "u64" => Some(self.context.i64_type().into()),
                 "f32" => Some(self.context.f32_type().into()),
                 "f64" => Some(self.context.f64_type().into()),
                 "bool" => Some(self.context.bool_type().into()),
@@ -365,6 +383,62 @@ impl<'ctx> CodeGenerator<'ctx> {
         })
     }
 
+    fn int_type_for_width(&self, bits: u32) -> IntType<'ctx> {
+        if bits <= 8 {
+            self.context.i8_type()
+        } else if bits <= 16 {
+            self.context.i16_type()
+        } else if bits <= 32 {
+            self.context.i32_type()
+        } else {
+            self.context.i64_type()
+        }
+    }
+
+    fn is_unsigned_type(&self, ty: &crate::ast::Type) -> bool {
+        match ty {
+            crate::ast::Type::Identifier { name, .. } => {
+                UNSIGNED_TYPE_NAMES.iter().any(|t| *t == name.as_str())
+            }
+            _ => false,
+        }
+    }
+
+    fn record_unsigned_binding(&mut self, name: &str, ty: &crate::ast::Type) {
+        if self.is_unsigned_type(ty) {
+            self.unsigned_variables.insert(name.to_string());
+        } else {
+            self.unsigned_variables.remove(name);
+        }
+    }
+
+    fn expression_is_unsigned(&self, expr: &Expression) -> bool {
+        match expr {
+            Expression::Identifier(name) => {
+                if self.unsigned_variables.contains(name) {
+                    true
+                } else {
+                    self.semantic
+                        .get_variable_type(name)
+                        .map(|ty| self.is_unsigned_type(ty))
+                        .unwrap_or(false)
+                }
+            }
+            Expression::Literal(Literal::Integer(int_lit)) => matches!(
+                int_lit.suffix,
+                Some(crate::ast::IntSuffix::U8)
+                    | Some(crate::ast::IntSuffix::U16)
+                    | Some(crate::ast::IntSuffix::U32)
+                    | Some(crate::ast::IntSuffix::U64)
+            ),
+            Expression::BinaryOp { left, right, .. } => {
+                self.expression_is_unsigned(left) && self.expression_is_unsigned(right)
+            }
+            Expression::FieldAccess { object, .. } => self.expression_is_unsigned(object),
+            _ => false,
+        }
+    }
+
     // Unify two integers to a common width (use i64) and return both cast plus chosen type
     fn unify_ints(
         &self,
@@ -378,7 +452,16 @@ impl<'ctx> CodeGenerator<'ctx> {
         ),
         CodegenError,
     > {
-        let ty = self.context.i64_type();
+        let l_bits = match l {
+            BasicValueEnum::IntValue(iv) => iv.get_type().get_bit_width(),
+            _ => 64,
+        };
+        let r_bits = match r {
+            BasicValueEnum::IntValue(iv) => iv.get_type().get_bit_width(),
+            _ => 64,
+        };
+        let target_bits = l_bits.max(r_bits).max(8);
+        let ty = self.int_type_for_width(target_bits);
         let li = self.cast_to_int(l, ty)?;
         let ri = self.cast_to_int(r, ty)?;
         Ok((li, ri, ty))
@@ -1279,16 +1362,26 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 self.variables.insert(name.clone(), (alloca, target_ty));
                 if type_annotation.is_none() {
-                    if let Some(inferred_ty) = self.semantic.get_variable_type(name) {
-                        self.local_types.insert(name.clone(), inferred_ty.clone());
+                    if let Some(inferred_ty) = self.semantic.get_variable_type(name).cloned() {
+                        self.record_unsigned_binding(name, &inferred_ty);
+                        self.local_types.insert(name.clone(), inferred_ty);
                     }
                 }
                 if let Some(ast_ty) = type_annotation {
                     self.local_types.insert(name.clone(), ast_ty.clone());
+                    self.record_unsigned_binding(name, ast_ty);
                 }
             }
 
             Statement::Assignment { target, value, .. } => {
+                if let Expression::Identifier(name) = target {
+                    if name == "output" {
+                        eprintln!("codegen assignment target identifier output");
+                    }
+                }
+                if matches!(target, Expression::Index { .. }) {
+                    eprintln!("generate assignment target kind: INDEX, value kind: {:?}", value);
+                }
                 let value_result = self.generate_expression(value)?;
 
                 match target {
@@ -1433,6 +1526,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 )
                             }
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let val_ty_tmp = value_result.get_type().print_to_string();
+                            let val_ty = val_ty_tmp.to_string_lossy();
+                            eprintln!("assign index storing value type: {}", val_ty);
                             self.builder
                                 .build_store(elem_ptr, value_result)
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -6201,6 +6297,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if !handled_special {
                     // Fallback to simple formatted printing for this argument
                     let value = self.generate_expression(&arg.value)?;
+                    let is_unsigned_arg = self.expression_is_unsigned(&arg.value);
                     // Detect string arguments: string literal or identifier typed as string in semantics
                     let is_string_arg = match &arg.value {
                         Expression::Literal(Literal::String(_)) => true,
@@ -6258,10 +6355,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                         let iv = value.into_int_value();
                         let bw = iv.get_type().get_bit_width();
                         let widened: BasicValueEnum<'ctx> = if bw < 64 {
-                            self.builder
-                                .build_int_s_extend(iv, self.context.i64_type(), "ext")
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?
-                                .into()
+                            if is_unsigned_arg {
+                                self.builder
+                                    .build_int_z_extend(iv, self.context.i64_type(), "ext")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                    .into()
+                            } else {
+                                self.builder
+                                    .build_int_s_extend(iv, self.context.i64_type(), "ext")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                    .into()
+                            }
                         } else {
                             iv.into()
                         };
@@ -6287,6 +6391,32 @@ impl<'ctx> CodeGenerator<'ctx> {
                             .build_call(printf_fn, &argsm, "printf_call")
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     } else if value.is_pointer_value() {
+                        let ty_tmp = value.get_type().print_to_string();
+                        let ty_str = ty_tmp.to_string_lossy();
+                        eprintln!("println pointer value type: {}", ty_str);
+                        if let Expression::Identifier(name) = &arg.value {
+                            if let Some(ty) = self.local_types.get(name) {
+                                eprintln!(
+                                    "println pointer arg {} local type {:?}, is_string_arg={}",
+                                    name,
+                                    ty,
+                                    is_string_arg
+                                );
+                            } else if let Some(ty) = self.semantic.get_variable_type(name) {
+                                eprintln!(
+                                    "println pointer arg {} semantic type {:?}, is_string_arg={}",
+                                    name,
+                                    ty,
+                                    is_string_arg
+                                );
+                            } else {
+                                eprintln!(
+                                    "println pointer arg {} type <unknown>, is_string_arg={}",
+                                    name,
+                                    is_string_arg
+                                );
+                            }
+                        }
                         let mut did_matrix = false;
                         // If this is a matrix-typed identifier, prefer special handling
                         if let Expression::Identifier(name) = &arg.value {
@@ -6989,6 +7119,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     name: "i64".to_string(),
                                     type_args: vec![],
                                 });
+                            self.record_unsigned_binding(&p_name, &ast_ty);
                             self.local_types.insert(p_name, ast_ty);
                         }
 
@@ -7224,6 +7355,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         // Restore state for next
                         self.variables = prev_vars;
                         self.local_types.clear();
+                        self.unsigned_variables.clear();
                         self.current_function = prev_fn;
                     } else if let ConstValue::SystemDef(system_def) = value {
                         // Handle system function body generation
@@ -7323,6 +7455,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         // Restore context
                         self.variables = prev_vars;
                         self.local_types.clear();
+                        self.unsigned_variables.clear();
                         self.current_function = prev_fn;
                     }
                 }
@@ -7416,6 +7549,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             name: "i64".to_string(),
                                             type_args: vec![],
                                         });
+                                    self.record_unsigned_binding(&p_name, &ast_ty);
                                     self.local_types.insert(p_name, ast_ty);
                                 }
 
@@ -7480,6 +7614,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 // Restore state for next
                                 self.variables = prev_vars;
                                 self.local_types.clear();
+                                self.unsigned_variables.clear();
                                 self.current_function = prev_fn;
                                 self.current_impl_struct = prev_impl_struct;
                             }

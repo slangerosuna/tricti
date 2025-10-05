@@ -2475,8 +2475,8 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             // Allow any pair of numeric scalar types to be used together; codegen will unify bit-widths.
             let na = a.as_str();
             let nb = b.as_str();
-            let is_num_a = matches!(na, "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64");
-            let is_num_b = matches!(nb, "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64");
+            let is_num_a = is_numeric_identifier_name(na);
+            let is_num_b = is_numeric_identifier_name(nb);
             if is_num_a && is_num_b {
                 return true;
             }
@@ -2725,17 +2725,26 @@ fn analyze_pattern(
     }
 }
 
+const NUMERIC_PROMOTION_ORDER: [&str; 10] = [
+    "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "f32", "f64",
+];
+
+fn is_numeric_identifier_name(name: &str) -> bool {
+    NUMERIC_PROMOTION_ORDER.iter().any(|n| *n == name)
+}
+
 fn numeric_type_name(t: &Type) -> Option<&str> {
     if let Type::Identifier { name, .. } = t {
         let as_str = name.as_str();
-        if matches!(
-            as_str,
-            "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64"
-        ) {
+        if is_numeric_identifier_name(as_str) {
             return Some(as_str);
         }
     }
     None
+}
+
+fn numeric_rank(name: &str) -> Option<usize> {
+    NUMERIC_PROMOTION_ORDER.iter().position(|n| *n == name)
 }
 
 fn promote_numeric_types(left: &Type, right: &Type) -> Type {
@@ -2744,22 +2753,9 @@ fn promote_numeric_types(left: &Type, right: &Type) -> Type {
 
     match (left_name, right_name) {
         (Some(ln), Some(rn)) => {
-            let target = if ln == "f64" || rn == "f64" {
-                "f64"
-            } else if ln == "f32" || rn == "f32" {
-                "f32"
-            } else if ln == "i64" || rn == "i64" {
-                "i64"
-            } else if ln == "u64" || rn == "u64" {
-                "u64"
-            } else if ln == "i32" || rn == "i32" {
-                "i32"
-            } else if ln == "u32" || rn == "u32" {
-                "u32"
-            } else {
-                "u16"
-            };
-
+            let l_rank = numeric_rank(ln).unwrap_or(0);
+            let r_rank = numeric_rank(rn).unwrap_or(0);
+            let target = if l_rank >= r_rank { ln } else { rn };
             Type::Identifier {
                 name: target.to_string(),
                 type_args: vec![],
@@ -2773,12 +2769,7 @@ fn promote_numeric_types(left: &Type, right: &Type) -> Type {
 
 fn is_numeric_type(t: &Type) -> bool {
     match t {
-        Type::Identifier { name, type_args: _ } => {
-            matches!(
-                name.as_str(),
-                "i32" | "i64" | "f32" | "f64" | "u16" | "u32" | "u64"
-            )
-        }
+        Type::Identifier { name, .. } => is_numeric_identifier_name(name.as_str()),
         _ => false,
     }
 }

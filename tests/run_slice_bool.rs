@@ -9,18 +9,32 @@ fn clang_available() -> bool {
 }
 
 #[test]
-fn iterate_slice_bool() {
+fn iterate_vec_bool() {
     if !clang_available() {
         eprintln!("clang not found; skipping");
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
-        v: [bool; 5] := [true, false, true, true, false]
-        s: slice_bool := slice_bool_from(v, 5)
+        vec_get_i64 :: (v: *Vec_i64, idx: i64) -> i64 => {
+                if ~(idx >= 0) { panic("vec index negative") }
+                if idx >= vec_len_i64(v) { panic("vec index out of bounds") }
+                v.ptr[idx]
+        }
+
+        v := new_vec_i64()
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 0)
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 0)
+
         count := 0
-        for b in s {
-            if b { count = count + 1 }
+        len := vec_len_i64(&v)
+        for i in 0:len {
+            if vec_get_i64(&v, i) == 1 {
+                count = count + 1
+            }
         }
         println(count)
     "#;
@@ -56,19 +70,32 @@ fn iterate_slice_bool() {
 }
 
 #[test]
-fn slice_bool_helpers() {
+fn vec_bool_helpers() {
     if !clang_available() {
         eprintln!("clang not found; skipping");
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
     let user = r#"
-        v: [bool; 4] := [true, true, false, false]
-        s: slice_bool := slice_bool_from(v, 4)
-        println(slice_len_bool(s))
-        println(slice_is_empty_bool(s))
-        println(slice_get_bool(s, 0))
-        println(slice_get_bool(s, 2))
+        vec_get_i64 :: (v: *Vec_i64, idx: i64) -> i64 => {
+                if ~(idx >= 0) { panic("vec index negative") }
+                if idx >= vec_len_i64(v) { panic("vec index out of bounds") }
+                v.ptr[idx]
+        }
+
+        vec_is_empty_i64 :: (v: *Vec_i64) -> bool => {
+                vec_len_i64(v) == 0
+        }
+
+        v := new_vec_i64()
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 1)
+        vec_push_i64(&v, 0)
+        vec_push_i64(&v, 0)
+        println(vec_len_i64(&v))
+        println(vec_is_empty_i64(&v))
+        println(vec_get_i64(&v, 0) == 1)
+        println(vec_get_i64(&v, 2) == 1)
     "#;
     let src = format!("{}\n{}", prelude, user);
 
