@@ -625,7 +625,7 @@ release_resource_for_task :: (
     task_id: u64,
     resource_name: string,
 ) -> none => {
-    lease_idx := array_find_index(runtime.resource_leases, (lease) => lease.task_id == task_id && lease.resource_name == resource_name)
+    lease_idx := array_find_index(runtime.resource_leases, (lease) => lease.task_id == task_id and lease.resource_name == resource_name)
     match lease_idx {
         some idx => {
             runtime.resource_leases = array_remove_at(runtime.resource_leases, idx)
@@ -656,7 +656,7 @@ release_task_resources :: (
 ) -> none => {
     for i in 0:task.resource_handles.len() {
         handle := task.resource_handles[i]
-        runtime.resource_leases = array_remove_where(runtime.resource_leases, (lease) => lease.task_id == task.id && lease.resource_name == handle.resource_name)
+    runtime.resource_leases = array_remove_where(runtime.resource_leases, (lease) => lease.task_id == task.id and lease.resource_name == handle.resource_name)
         wake_waiters_for_resource(runtime, handle.resource_name)
     }
 }
@@ -702,7 +702,7 @@ try_acquire_resource :: (
 
     if conflict {
         if enqueue_on_conflict {
-            existing_waiter := array_find_index(runtime.resource_waiters, (waiter) => waiter.task_id == task_id && waiter.resource_name == resource_name)
+            existing_waiter := array_find_index(runtime.resource_waiters, (waiter) => waiter.task_id == task_id and waiter.resource_name == resource_name)
             match existing_waiter {
                 some _ => {}
                 none => {

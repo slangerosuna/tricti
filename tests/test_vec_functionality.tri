@@ -72,7 +72,7 @@ test_vec_pop :: () -> bool => {
 test_vec_is_empty :: () -> bool => {
     empty_vec := Vec_clear(42);  # becomes 0
     non_empty_vec := Vec_new();  # 42
-    Vec_is_empty(empty_vec) && !Vec_is_empty(non_empty_vec)
+    Vec_is_empty(empty_vec) and !Vec_is_empty(non_empty_vec)
 }
 
 test_vec_clear :: () -> bool => {
@@ -90,7 +90,7 @@ test_vec_operations_chain :: () -> bool => {
     vec := Vec_clear(vec);  # becomes 0
     is_empty := Vec_is_empty(vec);  # should be true
 
-    len == 52 && value == 55 && is_empty
+    len == 52 and value == 55 and is_empty
 }
 
 # Main test runner

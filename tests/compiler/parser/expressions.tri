@@ -10,10 +10,10 @@ test_expr_nested_parens :: () -> i64 => { (((10 + 20) * 3) - 5) }
 test_expr_complex_arith :: () -> i64 => { ((10 + 20) * (30 - 15)) / 5 }
 
 # Test: nested logical expressions
-test_expr_nested_logical :: () -> bool => { ((true && false) || (true && true)) }
+test_expr_nested_logical :: () -> bool => { ((true and false) or (true and true)) }
 
 # Test: nested comparison
-test_expr_nested_cmp :: () -> bool => { (((5 + 5) == 10) && ((3 * 3) == 9)) }
+test_expr_nested_cmp :: () -> bool => { (((5 + 5) == 10) and ((3 * 3) == 9)) }
 
 # Test: nested function calls
 test_expr_nested_calls :: () => { outer(inner(value)) }
@@ -200,7 +200,7 @@ test_expr_mixed_arith_call :: () => { compute() + calculate() }
 test_expr_mixed_cmp_field :: () -> bool => { (obj.value > 10) }
 
 # Test: logical with calls
-test_expr_mixed_logical_call :: () -> bool => { check() && verify() }
+test_expr_mixed_logical_call :: () -> bool => { check() and verify() }
 
 # Test: nested mixed expression
 test_expr_mixed_nested :: () => { obj.get_data()[0].items.len() }

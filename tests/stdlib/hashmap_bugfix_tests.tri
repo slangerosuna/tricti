@@ -17,8 +17,8 @@ test_hash_i64_different_values :: () -> bool => {
     h4 := hash_i64(-50)
     
     # All hashes should be different (FNV-1a should produce distinct hashes)
-    result := h1 ~= h2 && h1 ~= h3 && h1 ~= h4 && 
-              h2 ~= h3 && h2 ~= h4 && h3 ~= h4
+    result := h1 ~= h2 and h1 ~= h3 and h1 ~= h4 and 
+              h2 ~= h3 and h2 ~= h4 and h3 ~= h4
     result
 }
 
@@ -27,7 +27,7 @@ test_hash_i64_zero :: () -> bool => {
     h2 := hash_i64(1)
     
     # Zero should produce a distinct hash
-    result := h1 ~= h2 && h1 ~= 0
+    result := h1 ~= h2 and h1 ~= 0
     result
 }
 
@@ -37,7 +37,7 @@ test_hash_u64_different_values :: () -> bool => {
     h3 := hash_u64(1000)
     
     # All hashes should be different
-    result := h1 ~= h2 && h1 ~= h3 && h2 ~= h3
+    result := h1 ~= h2 and h1 ~= h3 and h2 ~= h3
     result
 }
 
@@ -56,7 +56,7 @@ test_hash_consistency :: () -> bool => {
     h2 := hash_i64(42)
     h3 := hash_i64(42)
     
-    result := h1 == h2 && h2 == h3
+    result := h1 == h2 and h2 == h3
     result
 }
 
@@ -96,9 +96,9 @@ test_collision_get_correct_values :: () -> bool => {
     v2 := HashMap::get::<i64, i64>(&map, 20)
     v3 := HashMap::get::<i64, i64>(&map, 30)
     
-    result := v1 ~= (0 as *i64) && v1[0] == 100 &&
-              v2 ~= (0 as *i64) && v2[0] == 200 &&
-              v3 ~= (0 as *i64) && v3[0] == 300
+    result := v1 ~= (0 as *i64) and v1[0] == 100 and
+              v2 ~= (0 as *i64) and v2[0] == 200 and
+              v3 ~= (0 as *i64) and v3[0] == 300
     HashMap::destroy::<i64, i64>(&map)
     result
 }
@@ -119,10 +119,10 @@ test_collision_remove_correct_key :: () -> bool => {
     v2 := HashMap::get::<i64, i64>(&map, 2)
     v3 := HashMap::get::<i64, i64>(&map, 3)
     
-    result := removed &&
-              v1 ~= (0 as *i64) && v1[0] == 10 &&
-              v2 == (0 as *i64) &&
-              v3 ~= (0 as *i64) && v3[0] == 30 &&
+    result := removed and
+              v1 ~= (0 as *i64) and v1[0] == 10 and
+              v2 == (0 as *i64) and
+              v3 ~= (0 as *i64) and v3[0] == 30 and
               HashMap::len::<i64, i64>(&map) == 2
     HashMap::destroy::<i64, i64>(&map)
     result
@@ -144,9 +144,9 @@ test_collision_update_correct_key :: () -> bool => {
     v6 := HashMap::get::<i64, i64>(&map, 6)
     v7 := HashMap::get::<i64, i64>(&map, 7)
     
-    result := v5 ~= (0 as *i64) && v5[0] == 50 &&
-              v6 ~= (0 as *i64) && v6[0] == 600 &&
-              v7 ~= (0 as *i64) && v7[0] == 70 &&
+    result := v5 ~= (0 as *i64) and v5[0] == 50 and
+              v6 ~= (0 as *i64) and v6[0] == 600 and
+              v7 ~= (0 as *i64) and v7[0] == 70 and
               HashMap::len::<i64, i64>(&map) == 3
     HashMap::destroy::<i64, i64>(&map)
     result
@@ -164,12 +164,12 @@ test_collision_many_keys :: () -> bool => {
     all_correct := true
     for i in 0:20 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
-        if val == (0 as *i64) || val[0] ~= (i * 10) as i64 {
+    if val == (0 as *i64) or val[0] ~= (i * 10) as i64 {
             all_correct = false
         }
     }
     
-    result := all_correct && HashMap::len::<i64, i64>(&map) == 20
+    result := all_correct and HashMap::len::<i64, i64>(&map) == 20
     HashMap::destroy::<i64, i64>(&map)
     result
 }
@@ -182,10 +182,10 @@ test_collision_contains_key_accuracy :: () -> bool => {
     HashMap::insert::<i64, i64>(&map, 12, 120)
     
     # Check that contains_key is accurate for each key
-    result := HashMap::contains_key::<i64, i64>(&map, 10) &&
-              HashMap::contains_key::<i64, i64>(&map, 11) &&
-              HashMap::contains_key::<i64, i64>(&map, 12) &&
-              !HashMap::contains_key::<i64, i64>(&map, 13) &&
+    result := HashMap::contains_key::<i64, i64>(&map, 10) and
+              HashMap::contains_key::<i64, i64>(&map, 11) and
+              HashMap::contains_key::<i64, i64>(&map, 12) and
+              !HashMap::contains_key::<i64, i64>(&map, 13) and
               !HashMap::contains_key::<i64, i64>(&map, 9)
     HashMap::destroy::<i64, i64>(&map)
     result
@@ -205,7 +205,7 @@ test_collision_sequential_values :: () -> bool => {
     # Verify retrieval
     for i in 100:110 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
-        if val == (0 as *i64) || val[0] ~= i as i64 {
+    if val == (0 as *i64) or val[0] ~= i as i64 {
             result = false
         }
     }
@@ -228,10 +228,10 @@ test_collision_negative_positive_keys :: () -> bool => {
     v3 := HashMap::get::<i64, i64>(&map, -10)
     v4 := HashMap::get::<i64, i64>(&map, 10)
     
-    result := v1 ~= (0 as *i64) && v1[0] == 50 &&
-              v2 ~= (0 as *i64) && v2[0] == 55 &&
-              v3 ~= (0 as *i64) && v3[0] == 100 &&
-              v4 ~= (0 as *i64) && v4[0] == 110
+    result := v1 ~= (0 as *i64) and v1[0] == 50 and
+              v2 ~= (0 as *i64) and v2[0] == 55 and
+              v3 ~= (0 as *i64) and v3[0] == 100 and
+              v4 ~= (0 as *i64) and v4[0] == 110
     HashMap::destroy::<i64, i64>(&map)
     result
 }
@@ -248,9 +248,9 @@ test_collision_zero_and_nearby :: () -> bool => {
     v2 := HashMap::get::<i64, i64>(&map, 0)
     v3 := HashMap::get::<i64, i64>(&map, 1)
     
-    result := v1 ~= (0 as *i64) && v1[0] == 10 &&
-              v2 ~= (0 as *i64) && v2[0] == 20 &&
-              v3 ~= (0 as *i64) && v3[0] == 30
+    result := v1 ~= (0 as *i64) and v1[0] == 10 and
+              v2 ~= (0 as *i64) and v2[0] == 20 and
+              v3 ~= (0 as *i64) and v3[0] == 30
     HashMap::destroy::<i64, i64>(&map)
     result
 }
@@ -269,10 +269,10 @@ test_collision_large_values :: () -> bool => {
     v3 := HashMap::get::<i64, i64>(&map, 1000002)
     v4 := HashMap::get::<i64, i64>(&map, 2000000)
     
-    result := v1 ~= (0 as *i64) && v1[0] == 1 &&
-              v2 ~= (0 as *i64) && v2[0] == 2 &&
-              v3 ~= (0 as *i64) && v3[0] == 3 &&
-              v4 ~= (0 as *i64) && v4[0] == 4
+    result := v1 ~= (0 as *i64) and v1[0] == 1 and
+              v2 ~= (0 as *i64) and v2[0] == 2 and
+              v3 ~= (0 as *i64) and v3[0] == 3 and
+              v4 ~= (0 as *i64) and v4[0] == 4
     HashMap::destroy::<i64, i64>(&map)
     result
 }
@@ -294,8 +294,8 @@ test_tombstone_reuse_basic :: () -> bool => {
     # Value should be retrievable
     val := HashMap::get::<i64, i64>(&map, 2)
     
-    result := final_cap == initial_cap &&
-              val ~= (0 as *i64) && val[0] == 20
+    result := final_cap == initial_cap and
+              val ~= (0 as *i64) and val[0] == 20
     HashMap::destroy::<i64, i64>(&map)
     result
 }
@@ -348,10 +348,10 @@ test_tombstone_no_corruption :: () -> bool => {
     v3 := HashMap::get::<i64, i64>(&map, 3)
     v4 := HashMap::get::<i64, i64>(&map, 4)
     
-    result := v1 ~= (0 as *i64) && v1[0] == 10 &&
-              v2 == (0 as *i64) &&
-              v3 ~= (0 as *i64) && v3[0] == 30 &&
-              v4 ~= (0 as *i64) && v4[0] == 40
+    result := v1 ~= (0 as *i64) and v1[0] == 10 and
+              v2 == (0 as *i64) and
+              v3 ~= (0 as *i64) and v3[0] == 30 and
+              v4 ~= (0 as *i64) and v4[0] == 40
     HashMap::destroy::<i64, i64>(&map)
     result
 }
@@ -373,12 +373,12 @@ test_tombstone_after_resize :: () -> bool => {
     all_correct := true
     for i in 5:20 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
-        if val == (0 as *i64) || val[0] ~= (i * 10) as i64 {
+    if val == (0 as *i64) or val[0] ~= (i * 10) as i64 {
             all_correct = false
         }
     }
     
-    result := all_correct && HashMap::len::<i64, i64>(&map) == 15
+    result := all_correct and HashMap::len::<i64, i64>(&map) == 15
     HashMap::destroy::<i64, i64>(&map)
     result
 }
@@ -393,8 +393,8 @@ test_tombstone_reinsertion_same_key :: () -> bool => {
     
     val := HashMap::get::<i64, i64>(&map, 42)
     
-    result := removed &&
-              val ~= (0 as *i64) && val[0] == 200 &&
+    result := removed and
+              val ~= (0 as *i64) and val[0] == 200 and
               HashMap::len::<i64, i64>(&map) == 1
     HashMap::destroy::<i64, i64>(&map)
     result
@@ -415,9 +415,9 @@ test_bounds_key_at_valid :: () -> bool => {
     k2 := HashMap::key_at::<i64, i64>(&map, 2)
     
     # Should get back one of our keys (order may vary)
-    result := (k0 == 1 || k0 == 2 || k0 == 3) &&
-              (k1 == 1 || k1 == 2 || k1 == 3) &&
-              (k2 == 1 || k2 == 2 || k2 == 3)
+    result := (k0 == 1 or k0 == 2 or k0 == 3) and
+              (k1 == 1 or k1 == 2 or k1 == 3) and
+              (k2 == 1 or k2 == 2 or k2 == 3)
     HashMap::destroy::<i64, i64>(&map)
     result
 }
@@ -433,8 +433,8 @@ test_bounds_value_at_valid :: () -> bool => {
     v1 := HashMap::value_at::<i64, i64>(&map, 1)
     
     # Should get back one of our values
-    result := (v0 == 10 || v0 == 20) &&
-              (v1 == 10 || v1 == 20)
+    result := (v0 == 10 or v0 == 20) and
+              (v1 == 10 or v1 == 20)
     HashMap::destroy::<i64, i64>(&map)
     result
 }

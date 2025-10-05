@@ -337,10 +337,10 @@ test_bool_comparison :: () -> bool => { (true == true) }
 test_bool_negation :: () -> bool => { !true }
 
 # Test: bool and
-test_bool_and :: () -> bool => { true && false }
+test_bool_and :: () -> bool => { true and false }
 
 # Test: bool or
-test_bool_or :: () -> bool => { true || false }
+test_bool_or :: () -> bool => { true or false }
 
 # Test: bool in match
 test_bool_match :: () -> i64 => {

@@ -2,6 +2,7 @@
 # Provides common data structures for storing and manipulating collections of values
 
 use prelude
+use core::traits
 
 # =============================================================================
 # VEC - Dynamic length array (should have syntax sugar to allow writing Vec<T> as [T])
@@ -63,7 +64,7 @@ impl<T> Vec<T> {
         if capacity == self.capacity { ret }
 
         # Workaround for parser < bug
-        if self.len >= capacity && capacity >= 0 {
+    if self.len >= capacity and capacity >= 0 {
             for i in capacity:self.len {
                 unsafe {
                     drop(*(self.data + i))
@@ -147,7 +148,7 @@ impl<T> Vec<T> {
 }
 
 impl Drop for Vec<T> {
-    free :: (self) => {
+    drop :: (*self) => {
         if self.capacity == 0 { ret }
 
         # drop all elements
@@ -155,8 +156,8 @@ impl Drop for Vec<T> {
             unsafe { drop(*(self.data + i)) }
         }
 
-    unsafe { dealloc(self.data as *raw u8) }
-    self.data = unsafe { 0 as *raw T }
+        unsafe { dealloc(self.data as *raw u8) }
+        self.data = unsafe { 0 as *raw T }
         self.len = 0
         self.capacity = 0
     }
@@ -640,7 +641,7 @@ HashMap_u64_u64_insert :: (m: *HashMap_u64_u64, key: u64, value: u64) => {
         probe_idx := (idx + i) % m.capacity
         entry := unsafe { m.buckets + probe_idx }
         
-        if ~entry.occupied || entry.key == key {
+    if ~entry.occupied or entry.key == key {
             was_occupied := entry.occupied
             entry.key = key
             entry.value = value
@@ -662,7 +663,7 @@ HashMap_u64_u64_get :: (m: *HashMap_u64_u64, key: u64) -> u64 => {
         probe_idx := (idx + i) % m.capacity
         entry := unsafe { m.buckets + probe_idx }
         
-        if entry.occupied && entry.key == key {
+    if entry.occupied and entry.key == key {
             ret entry.value
         }
         if ~entry.occupied {
@@ -681,7 +682,7 @@ HashMap_u64_u64_remove :: (m: *HashMap_u64_u64, key: u64) -> bool => {
         probe_idx := (idx + i) % m.capacity
         entry := unsafe { m.buckets + probe_idx }
         
-        if entry.occupied && entry.key == key {
+    if entry.occupied and entry.key == key {
             entry.occupied = false
             m.size = m.size - 1
             ret true
@@ -702,7 +703,7 @@ HashMap_u64_u64_has :: (m: *HashMap_u64_u64, key: u64) -> bool => {
         probe_idx := (idx + i) % m.capacity
         entry := unsafe { m.buckets + probe_idx }
         
-        if entry.occupied && entry.key == key {
+    if entry.occupied and entry.key == key {
             ret true
         }
         if ~entry.occupied {

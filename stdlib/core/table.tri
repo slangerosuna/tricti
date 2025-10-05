@@ -206,7 +206,7 @@ impl Table {
         # Find the latest version visible to this transaction
         for version in row.versions.iter().rev() {
             if version.created_at <= tx_log.read_snapshot {
-                if version.deleted_at.is_none() || version.deleted_at? > tx_log.read_snapshot {
+                if version.deleted_at.is_none() or version.deleted_at? > tx_log.read_snapshot {
                     ret ok some version.row_data
                 }
             }

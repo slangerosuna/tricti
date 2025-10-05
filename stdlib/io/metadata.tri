@@ -41,11 +41,11 @@ impl Metadata {
         size_ptr := (&stat_buf[48]) as *u64
         size := *size_ptr
         
-        file_type := mode & S_IFMT
+    file_type := mode and S_IFMT
         is_file := file_type == S_IFREG
         is_dir := file_type == S_IFDIR
         
-        permissions := mode & 511u32
+    permissions := mode and 511u32
         
         atime_ptr := (&stat_buf[72]) as *i64
         atime := *atime_ptr
@@ -104,17 +104,17 @@ impl Metadata {
     
     # Check if readable
     is_readable :: (meta: &Metadata) -> bool => {
-        (meta.permissions & S_IRUSR) != 0
+    (meta.permissions and S_IRUSR) != 0
     }
     
     # Check if writable
     is_writable :: (meta: &Metadata) -> bool => {
-        (meta.permissions & S_IWUSR) != 0
+    (meta.permissions and S_IWUSR) != 0
     }
     
     # Check if executable
     is_executable :: (meta: &Metadata) -> bool => {
-        (meta.permissions & S_IXUSR) != 0
+    (meta.permissions and S_IXUSR) != 0
     }
 }
 

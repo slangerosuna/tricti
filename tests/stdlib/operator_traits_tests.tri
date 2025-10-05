@@ -467,7 +467,7 @@ test_string_add_associativity :: () -> bool => {
     right := String::clone(&a).add(bc)
     
     expected := String::from_cstr("ABC" as *u8)
-    String::equals(&left, &expected) && String::equals(&right, &expected)
+    String::equals(&left, &expected) and String::equals(&right, &expected)
 }
 
 test_string_mul_distributivity :: () -> bool => {
@@ -672,7 +672,7 @@ test_f64_div_precision :: () -> bool => {
     a := 1.0
     b := 3.0
     result := a.div(b)
-    result > 0.33 && result < 0.34
+    result > 0.33 and result < 0.34
 }
 
 test_i64_shl_large_shift :: () -> bool => {
@@ -707,7 +707,7 @@ test_bool_all_combinations :: () -> bool => {
     check4 := f.bitand(f) == false
     check5 := t.bitor(f) == true
     
-    check1 && check2 && check3 && check4 && check5
+    check1 and check2 and check3 and check4 and check5
 }
 
 # =============================================================================

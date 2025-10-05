@@ -124,10 +124,10 @@ db_entry = { identifier ~ (":" ~ identifier)? }
 expression    = { or }
 expression_no_block    = { or_no_block }
 
-op_or         = { "or" | "xor" | "||" }
+op_or         = { "or" | "xor" }
 or            = { and ~ (WHITESPACE* ~ op_or ~ WHITESPACE* ~ and)* }
 or_no_block   = { and_no_block ~ (WHITESPACE* ~ op_or ~ WHITESPACE* ~ and_no_block)* }
-op_and        = { "and" | "&&" }
+op_and        = { "and" }
 and           = { comparison ~ (WHITESPACE* ~ op_and ~ WHITESPACE* ~ comparison)* }
 and_no_block  = { comparison_no_block ~ (WHITESPACE* ~ op_and ~ WHITESPACE* ~ comparison_no_block)* }
 op_cmp        = { "==" | "~=" | "<=" | ">=" | ">" | "<" }
@@ -144,7 +144,7 @@ multiplication= { with_range ~ (WHITESPACE* ~ op_mul ~ WHITESPACE* ~ with_range)
 multiplication_no_block = { with_range_no_block ~ (WHITESPACE* ~ op_mul ~ WHITESPACE* ~ with_range_no_block)* }
 with_range    = { unary ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary)?)? }
 with_range_no_block = { unary_no_block ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary_no_block ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary_no_block)?)? }
-op_unary      = { "-" | "~" | "*" | "&mut" | "&" | "!" | "some" }
+op_unary      = { "-" | "~" | "*" | "&mut" | "&" | "!" | "some" | "ok" | "err" | "not" 2}
 unary         = { op_unary? ~ cast_expr }
 unary_no_block = { op_unary? ~ cast_expr_no_block }
 cast_expr     = { post_fix ~ (WHITESPACE* ~ cast_tail)* }
@@ -200,7 +200,7 @@ function      = { attributes? ~ "async"? ~ type_params? ~ "(" ~ function_params?
 function_params = { (function_param | ("self" | "&self" | "&mut self" | "*self")) ~ ("," ~ function_param)* ~ ","? }
 function_param = { identifier ~ (":" ~ type)? ~ ("=" ~ expression)? }
 return_type   = { "->" ~ type}
-function_body = { expression | "{" ~ statement* ~ "}" }
+function_body = { block | expression }
 
 assignment_op = { "=" | "*=" | "/=" | "+=" | "-=" | ".*=" | "./=" | "\\=" }
 assignment    = { expression ~ WHITESPACE* ~ assignment_op ~ WHITESPACE* ~ expression }
@@ -219,11 +219,13 @@ trait_items   = _{ (trait_assoc | trait_method)* }
 trait_assoc   = { identifier ~ ":" ~ "type" ~ ","? }
 trait_method  = { identifier ~ ":" ~ function_type ~ ","? }
 
-pointer       = { "&mut" ~ WHITESPACE* ~ type | "&" ~ WHITESPACE* ~ type | "*raw" ~ WHITESPACE+ ~ type | "*" ~ WHITESPACE* ~ type }
+pointer       = { "&mut" ~ type | "&" ~ type | "*raw" ~ type | "*" ~ type }
 optional      = { "?" ~ type }
 result        = { "!" ~ type }
 
-function_type = { "(" ~ type? ~ ("," ~ type)* ~ ","? ~ ")" ~ return_type ~ !"=>" }
+function_type_param = { (identifier ~ ":" ~ WHITESPACE*)? ~ type }
+function_type_params = { function_type_param ~ ("," ~ WHITESPACE* ~ function_type_param)* ~ ","? }
+function_type = { "(" ~ WHITESPACE* ~ function_type_params? ~ ")" ~ return_type ~ !"=>" }
 
 enum          = { "enum" ~ "{" ~ (enum_variant ~ ("," ~ enum_variant)*)? ~ ","? ~ "}" }
 enum_variant = { identifier ~ (":" ~ type)? }

@@ -94,12 +94,12 @@ impl HashMap<K, V>
             entry := &self.buckets[index]
             
             # Track first tombstone for potential reuse
-            if entry.tombstone && ~entry.occupied && first_tombstone == self.capacity {
+            if entry.tombstone and ~entry.occupied and first_tombstone == self.capacity {
                 first_tombstone = index
             }
             
             # Empty slot (not occupied, not tombstone) - end of probe sequence
-            if ~entry.occupied && ~entry.tombstone {
+            if ~entry.occupied and ~entry.tombstone {
                 # Return first tombstone if we found one, otherwise this empty slot
                 if first_tombstone ~= self.capacity {
                     ret first_tombstone
@@ -108,7 +108,7 @@ impl HashMap<K, V>
             }
             
             # Found occupied slot with matching hash - check key equality
-            if entry.occupied && entry.hash == hash {
+            if entry.occupied and entry.hash == hash {
                 if Eq::eq(&entry.key, key) {
                     ret index
                 }
@@ -235,12 +235,12 @@ impl HashMap<K, V>
             entry := &self.buckets[index]
 
             # Empty slot - key not found
-            if ~entry.occupied && ~entry.tombstone {
+            if ~entry.occupied and ~entry.tombstone {
                 ret none
             }
 
             # Check both hash AND key equality
-            if entry.occupied && entry.hash == hash {
+            if entry.occupied and entry.hash == hash {
                 if Eq::eq(&entry.key, &key) {
                     ret some &entry.value
                 }
@@ -271,11 +271,11 @@ impl HashMap<K, V>
             entry := &mut self.buckets[index]
 
             # Empty slot - key not found
-            if ~entry.occupied && ~entry.tombstone {
+            if ~entry.occupied and ~entry.tombstone {
                 ret none
             }
 
-            if entry.occupied && entry.hash == hash {
+            if entry.occupied and entry.hash == hash {
                 if Eq::eq(&entry.key, &key) {
                     ret some &mut entry.value
                 }
@@ -319,12 +319,12 @@ impl HashMap<K, V>
             entry := &mut self.buckets[index]
             
             # Empty slot - key not found
-            if ~entry.occupied && ~entry.tombstone {
+            if ~entry.occupied and ~entry.tombstone {
                 ret false
             }
             
             # Check both hash AND key equality
-            if entry.occupied && entry.hash == hash {
+            if entry.occupied and entry.hash == hash {
                 if Eq::eq(&entry.key, &key) {
                     entry.occupied = false
                     entry.tombstone = true

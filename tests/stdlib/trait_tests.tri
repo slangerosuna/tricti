@@ -22,7 +22,7 @@ test_hash_i64 :: () -> bool => {
     # Different values should (likely) have different hash
     result2 := hash1 ~= hash3
     
-    result1 && result2
+    result1 and result2
 }
 
 # Test Hash trait for u64
@@ -35,7 +35,7 @@ test_hash_u64 :: () -> bool => {
     hash2 := Hash::hash(&val2)
     hash3 := Hash::hash(&val3)
     
-    hash1 == hash2 && hash1 ~= hash3
+    hash1 == hash2 and hash1 ~= hash3
 }
 
 # Test Hash trait for bool
@@ -48,7 +48,7 @@ test_hash_bool :: () -> bool => {
     hash_t2 := Hash::hash(&t2)
     hash_f1 := Hash::hash(&f1)
     
-    hash_t1 == hash_t2 && hash_t1 ~= hash_f1
+    hash_t1 == hash_t2 and hash_t1 ~= hash_f1
 }
 
 # Test Hash trait for String
@@ -61,7 +61,7 @@ test_hash_string :: () -> bool => {
     hash2 := Hash::hash(&s2)
     hash3 := Hash::hash(&s3)
     
-    hash1 == hash2 && hash1 ~= hash3
+    hash1 == hash2 and hash1 ~= hash3
 }
 
 # Test Eq trait for i64
@@ -73,7 +73,7 @@ test_eq_i64 :: () -> bool => {
     eq1 := Eq::eq(&val1, &val2)
     eq2 := Eq::eq(&val1, &val3)
     
-    eq1 && !eq2
+    eq1 and !eq2
 }
 
 # Test Eq trait for u64
@@ -85,7 +85,7 @@ test_eq_u64 :: () -> bool => {
     eq1 := Eq::eq(&val1, &val2)
     eq2 := Eq::eq(&val1, &val3)
     
-    eq1 && !eq2
+    eq1 and !eq2
 }
 
 # Test Eq trait for bool
@@ -97,7 +97,7 @@ test_eq_bool :: () -> bool => {
     eq1 := Eq::eq(&t1, &t2)
     eq2 := Eq::eq(&t1, &f1)
     
-    eq1 && !eq2
+    eq1 and !eq2
 }
 
 # Test Eq trait for String
@@ -109,7 +109,7 @@ test_eq_string :: () -> bool => {
     eq1 := Eq::eq(&s1, &s2)
     eq2 := Eq::eq(&s1, &s3)
     
-    eq1 && !eq2
+    eq1 and !eq2
 }
 
 # Test HashMap uses Hash trait properly
@@ -126,9 +126,9 @@ test_hashmap_uses_hash_trait :: () -> bool => {
     v2 := HashMap::get::<i64, i64>(&map, 2)
     v3 := HashMap::get::<i64, i64>(&map, 3)
     
-    result := v1 ~= (0 as *i64) && v1[0] == 100 &&
-              v2 ~= (0 as *i64) && v2[0] == 200 &&
-              v3 ~= (0 as *i64) && v3[0] == 300
+    result := v1 ~= (0 as *i64) and v1[0] == 100 and
+              v2 ~= (0 as *i64) and v2[0] == 200 and
+              v3 ~= (0 as *i64) and v3[0] == 300
     
     HashMap::destroy::<i64, i64>(&map)
     result
@@ -147,7 +147,7 @@ test_hashmap_collision_handling :: () -> bool => {
     all_correct := true
     for i in 0:100 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
-        if val == (0 as *i64) || val[0] ~= (i * 10) as i64 {
+    if val == (0 as *i64) or val[0] ~= (i * 10) as i64 {
             all_correct = false
             break
         }
@@ -173,9 +173,9 @@ test_hashmap_string_keys_traits :: () -> bool => {
     v2 := HashMap::get::<*String, i64>(&map, &key2)
     v3 := HashMap::get::<*String, i64>(&map, &key3)
     
-    result := v1 ~= (0 as *i64) && v1[0] == 1 &&
-              v2 ~= (0 as *i64) && v2[0] == 2 &&
-              v3 ~= (0 as *i64) && v3[0] == 3
+    result := v1 ~= (0 as *i64) and v1[0] == 1 and
+              v2 ~= (0 as *i64) and v2[0] == 2 and
+              v3 ~= (0 as *i64) and v3[0] == 3
     
     HashMap::destroy::<*String, i64>(&map)
     result
@@ -196,7 +196,7 @@ test_hashset_uses_traits :: () -> bool => {
     c3 := HashSet::contains::<i64>(&set, 3)
     c4 := HashSet::contains::<i64>(&set, 999)
     
-    result := c1 && c2 && c3 && !c4
+    result := c1 and c2 and c3 and !c4
     
     HashSet::destroy::<i64>(&set)
     result
@@ -222,7 +222,7 @@ test_associated_function_syntax :: () -> bool => {
     HashMap::destroy::<i64, i64>(&map)
     HashSet::destroy::<i64>(&set)
     
-    len_correct && contains_correct && set_contains_correct
+    len_correct and contains_correct and set_contains_correct
 }
 
 # Test no "all keys hash to 0" bug
@@ -234,10 +234,10 @@ test_no_zero_hash_bug :: () -> bool => {
     hash4 := Hash::hash(&999)
     
     # At least some should be non-zero and different
-    non_zero := hash1 ~= 0 || hash2 ~= 0 || hash3 ~= 0 || hash4 ~= 0
-    different := hash1 ~= hash2 || hash2 ~= hash3 || hash3 ~= hash4
-    
-    non_zero && different
+    non_zero := hash1 ~= 0 or hash2 ~= 0 or hash3 ~= 0 or hash4 ~= 0
+    different := hash1 ~= hash2 or hash2 ~= hash3 or hash3 ~= hash4
+
+    non_zero and different
 }
 
 # Test no "equality always false" bug
@@ -252,7 +252,7 @@ test_no_equality_bug :: () -> bool => {
     int_eq := Eq::eq(&val1, &val2)
     str_eq := Eq::eq(&s1, &s2)
     
-    int_eq && str_eq
+    int_eq and str_eq
 }
 
 # Test HashMap properly handles duplicate keys
@@ -266,7 +266,7 @@ test_hashmap_duplicate_keys :: () -> bool => {
     len := HashMap::len::<i64, i64>(&map)
     
     # Should have value 200 (overwritten) and length 1 (not duplicate entry)
-    result := val ~= (0 as *i64) && val[0] == 200 && len == 1
+    result := val ~= (0 as *i64) and val[0] == 200 and len == 1
     
     HashMap::destroy::<i64, i64>(&map)
     result

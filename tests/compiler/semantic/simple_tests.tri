@@ -102,7 +102,7 @@ test_two_type_params :: () -> bool => {
 test_generic_multi_inst :: () -> bool => {
     a := identity(10)
     b := identity(true)
-    ((a == 10) && b)
+        ((a == 10) and b)
 }
 
 test_generic_expr :: () -> bool => {
@@ -181,7 +181,7 @@ test_nested_blocks :: () -> bool => {
 test_conditional_chain :: () -> bool => {
     a := (5 > 3)
     b := (10 < 20)
-    (a && b)
+    (a and b)
 }
 
 # ============ OPERATORS (10 tests) ============
@@ -223,11 +223,11 @@ test_lt_op :: () -> bool => {
 }
 
 test_and_op :: () -> bool => {
-    (true && true)
+    (true and true)
 }
 
 test_or_op :: () -> bool => {
-    (false || true)
+    (false or true)
 }
 
 # ============ FUNCTIONS (10 tests) ============
@@ -278,7 +278,7 @@ test_func_if :: () -> bool => {
     f :: (x: bool) -> i64 => { if (x) { 1 } else { 0 } }
     a := f(true)
     b := f(false)
-    ((a == 1) && (b == 0))
+    ((a == 1) and (b == 0))
 }
 
 test_func_return_type :: () -> bool => {

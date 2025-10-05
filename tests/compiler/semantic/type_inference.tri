@@ -47,7 +47,7 @@ test_infer_comparison :: () -> bool => {
 
 # Test: inference from logical expression
 test_infer_logical :: () -> bool => {
-    x := (true && false)
+    x := (true and false)
     y := x
     (y == false)
 }
@@ -277,14 +277,14 @@ test_infer_gt :: () -> bool => {
 
 # Test: inference with logical AND
 test_infer_and :: () -> bool => {
-    x := (true && true)
+    x := (true and true)
     y := x
     y
 }
 
 # Test: inference with logical OR
 test_infer_or :: () -> bool => {
-    x := (false || true)
+    x := (false or true)
     y := x
     y
 }

@@ -691,8 +691,6 @@ fn parse_binary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
             "and" => BinaryOperator::And,
             "or" => BinaryOperator::Or,
             "xor" => BinaryOperator::Xor,
-            "&&" => BinaryOperator::LogicalAnd,
-            "||" => BinaryOperator::LogicalOr,
             "==" => BinaryOperator::Equal,
             "~=" => BinaryOperator::NotEqual,
             "<" => BinaryOperator::Less,
@@ -1288,16 +1286,38 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
         }
     }
 
+    fn parse_function_type_param(pair: pest::iterators::Pair<Rule>) -> Type {
+        let mut ty: Option<Type> = None;
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::r#type => {
+                    ty = Some(parse_type(inner));
+                }
+                // Skip parameter identifiers; function type annotations do not currently
+                // store parameter names.
+                Rule::identifier => {}
+                _ => {}
+            }
+        }
+
+        ty.unwrap_or_else(|| panic!("function type parameter missing type"))
+    }
+
     fn parse_function_type(p: pest::iterators::Pair<Rule>) -> Type {
         let mut params: Vec<Type> = Vec::new();
         let mut ret: Option<Type> = None;
         for inner in p.into_inner() {
             match inner.as_rule() {
+                Rule::function_type_params => {
+                    for param in inner.into_inner() {
+                        if param.as_rule() == Rule::function_type_param {
+                            params.push(parse_function_type_param(param));
+                        }
+                    }
+                }
                 Rule::r#type => {
                     if ret.is_none() {
                         params.push(parse_type(inner));
-                    } else {
-                        // unexpected; ignore
                     }
                 }
                 Rule::return_type => {
@@ -1452,7 +1472,12 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
                             body_opt =
                                 Some(FunctionBody::Expression(Box::new(parse_expression(first))))
                         }
-                        Rule::block => body_opt = Some(FunctionBody::Block(parse_block(first))),
+                        Rule::block => {
+                            let statements = parse_block(first);
+                            body_opt = Some(FunctionBody::Expression(Box::new(
+                                Expression::Block { statements },
+                            )));
+                        }
                         _ => {}
                     }
                 }
@@ -1770,7 +1795,12 @@ fn parse_impl_method(pair: pest::iterators::Pair<Rule>) -> Statement {
                             body_opt =
                                 Some(FunctionBody::Expression(Box::new(parse_expression(first))))
                         }
-                        Rule::block => body_opt = Some(FunctionBody::Block(parse_block(first))),
+                        Rule::block => {
+                            let statements = parse_block(first);
+                            body_opt = Some(FunctionBody::Expression(Box::new(
+                                Expression::Block { statements },
+                            )));
+                        }
                         _ => {}
                     }
                 }

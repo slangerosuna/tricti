@@ -73,7 +73,7 @@ impl Debug for DirEntry {
 }
 
 impl Drop for DirEntry {
-    drop :: (&mut self) => {
+    drop :: (*self) => {
         String::destroy(&mut self.name)
         String::destroy(&mut self.path)
     }

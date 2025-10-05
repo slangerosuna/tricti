@@ -2,6 +2,7 @@
 # Provides C/C++ interoperability for TriCTI
 
 use core
+use core::traits
 mod marshal
 
 # C-compatible types
@@ -74,8 +75,14 @@ impl DynLib {
 }
 
 impl Drop for DynLib {
-    drop :: (&mut self) => {
-        self.close()
+    drop :: (*self) => {
+        if ~self.is_open {
+            ret
+        }
+
+        ffi_dlclose(self.handle)
+        self.is_open = false
+        self.handle = unsafe { 0 as *raw u8 }
     }
 }
 

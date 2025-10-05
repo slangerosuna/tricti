@@ -338,8 +338,6 @@ pub enum BinaryOperator {
     ShiftRight,
     And,
     Or,
-    LogicalAnd,
-    LogicalOr,
     Xor,
     Equal,
     NotEqual,

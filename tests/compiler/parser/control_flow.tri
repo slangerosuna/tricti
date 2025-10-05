@@ -30,7 +30,7 @@ test_if_comparison :: () -> i64 => {
 
 # Test: if with complex condition
 test_if_complex_cond :: () -> i64 => {
-    if ((10 > 5) && (5 < 20)) {
+    if ((10 > 5) and (5 < 20)) {
         ret 1
     }
     0
@@ -98,7 +98,7 @@ test_if_multi_stmt :: () -> i64 => {
 
 # Test: if with logical operators
 test_if_logical :: () -> i64 => {
-    if (true || false) {
+    if (true or false) {
         ret 1
     }
     0
@@ -153,7 +153,7 @@ test_if_parens :: () -> i64 => {
 
 # Test: if with comparison chain
 test_if_cmp_chain :: () -> i64 => {
-    if ((5 < 10) && (10 < 20) && (20 < 30)) {
+    if ((5 < 10) and (10 < 20) and (20 < 30)) {
         ret 1
     }
     0

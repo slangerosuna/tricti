@@ -192,7 +192,7 @@ impl String {
             ret none
         }
         
-        cstr_in_self := (cstr >= self.data && cstr < ptr_offset(self.data, self.len))
+    cstr_in_self := (cstr >= self.data and cstr < ptr_offset(self.data, self.len))
         offset := 0
         if cstr_in_self {
             offset = (cstr as u64) - (self.data as u64)
@@ -301,7 +301,7 @@ impl String {
         if needle.len == 0 {
             ret 0
         }
-        if self.len == 0 || needle.len > self.len {
+    if self.len == 0 or needle.len > self.len {
             ret -1
         }
         
@@ -490,7 +490,7 @@ impl String {
 
     # Repeat string n times
     repeat :: (self: *String, n: u64) -> String => {
-        if n == 0 || self.len == 0 {
+    if n == 0 or self.len == 0 {
             ret String::new()
         }
         
@@ -710,7 +710,7 @@ impl String {
         result: i64 = 0
         for i in start_idx:trimmed.len {
             ch := ptr_offset(trimmed.data, i)[0]
-            if ch < 48 || ch > 57 {
+            if ch < 48 or ch > 57 {
                 ret none
             }
             digit := (ch - 48) as i64
@@ -719,7 +719,7 @@ impl String {
                 if result < -922337203685477580 {
                     ret none
                 }
-                if result == -922337203685477580 && digit > 8 {
+                if result == -922337203685477580 and digit > 8 {
                     ret none
                 }
                 result = result * 10 - digit
@@ -727,7 +727,7 @@ impl String {
                 if result > 922337203685477580 {
                     ret none
                 }
-                if result == 922337203685477580 && digit > 7 {
+                if result == 922337203685477580 and digit > 7 {
                     ret none
                 }
                 result = result * 10 + digit
@@ -763,7 +763,7 @@ impl String {
         result: u64 = 0
         for i in start_idx:trimmed.len {
             ch := ptr_offset(trimmed.data, i)[0]
-            if ch < 48 || ch > 57 {
+            if ch < 48 or ch > 57 {
                 ret none
             }
             digit := (ch - 48) as u64
@@ -771,7 +771,7 @@ impl String {
             if result > 1844674407370955161 {
                 ret none
             }
-            if result == 1844674407370955161 && digit > 5 {
+            if result == 1844674407370955161 and digit > 5 {
                 ret none
             }
             result = result * 10 + digit
@@ -796,20 +796,20 @@ impl String {
         start_idx := 0
         
         first_char := ptr_offset(trimmed.data, 0)[0]
-        if first_char == 45 || first_char == 43 {
+    if first_char == 45 or first_char == 43 {
             start_idx = 1
         }
         
         for i in start_idx:trimmed.len {
             ch := ptr_offset(trimmed.data, i)[0]
-            if ch >= 48 && ch <= 57 {
+            if ch >= 48 and ch <= 57 {
                 has_digit = true
             } else if ch == 46 {
                 if has_dot {
                     ret none
                 }
                 has_dot = true
-            } else if ch == 101 || ch == 69 {
+            } else if ch == 101 or ch == 69 {
                 break
             } else {
                 ret none

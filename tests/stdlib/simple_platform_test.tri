@@ -16,7 +16,7 @@ main :: () => {
     check1 := (t1 == 1)
     check2 := (t2 == 2)
     
-    if check1 && check2 {
+    if check1 and check2 {
         println("PASS: Timestamps increment correctly")
     } else {
         println("FAIL: Timestamps not incrementing")
@@ -28,7 +28,7 @@ main :: () => {
     has_ts := platform_has_feature("timestamp")
     has_alloc := platform_has_feature("alloc")
     
-    if has_ts && has_alloc {
+    if has_ts and has_alloc {
         println("PASS: Platform features detected correctly")
     } else {
         println("FAIL: Platform features not detected")

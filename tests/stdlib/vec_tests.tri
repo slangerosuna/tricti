@@ -21,12 +21,12 @@ multiply :: (a: i64, b: i64) -> i64 => {
 
 test_new_creates_empty_vec :: () -> bool => {
     v := ParVec::new()
-    (v.len() == 0) && v.is_empty()
+    (v.len() == 0) and v.is_empty()
 }
 
 test_with_capacity_allocates_space :: () -> bool => {
     v := ParVec::with_capacity(10)
-    (v.capacity() == 10) && (v.len() == 0)
+    (v.capacity() == 10) and (v.len() == 0)
 }
 
 test_push_single_element :: () -> bool => {
@@ -57,7 +57,7 @@ test_push_triggers_capacity_growth :: () -> bool => {
     v.push(8)
     v.push(9)
     
-    (v.len() == 10) && (v.capacity() >= 10)
+    (v.len() == 10) and (v.capacity() >= 10)
 }
 
 test_pop_removes_element :: () -> bool => {
@@ -503,7 +503,7 @@ test_empty_vec_all_operations :: () -> bool => {
     v2.clear()
     c3 := v2.is_empty()
     
-    c1 && c2 && c3
+    c1 and c2 and c3
 }
 
 test_set_valid_index :: () -> bool => {
@@ -536,7 +536,7 @@ test_len_tracks_correctly :: () -> bool => {
     v.pop()
     cond4 := v.len() == 1
     
-    cond1 && cond2 && cond3 && cond4
+    cond1 and cond2 and cond3 and cond4
 }
 
 test_capacity_tracks_correctly :: () -> bool => {
@@ -556,7 +556,7 @@ test_capacity_tracks_correctly :: () -> bool => {
     v2.push(10)
     
     final_cap := v2.capacity()
-    (initial_cap == 5) && (final_cap >= 10)
+    (initial_cap == 5) and (final_cap >= 10)
 }
 
 test_remove_element :: () -> bool => {

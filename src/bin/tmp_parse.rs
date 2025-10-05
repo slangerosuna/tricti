@@ -42,7 +42,73 @@ fn main() {
         .nth(1)
         .unwrap_or_else(|| "tmp/debug_if_expr.tri".to_string());
     let source = std::fs::read_to_string(&path).expect("read source");
+    let standalone = "assert :: () -> none => {}\n";
+    match DebugParser::parse(Rule::statement, standalone) {
+        Ok(_) => eprintln!("standalone assert statement parsed"),
+        Err(err) => eprintln!("standalone assert statement failed: {}", err),
+    }
+    let with_leading_newline = "\nassert :: () -> none => {}\n";
+    match DebugParser::parse(Rule::statement, with_leading_newline) {
+        Ok(_) => eprintln!("newline-leading assert statement parsed"),
+        Err(err) => eprintln!("newline-leading assert statement failed: {}", err),
+    }
     eprintln!("Parsing file: {}", path);
+    match DebugParser::parse(Rule::statement, &source) {
+        Ok(mut pairs) => {
+            eprintln!("entire source parsed as statement");
+            if let Some(pair) = pairs.next() {
+                eprintln!("statement span: {:?}", pair.as_str());
+            }
+        }
+        Err(err) => eprintln!("entire source failed as statement: {}", err),
+    }
+    match DebugParser::parse(Rule::const_statement, &source) {
+        Ok(mut pairs) => {
+            eprintln!("entire source parsed as const_statement");
+            if let Some(pair) = pairs.next() {
+                let span = pair.as_str().replace('\n', "\\n");
+                eprintln!("const_statement span: {}", span);
+                for inner in pair.clone().into_inner() {
+                    let inner_span = inner.as_str().replace('\n', "\\n");
+                    eprintln!("  inner {:?} -> {}", inner.as_rule(), inner_span);
+                    for nested in inner.clone().into_inner() {
+                        let nested_span = nested.as_str().replace('\n', "\\n");
+                        eprintln!("    nested {:?} -> {}", nested.as_rule(), nested_span);
+                        for deeper in nested.clone().into_inner() {
+                            let deeper_span = deeper.as_str().replace('\n', "\\n");
+                            eprintln!("      deeper {:?} -> {}", deeper.as_rule(), deeper_span);
+                        }
+                    }
+                }
+            }
+        }
+        Err(err) => eprintln!("entire source failed as const_statement: {}", err),
+    }
+    match DebugParser::parse(Rule::const_decl, &source) {
+        Ok(mut pairs) => {
+            eprintln!("entire source parsed as const_decl");
+            if let Some(pair) = pairs.next() {
+                let span = pair.as_str().replace('\n', "\\n");
+                eprintln!("const_decl span: {}", span);
+                for inner in pair.clone().into_inner() {
+                    let inner_span = inner.as_str().replace('\n', "\\n");
+                    eprintln!("  inner {:?} -> {}", inner.as_rule(), inner_span);
+                }
+            }
+        }
+        Err(err) => eprintln!("entire source failed as const_decl: {}", err),
+    }
+    if let Some(assert_idx) = source.find("assert ::") {
+        let tail = &source[assert_idx..];
+        match DebugParser::parse(Rule::statement, tail) {
+            Ok(_) => eprintln!("tail statement parsed"),
+            Err(err) => eprintln!("tail statement failed: {}", err),
+        }
+        match DebugParser::parse(Rule::program, tail) {
+            Ok(_) => eprintln!("tail program parsed"),
+            Err(err) => eprintln!("tail program failed: {}", err),
+        }
+    }
     parse_const_decl_snippet(&source);
     let snippet = "if b >= a { a } else { b }";
     match DebugParser::parse(Rule::keyword_if, "if ") {

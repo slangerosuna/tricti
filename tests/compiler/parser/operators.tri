@@ -127,13 +127,13 @@ test_op_eq_var :: () -> bool => {
 }
 
 # Test: inequality chain
-test_op_ineq_chain :: () -> bool => { (1 < 2) && (2 < 3) }
+test_op_ineq_chain :: () -> bool => { (1 < 2) and (2 < 3) }
 
 # Test: comparison with arithmetic
 test_op_cmp_arith :: () -> bool => { (10 + 5 > 12) }
 
 # Test: multiple comparisons
-test_op_multi_cmp :: () -> bool => { (5 < 10) && (10 < 20) }
+test_op_multi_cmp :: () -> bool => { (5 < 10) and (10 < 20) }
 
 # Test: comparison with parentheses
 test_op_cmp_parens :: () -> bool => { ((5 + 5) == 10) }
@@ -145,13 +145,13 @@ test_op_float_cmp :: () -> bool => { (3.14 > 2.0) }
 test_op_bool_eq :: () -> bool => { (true == true) }
 
 # Test: less than chain
-test_op_lt_multi :: () -> bool => { (1 < 2) && (2 < 3) && (3 < 4) }
+test_op_lt_multi :: () -> bool => { (1 < 2) and (2 < 3) and (3 < 4) }
 
 # Test: greater than chain
-test_op_gt_multi :: () -> bool => { (10 > 5) && (5 > 1) }
+test_op_gt_multi :: () -> bool => { (10 > 5) and (5 > 1) }
 
 # Test: mixed comparison operators
-test_op_mixed_cmp :: () -> bool => { (5 < 10) && (10 >= 10) && (10 <= 10) }
+test_op_mixed_cmp :: () -> bool => { (5 < 10) and (10 >= 10) and (10 <= 10) }
 
 # Test: comparison in variable
 test_op_cmp_var_assign :: () -> bool => {
@@ -177,10 +177,10 @@ test_op_cmp_in_if :: () -> i64 => {
 # ============ LOGICAL OPERATORS (20 tests) ============
 
 # Test: logical and
-test_op_and :: () -> bool => { true && true }
+test_op_and :: () -> bool => { true and true }
 
 # Test: logical or
-test_op_or :: () -> bool => { true || false }
+test_op_or :: () -> bool => { true or false }
 
 # Test: logical and with word
 test_op_and_word :: () -> bool => { true and true }
@@ -195,27 +195,27 @@ test_op_xor :: () -> bool => { true xor false }
 test_op_not :: () -> bool => { !false }
 
 # Test: chained and
-test_op_and_chain :: () -> bool => { true && true && true }
+test_op_and_chain :: () -> bool => { true and true and true }
 
 # Test: chained or
-test_op_or_chain :: () -> bool => { false || false || true }
+test_op_or_chain :: () -> bool => { false or false or true }
 
 # Test: mixed and or
-test_op_mixed_logical :: () -> bool => { true && false || true }
+test_op_mixed_logical :: () -> bool => { true and false or true }
 
 # Test: and with variables
 test_op_and_var :: () -> bool => {
     a := true
     b := false
-    a && b
+    a and b
 }
 
 # Test: or with variables
 test_op_or_var :: () -> bool => {
     a := true
-    b := false
-    a || b
-}
+    a := false
+    b := true
+    a or b
 
 # Test: not with variable
 test_op_not_var :: () -> bool => {
@@ -224,30 +224,30 @@ test_op_not_var :: () -> bool => {
 }
 
 # Test: complex logical expression
-test_op_complex_logical :: () -> bool => { (true && false) || (true && true) }
+test_op_complex_logical :: () -> bool => { (true and false) or (true and true) }
 
 # Test: logical with comparison
-test_op_logical_cmp :: () -> bool => { (5 < 10) && (10 < 20) }
+test_op_logical_cmp :: () -> bool => { (5 < 10) and (10 < 20) }
 
 # Test: double negation (using separate expression)
 test_op_double_not :: () -> bool => { !(!true) }
 
 # Test: and or precedence
-test_op_and_or_prec :: () -> bool => { false || true && true }
+test_op_and_or_prec :: () -> bool => { false or true and true }
 
 # Test: logical in if condition
 test_op_logical_if :: () -> i64 => {
-    if (true && true) {
+    if (true and true) {
         ret 1
     }
     0
 }
 
 # Test: nested logical
-test_op_nested_logical :: () -> bool => { ((true && false) || true) && true }
+test_op_nested_logical :: () -> bool => { ((true and false) or true) and true }
 
 # Test: logical with parentheses
-test_op_logical_parens :: () -> bool => { (true || false) && (false || true) }
+test_op_logical_parens :: () -> bool => { (true or false) and (false or true) }
 
 # Test: all logical operators
 test_op_all_logical :: () -> bool => { (true and false) or (true xor false) }
@@ -382,10 +382,10 @@ test_prec_parens :: () -> i64 => { (2 + 3) * 4 }
 test_prec_nested_parens :: () -> i64 => { ((2 + 3) * 4) - 1 }
 
 # Test: and before or
-test_prec_and_or :: () -> bool => { false || true && true }
+test_prec_and_or :: () -> bool => { false or true and true }
 
 # Test: comparison before and
-test_prec_cmp_and :: () -> bool => { (5 < 10) && (10 < 20) }
+test_prec_cmp_and :: () -> bool => { (5 < 10) and (10 < 20) }
 
 # Test: arithmetic before comparison
 test_prec_arith_cmp :: () -> bool => { (2 + 3 > 4) }
@@ -400,7 +400,7 @@ test_prec_unary_binary :: () -> i64 => { -5 + 10 }
 test_prec_complex :: () -> i64 => { 2 + 3 * 4 - 10 / 2 }
 
 # Test: all precedence levels
-test_prec_all_levels :: () -> bool => { (2 + 3 * 4 > 10) && (5 < 10) }
+test_prec_all_levels :: () -> bool => { (2 + 3 * 4 > 10) and (5 < 10) }
 
 # Test: bitwise and arithmetic precedence
 test_prec_bitwise_arith :: () -> i64 => { 2 + 3 & 7 }

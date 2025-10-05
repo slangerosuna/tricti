@@ -1,6 +1,23 @@
 # TriCTI Standard Library Prelude
 # Core types and functions available to all TriCTI programs
 
+# Errors and assertions
+# Assert a condition holds; otherwise panic with message
+assert :: (cond: bool, msg: string) -> none => {
+        if ~cond { panic(msg) }
+};
+
+# Assert equality for i64 values; otherwise panic
+assert_eq_i64 :: (a: i64, b: i64, msg: string) -> none => {
+        if a ~= b { panic(msg) }
+};
+
+# Print a message and terminate the process with non-zero status
+panic :: (msg: string) -> none => {
+        println("Assertion failed:", msg)
+        exit(1)
+}
+
 # Identity function
 id<T> :: (value: T) -> T => value
 
@@ -27,7 +44,7 @@ std_error_message_only :: (message: string) -> string => {
 }
 
 std_error_unsupported :: (feature: string) -> string => {
-    feature
+        feature
 }
 
 LogLevel :: enum {
@@ -85,8 +102,8 @@ std_default_config :: () -> StdConfig => {
 print :: (x) => { println(x) }
 
 # Basic memory helpers (compiler maps to malloc/free for now)
-extern alloc :: (i64) -> *raw u8
-extern dealloc :: (*raw u8) -> none
+extern alloc :: (size: i64) -> *raw u8
+extern dealloc :: (ptr: *raw u8) -> none
 
 # Vector utilities (stubs)
 # Placeholder utility
@@ -138,24 +155,6 @@ is_even_i64 :: (value: i64) -> bool => {
 
 is_odd_i64 :: (value: i64) -> bool => {
         rem_i64(value, 2) ~= 0
-}
-
-
-# Errors and assertions
-# Print a message and terminate the process with non-zero status
-panic :: (msg: string) -> none => {
-        println("Assertion failed:", msg)
-        exit(1)
-}
-
-# Assert a condition holds; otherwise panic with message
-assert :: (cond: bool, msg: string) -> none => {
-        if ~cond { panic(msg) }
-}
-
-# Assert equality for i64 values; otherwise panic
-assert_eq_i64 :: (a: i64, b: i64, msg: string) -> none => {
-        if a ~= b { panic(msg) }
 }
 
 
@@ -256,7 +255,7 @@ array_remove_at<T> :: (items: [T], remove_idx: i64) -> [T] => {
         }
 
         # Workaround for parser < bug
-        if ~(remove_idx >= 0) || remove_idx >= len {
+        if ~(remove_idx >= 0) or remove_idx >= len {
                 copy := new [T; len]
                 for i in 0:len {
                         copy[i] = items[i]

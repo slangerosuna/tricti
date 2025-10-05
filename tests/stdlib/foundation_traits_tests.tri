@@ -101,7 +101,7 @@ test_partialeq_symmetry_u64 :: () -> none => {
     test_assert(a.eq(&c) == c.eq(&a), "u64 symmetry not equal")
 }
 
-# Transitivity tests (x == y && y == z implies x == z)
+# Transitivity tests (x == y and y == z implies x == z)
 test_partialeq_transitivity_i64 :: () -> none => {
     a := 5
     b := 5
@@ -109,7 +109,7 @@ test_partialeq_transitivity_i64 :: () -> none => {
     xy := a.eq(&b)
     yz := b.eq(&c)
     xz := a.eq(&c)
-    test_assert(~xy || ~yz || xz, "i64 transitivity")
+    test_assert(~xy or ~yz or xz, "i64 transitivity")
 }
 
 test_partialeq_transitivity_bool :: () -> none => {
@@ -119,7 +119,7 @@ test_partialeq_transitivity_bool :: () -> none => {
     xy := a.eq(&b)
     yz := b.eq(&c)
     xz := a.eq(&c)
-    test_assert(~xy || ~yz || xz, "bool transitivity")
+    test_assert(~xy or ~yz or xz, "bool transitivity")
 }
 
 # ne consistency tests (x != y == !(x == y))
@@ -245,9 +245,9 @@ test_ord_totality_i64 :: () -> none => {
     r1 := a.cmp(&b)
     r2 := b.cmp(&a)
     r3 := a.cmp(&c)
-    test_assert(r1 == -1 || r1 == 0 || r1 == 1, "i64 cmp totality 1")
-    test_assert(r2 == -1 || r2 == 0 || r2 == 1, "i64 cmp totality 2")
-    test_assert(r3 == -1 || r3 == 0 || r3 == 1, "i64 cmp totality 3")
+    test_assert(r1 == -1 or r1 == 0 or r1 == 1, "i64 cmp totality 1")
+    test_assert(r2 == -1 or r2 == 0 or r2 == 1, "i64 cmp totality 2")
+    test_assert(r3 == -1 or r3 == 0 or r3 == 1, "i64 cmp totality 3")
 }
 
 test_ord_totality_bool :: () -> none => {
@@ -256,9 +256,9 @@ test_ord_totality_bool :: () -> none => {
     r1 := t.cmp(&f)
     r2 := f.cmp(&t)
     r3 := t.cmp(&t)
-    test_assert(r1 == -1 || r1 == 0 || r1 == 1, "bool cmp totality 1")
-    test_assert(r2 == -1 || r2 == 0 || r2 == 1, "bool cmp totality 2")
-    test_assert(r3 == -1 || r3 == 0 || r3 == 1, "bool cmp totality 3")
+    test_assert(r1 == -1 or r1 == 0 or r1 == 1, "bool cmp totality 1")
+    test_assert(r2 == -1 or r2 == 0 or r2 == 1, "bool cmp totality 2")
+    test_assert(r3 == -1 or r3 == 0 or r3 == 1, "bool cmp totality 3")
 }
 
 # Antisymmetry tests (x <= y && y <= x implies x == y)
@@ -268,7 +268,7 @@ test_partialord_antisymmetry_i64 :: () -> none => {
     xy := a.le(&b)
     yx := b.le(&a)
     eq := a.eq(&b)
-    test_assert(~xy || ~yx || eq, "i64 antisymmetry")
+    test_assert(~xy or ~yx or eq, "i64 antisymmetry")
 }
 
 test_partialord_antisymmetry_u64 :: () -> none => {
@@ -277,7 +277,7 @@ test_partialord_antisymmetry_u64 :: () -> none => {
     xy := a.le(&b)
     yx := b.le(&a)
     eq := a.eq(&b)
-    test_assert(~xy || ~yx || eq, "u64 antisymmetry")
+    test_assert(~xy or ~yx or eq, "u64 antisymmetry")
 }
 
 # Transitivity tests (x <= y && y <= z implies x <= z)
@@ -288,7 +288,7 @@ test_partialord_transitivity_i64 :: () -> none => {
     xy := a.le(&b)
     yz := b.le(&c)
     xz := a.le(&c)
-    test_assert(~xy || ~yz || xz, "i64 transitivity")
+    test_assert(~xy or ~yz or xz, "i64 transitivity")
 }
 
 test_partialord_transitivity_u64 :: () -> none => {
@@ -298,7 +298,7 @@ test_partialord_transitivity_u64 :: () -> none => {
     xy := a.le(&b)
     yz := b.le(&c)
     xz := a.le(&c)
-    test_assert(~xy || ~yz || xz, "u64 transitivity")
+    test_assert(~xy or ~yz or xz, "u64 transitivity")
 }
 
 # cmp/lt/le/gt/ge consistency tests
@@ -992,8 +992,8 @@ test_default_with_ops_i64 :: () -> none => {
 
 test_default_with_ops_bool :: () -> none => {
     d := bool::default()
-    result := d || true
-    test_assert_eq_bool(result, true, "bool default || true")
+    result := d or true
+    test_assert_eq_bool(result, true, "bool default or true")
 }
 
 # =============================================================================

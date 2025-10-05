@@ -29,7 +29,7 @@ impl File {
     # Create file for writing (truncates if exists)
     # Returns Some(File) on success, None on error
     create :: (path: String) -> ?File => {
-        fd := posix_open(String::as_ptr(&path), O_WRONLY | O_CREAT | O_TRUNC, 420)
+    fd := posix_open(String::as_ptr(&path), O_WRONLY or O_CREAT or O_TRUNC, 420)
         if fd < 0 { ret none }
         ret some File { fd: fd, path: path, is_open: true }
     }
@@ -47,7 +47,7 @@ impl File {
     # Open file for appending
     # Returns Some(File) on success, None on error
     append :: (path: String) -> ?File => {
-        fd := posix_open(String::as_ptr(&path), O_WRONLY | O_CREAT | O_APPEND, 420)
+    fd := posix_open(String::as_ptr(&path), O_WRONLY or O_CREAT or O_APPEND, 420)
         if fd < 0 { ret none }
         ret some File { fd: fd, path: path, is_open: true }
     }
@@ -245,7 +245,12 @@ impl Seek for File {
 
 # Implement Drop trait for File (auto-close on destruction)
 impl Drop for File {
-    drop :: (&mut self) => {
-        File::close(self)
+    drop :: (*self) => {
+        if ~self.is_open {
+            ret
+        }
+
+        posix_close(self.fd)
+        self.is_open = false
     }
 }

@@ -491,7 +491,7 @@ impl Or for i64 {
 
 impl Xor for i64 {
     xor_ :: (self, other: i64) -> i64 => {
-        self ^ other
+        self xor other
     }
 }
 
@@ -606,19 +606,19 @@ impl Rem for u64 {
 # Bitwise operators for u64
 impl BitAnd for u64 {
     bitand :: (self, other: u64) -> u64 => {
-        self & other
+        self and other
     }
 }
 
 impl BitOr for u64 {
     bitor :: (self, other: u64) -> u64 => {
-        self | other
+        self or other
     }
 }
 
 impl BitXor for u64 {
     bitxor :: (self, other: u64) -> u64 => {
-        self ^ other
+        self xor other
     }
 }
 
@@ -733,19 +733,19 @@ impl Rem for u8 {
 # Bitwise operators for u8
 impl BitAnd for u8 {
     bitand :: (self, other: u8) -> u8 => {
-        self & other
+        self and other
     }
 }
 
 impl BitOr for u8 {
     bitor :: (self, other: u8) -> u8 => {
-        self | other
+        self or other
     }
 }
 
 impl BitXor for u8 {
     bitxor :: (self, other: u8) -> u8 => {
-        self ^ other
+        self xor other
     }
 }
 
@@ -918,7 +918,7 @@ impl Debug for String {
 
 impl Default for String {
     default :: () -> String => {
-        String::new()
+        ret String::new()
     }
 }
 
@@ -936,7 +936,7 @@ impl Hash for String {
         hash := FNV_OFFSET_BASIS
         for i in 0:self.len {
             byte := self.data[i] as u64
-            hash = hash ^ byte
+            hash = hash xor byte
             hash = hash * FNV_PRIME
         }
         hash
