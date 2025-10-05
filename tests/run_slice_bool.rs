@@ -1,8 +1,7 @@
 use inkwell::context::Context;
-use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tricti::{codegen, parser, semantic};
+use tricti::{codegen, program_loader, semantic};
 
 fn clang_available() -> bool {
     Command::new("clang").arg("--version").output().is_ok()
@@ -14,58 +13,41 @@ fn iterate_vec_bool() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
-        vec_get_i64 :: (v: *Vec_i64, idx: i64) -> i64 => {
-                if ~(idx >= 0) { panic("vec index negative") }
-                if idx >= vec_len_i64(v) { panic("vec index out of bounds") }
-                v.ptr[idx]
-        }
+    let source = r#"
+use prelude
+use core::collections
 
-        v := new_vec_i64()
-        vec_push_i64(&v, 1)
-        vec_push_i64(&v, 0)
-        vec_push_i64(&v, 1)
-        vec_push_i64(&v, 1)
-        vec_push_i64(&v, 0)
+main :: () => {
+    v := Vec<i64>::new()
+    v.push(1)
+    v.push(0)
+    v.push(1)
+    v.push(1)
+    v.push(0)
 
-        count := 0
-        len := vec_len_i64(&v)
-        for i in 0:len {
-            if vec_get_i64(&v, i) == 1 {
-                count = count + 1
-            }
+    count := 0
+    len := v.len()
+    for i in 0:len {
+        match v.get(i) {
+            some value => {
+                if value == 1 {
+                    count = count + 1
+                }
+            },
+            none => panic("vec index out of bounds"),
         }
-        println(count)
+    }
+    println(count)
+}
+
+main()
     "#;
-    let src = format!("{}\n{}", prelude, user);
 
-    let program = parser::parse(src.to_string());
-    let sem = semantic::analyze_program(&program).expect("semantic analysis");
-
-    let context = Context::create();
-    let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
-    gen.generate_program(&program).expect("codegen");
-
-    let obj = "tests/tmp_slice_bool.o";
-    let exe = "tests/tmp_slice_bool.out";
-    if Path::new(obj).exists() {
-        let _ = fs::remove_file(obj);
-    }
-    if Path::new(exe).exists() {
-        let _ = fs::remove_file(exe);
-    }
-    gen.write_object_file(obj).expect("write obj");
-
-    let status = Command::new("clang")
-        .args(["-o", exe, obj])
-        .status()
-        .expect("link");
-    assert!(status.success(), "link failed");
-
-    let out = Command::new(exe).output().expect("run");
-    assert!(out.status.success(), "program failed to run");
-    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stdout = compile_and_run(
+        source,
+        "tests/tmp_slice_bool.o",
+        "tests/tmp_slice_bool.out",
+    );
     assert_eq!(stdout, "3\n");
 }
 
@@ -75,44 +57,67 @@ fn vec_bool_helpers() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
-        vec_get_i64 :: (v: *Vec_i64, idx: i64) -> i64 => {
-                if ~(idx >= 0) { panic("vec index negative") }
-                if idx >= vec_len_i64(v) { panic("vec index out of bounds") }
-                v.ptr[idx]
-        }
+    let source = r#"
+use prelude
+use core::collections
 
-        vec_is_empty_i64 :: (v: *Vec_i64) -> bool => {
-                vec_len_i64(v) == 0
-        }
+main :: () => {
+    v := Vec<i64>::new()
+    v.push(1)
+    v.push(1)
+    v.push(0)
+    v.push(0)
 
-        v := new_vec_i64()
-        vec_push_i64(&v, 1)
-        vec_push_i64(&v, 1)
-        vec_push_i64(&v, 0)
-        vec_push_i64(&v, 0)
-        println(vec_len_i64(&v))
-        println(vec_is_empty_i64(&v))
-        println(vec_get_i64(&v, 0) == 1)
-        println(vec_get_i64(&v, 2) == 1)
+    println(v.len())
+    println(v.is_empty())
+
+    first_is_one := match v.get(0) {
+        some value => value == 1,
+        none => false,
+    }
+    println(first_is_one)
+
+    third_is_one := match v.get(2) {
+        some value => value == 1,
+        none => false,
+    }
+    println(third_is_one)
+}
+
+main()
     "#;
-    let src = format!("{}\n{}", prelude, user);
 
-    let program = parser::parse(src.to_string());
+    let stdout = compile_and_run(
+        source,
+        "tests/tmp_slice_bool_helpers.o",
+        "tests/tmp_slice_bool_helpers.out",
+    );
+    assert_eq!(stdout, "4\nfalse\ntrue\nfalse\n");
+}
+
+fn compile_and_run(source: &str, obj: &str, exe: &str) -> String {
+    let cwd = std::env::current_dir().expect("cwd");
+    let stdlib_path = cwd.join("stdlib").join("std.tri");
+    let options = program_loader::LoadOptions {
+        skip_std_env: std::env::var("SKIP_STDLIB").unwrap_or_default() == "1",
+        skip_std_flag: false,
+        stdlib_path: stdlib_path.as_path(),
+        base_dir: cwd.as_path(),
+    };
+
+    let loaded = program_loader::parse_source_with_std(source.to_string(), None, options);
+    let program = loaded.program;
     let sem = semantic::analyze_program(&program).expect("semantic analysis");
 
     let context = Context::create();
     let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
     gen.generate_program(&program).expect("codegen");
 
-    let obj = "tests/tmp_slice_bool_helpers.o";
-    let exe = "tests/tmp_slice_bool_helpers.out";
     if Path::new(obj).exists() {
-        let _ = fs::remove_file(obj);
+        let _ = std::fs::remove_file(obj);
     }
     if Path::new(exe).exists() {
-        let _ = fs::remove_file(exe);
+        let _ = std::fs::remove_file(exe);
     }
     gen.write_object_file(obj).expect("write obj");
 
@@ -124,6 +129,5 @@ fn vec_bool_helpers() {
 
     let out = Command::new(exe).output().expect("run");
     assert!(out.status.success(), "program failed to run");
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert_eq!(stdout, "4\nfalse\ntrue\nfalse\n");
+    String::from_utf8_lossy(&out.stdout).into_owned()
 }

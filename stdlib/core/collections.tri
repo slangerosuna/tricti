@@ -8,7 +8,7 @@ use prelude
 # =============================================================================
 
 Vec<T> :: {
-    data: *T,
+    data: *i64,
     len: u64,
     capacity: u64,
 }
@@ -16,7 +16,7 @@ Vec<T> :: {
 impl<T> Vec<T> {
     new :: () -> Vec<T> => {
         Vec<T> {
-            data: unsafe { none as ?*T as *T },
+            data: unsafe { 0 as *i64 },
             len: 0,
             capacity: 0,
         }
@@ -46,7 +46,7 @@ impl<T> Vec<T> {
 
     with_capacity :: (capacity: u64) -> Vec<T> => {
         cap := ceil_power_2(capacity)
-        data := unsafe { alloc(sizeof<T>() * cap) as *T}
+    data := unsafe { alloc(sizeof<T>() * cap) }
 
         Vec<T> {
             data: data,
@@ -73,36 +73,30 @@ impl<T> Vec<T> {
         }
 
         if capacity == 0 {
-            # free old storage and set to none
-            if self.data != none {
+            # free old storage and reset pointer
+            if self.capacity > 0 {
                 unsafe { dealloc(self.data as *none) }
             }
-            self.data = unsafe { none }
+            self.data = unsafe { 0 as *T }
             self.capacity = 0
             ret
         }
 
         # Allocate new buffer
-        var new_data := unsafe { alloc(sizeof<T>() * capacity) } as *T
+    var new_data := unsafe { alloc(sizeof<T>() * capacity) as *T }
 
         # Workaround for parser < bug
         if self.len >= 1 {
-            # move existing elements (raw memory) into new buffer
-            # prefer a builtin memmove if available
-            @ifdef(__memmov) {
-                unsafe { __memmov(new_data as *none, self.data as *none, self.len * sizeof<T>()) }
-            } else {
-                # fallback: element-wise move (may call T's move semantics)
-                for i in 0:self.len {
-                    unsafe {
-                        *(new_data + i) = *(self.data + i)
-                    }
+            # fallback: element-wise move (may call T's move semantics)
+            for i in 0:self.len {
+                unsafe {
+                    *(new_data + i) = *(self.data + i)
                 }
             }
         }
 
         # free old buffer
-        if self.data != none {
+        if self.capacity > 0 {
             unsafe { dealloc(self.data as *none) }
         }
 
@@ -154,15 +148,15 @@ impl<T> Vec<T> {
 
 impl Drop for Vec<T> {
     free :: (self) => {
-        if self.data == none { ret }
+        if self.capacity == 0 { ret }
 
         # drop all elements
         for i in 0:self.len {
             unsafe { drop(*(self.data + i)) }
         }
- 
+
         unsafe { dealloc(self.data as *none) }
-        self.data = unsafe { none }
+        self.data = unsafe { 0 as *T }
         self.len = 0
         self.capacity = 0
     }
@@ -528,7 +522,7 @@ Vec_u64 :: struct {
 
 Vec_u64_new :: () -> *Vec_u64 => {
     v := alloc(24) as *Vec_u64
-    v.data = unsafe { none as *u64 }
+    v.data = unsafe { 0 as *u64 }
     v.len = 0
     v.capacity = 0
     v
@@ -551,8 +545,8 @@ Vec_u64_push :: (v: *Vec_u64, value: u64) => {
         }
         
         # Free old data if it exists
-        if v.data != unsafe { none as *u64 } {
-            dealloc(v.data as *none)
+        if v.capacity > 0 {
+            dealloc(v.data as *i64)
         }
         
         v.data = new_data
@@ -560,7 +554,7 @@ Vec_u64_push :: (v: *Vec_u64, value: u64) => {
     }
     
     unsafe {
-        *(v.data + v.len) = value
+        *((v.data as *u64) + v.len) = value
     }
     v.len = v.len + 1
 }
