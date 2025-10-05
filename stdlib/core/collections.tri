@@ -75,7 +75,7 @@ impl<T> Vec<T> {
         if capacity == 0 {
             # free old storage and reset pointer
             if self.capacity > 0 {
-                unsafe { dealloc(self.data as *none) }
+                unsafe { dealloc(self.data) }
             }
             self.data = unsafe { 0 as *T }
             self.capacity = 0
@@ -97,7 +97,7 @@ impl<T> Vec<T> {
 
         # free old buffer
         if self.capacity > 0 {
-            unsafe { dealloc(self.data as *none) }
+            unsafe { dealloc(self.data) }
         }
 
         self.data = new_data
@@ -155,7 +155,7 @@ impl Drop for Vec<T> {
             unsafe { drop(*(self.data + i)) }
         }
 
-        unsafe { dealloc(self.data as *none) }
+        unsafe { dealloc(self.data) }
         self.data = unsafe { 0 as *T }
         self.len = 0
         self.capacity = 0

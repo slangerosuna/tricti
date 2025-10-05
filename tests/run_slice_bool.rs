@@ -14,23 +14,22 @@ fn iterate_vec_bool() {
         return;
     }
     let source = r#"
-use prelude
 use core::collections
 
 main :: () => {
-    v := Vec<i64>::new()
-    v.push(1)
-    v.push(0)
-    v.push(1)
-    v.push(1)
-    v.push(0)
+    v := Vec<bool>::new()
+    v.push(true)
+    v.push(false)
+    v.push(true)
+    v.push(false)
+    v.push(false)
 
     count := 0
     len := v.len()
     for i in 0:len {
         match v.get(i) {
             some value => {
-                if value == 1 {
+                if value {
                     count = count + 1
                 }
             },
@@ -58,7 +57,6 @@ fn vec_bool_helpers() {
         return;
     }
     let source = r#"
-use prelude
 use core::collections
 
 main :: () => {
@@ -71,17 +69,9 @@ main :: () => {
     println(v.len())
     println(v.is_empty())
 
-    first_is_one := match v.get(0) {
-        some value => value == 1,
-        none => false,
-    }
-    println(first_is_one)
+    println(v.get(0) == some 1)
 
-    third_is_one := match v.get(2) {
-        some value => value == 1,
-        none => false,
-    }
-    println(third_is_one)
+    println(v.get(2) == some 1)
 }
 
 main()
@@ -100,7 +90,7 @@ fn compile_and_run(source: &str, obj: &str, exe: &str) -> String {
     let stdlib_path = cwd.join("stdlib").join("std.tri");
     let options = program_loader::LoadOptions {
         skip_std_env: std::env::var("SKIP_STDLIB").unwrap_or_default() == "1",
-        skip_std_flag: false,
+        skip_std_flag: true,
         stdlib_path: stdlib_path.as_path(),
         base_dir: cwd.as_path(),
     };

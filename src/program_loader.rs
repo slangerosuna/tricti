@@ -59,7 +59,12 @@ pub fn parse_source_with_std(
     let mut program = parser::parse(source);
     let has_no_std_attr = has_program_no_std_attribute(&program);
 
-    program = expand_modules(program, options.base_dir, &mut visited_modules);
+    program = expand_modules(
+        program,
+        options.base_dir,
+        options.base_dir,
+        &mut visited_modules,
+    );
 
     let stdlib_status = if options.skip_std_env {
         StdlibStatus::SkippedEnvironment
@@ -74,7 +79,12 @@ pub fn parse_source_with_std(
     let mut statements = Vec::new();
 
     if matches!(stdlib_status, StdlibStatus::Included) {
-        let mut std_program = load_and_expand_stdlib(options.stdlib_path, &mut visited_modules);
+        let std_root = options
+            .stdlib_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new(""));
+        let mut std_program =
+            load_and_expand_stdlib(options.stdlib_path, std_root, &mut visited_modules);
         statements.append(&mut std_program.statements);
     }
 
@@ -99,7 +109,11 @@ fn has_program_no_std_attribute(program: &Program) -> bool {
         .unwrap_or(false)
 }
 
-fn load_and_expand_stdlib(stdlib_path: &Path, visited_modules: &mut HashSet<PathBuf>) -> Program {
+fn load_and_expand_stdlib(
+    stdlib_path: &Path,
+    root_dir: &Path,
+    visited_modules: &mut HashSet<PathBuf>,
+) -> Program {
     if let Ok(canonical) = fs::canonicalize(stdlib_path) {
         visited_modules.insert(canonical);
     }
@@ -118,10 +132,15 @@ fn load_and_expand_stdlib(stdlib_path: &Path, visited_modules: &mut HashSet<Path
         .map(Path::to_path_buf)
         .unwrap_or_else(|| std::env::current_dir().expect("failed to get current dir"));
 
-    expand_modules(std_program, &base_dir, visited_modules)
+    expand_modules(std_program, &base_dir, root_dir, visited_modules)
 }
 
-fn expand_modules(program: Program, base_dir: &Path, visited: &mut HashSet<PathBuf>) -> Program {
+fn expand_modules(
+    program: Program,
+    base_dir: &Path,
+    root_dir: &Path,
+    visited: &mut HashSet<PathBuf>,
+) -> Program {
     let mut expanded: Vec<Statement> = Vec::new();
     for stmt in program.statements.into_iter() {
         match &stmt {
@@ -131,14 +150,21 @@ fn expand_modules(program: Program, base_dir: &Path, visited: &mut HashSet<PathB
                 is_public: _,
             } if items.is_none() => {
                 let mut tried: Vec<PathBuf> = Vec::new();
-                tried.push(base_dir.join(format!("{}.pn", name)));
                 tried.push(base_dir.join(format!("{}.tri", name)));
-                tried.push(base_dir.join("src").join(format!("{}.pn", name)));
                 tried.push(base_dir.join("src").join(format!("{}.tri", name)));
+                tried.push(root_dir.join(format!("{}.tri", name)));
+                tried.push(root_dir.join("src").join(format!("{}.tri", name)));
+                tried.push(root_dir.join("stdlib").join(format!("{}.tri", name)));
 
                 let mut loaded: Option<(String, PathBuf)> = None;
-                for candidate in tried {
-                    if let Ok(canonical) = fs::canonicalize(&candidate) {
+                if let Some(parent) = base_dir.parent() {
+                    let parent = parent.to_path_buf();
+                    tried.push(parent.join(format!("{}.tri", name)));
+                    tried.push(parent.join("src").join(format!("{}.tri", name)));
+                    tried.push(parent.join("stdlib").join(format!("{}.tri", name)));
+                }
+                    for candidate in tried {
+                        if let Ok(canonical) = fs::canonicalize(&candidate) {
                         if visited.contains(&canonical) {
                             continue;
                         }
@@ -147,7 +173,7 @@ fn expand_modules(program: Program, base_dir: &Path, visited: &mut HashSet<PathB
                             loaded = Some((content, canonical));
                             break;
                         }
-                    }
+                        }
                 }
 
                 if let Some((content, canonical)) = loaded {
@@ -156,7 +182,7 @@ fn expand_modules(program: Program, base_dir: &Path, visited: &mut HashSet<PathB
                         .parent()
                         .map(Path::to_path_buf)
                         .unwrap_or_else(|| base_dir.to_path_buf());
-                    sub = expand_modules(sub, &base_for_sub, visited);
+                    sub = expand_modules(sub, &base_for_sub, root_dir, visited);
                     expanded.extend(sub.statements);
                 } else {
                     eprintln!("warning: module '{}' not found on disk", name);
@@ -171,19 +197,28 @@ fn expand_modules(program: Program, base_dir: &Path, visited: &mut HashSet<PathB
                     let joined = path.join("/");
                     let name = &path[0];
                     let mut tried: Vec<PathBuf> = Vec::new();
-                    tried.push(base_dir.join(format!("{}.pn", joined)));
                     tried.push(base_dir.join(format!("{}.tri", joined)));
-                    tried.push(base_dir.join("src").join(format!("{}.pn", joined)));
                     tried.push(base_dir.join("src").join(format!("{}.tri", joined)));
-                    tried.push(base_dir.join("stdlib").join(format!("{}.pn", joined)));
                     tried.push(base_dir.join("stdlib").join(format!("{}.tri", joined)));
-                    tried.push(base_dir.join(format!("{}.pn", name)));
                     tried.push(base_dir.join(format!("{}.tri", name)));
-                    tried.push(base_dir.join("src").join(format!("{}.pn", name)));
                     tried.push(base_dir.join("src").join(format!("{}.tri", name)));
-                    tried.push(base_dir.join("stdlib").join(format!("{}.pn", name)));
                     tried.push(base_dir.join("stdlib").join(format!("{}.tri", name)));
+                    tried.push(root_dir.join(format!("{}.tri", joined)));
+                    tried.push(root_dir.join("src").join(format!("{}.tri", joined)));
+                    tried.push(root_dir.join("stdlib").join(format!("{}.tri", joined)));
+                    tried.push(root_dir.join(format!("{}.tri", name)));
+                    tried.push(root_dir.join("src").join(format!("{}.tri", name)));
+                    tried.push(root_dir.join("stdlib").join(format!("{}.tri", name)));
                     let mut loaded: Option<(String, PathBuf)> = None;
+                    if let Some(parent) = base_dir.parent() {
+                        let parent = parent.to_path_buf();
+                        tried.push(parent.join(format!("{}.tri", joined)));
+                        tried.push(parent.join("src").join(format!("{}.tri", joined)));
+                        tried.push(parent.join("stdlib").join(format!("{}.tri", joined)));
+                        tried.push(parent.join(format!("{}.tri", name)));
+                        tried.push(parent.join("src").join(format!("{}.tri", name)));
+                        tried.push(parent.join("stdlib").join(format!("{}.tri", name)));
+                    }
                     for candidate in tried {
                         if let Ok(canonical) = fs::canonicalize(&candidate) {
                             if visited.contains(&canonical) {
@@ -202,7 +237,7 @@ fn expand_modules(program: Program, base_dir: &Path, visited: &mut HashSet<PathB
                             .parent()
                             .map(Path::to_path_buf)
                             .unwrap_or_else(|| base_dir.to_path_buf());
-                        sub = expand_modules(sub, &base_for_sub, visited);
+                        sub = expand_modules(sub, &base_for_sub, root_dir, visited);
                         expanded.extend(sub.statements);
                     } else {
                         eprintln!("warning: use {:?} not found on disk", path);
