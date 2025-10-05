@@ -45,8 +45,8 @@ Signal<T> :: {
     buffering: BufferingStrategy,
     
     # Runtime state
-    senders: Vec<SenderId>,
-    receivers: Vec<ReceiverId>,
+    senders: [SenderId],
+    receivers: [ReceiverId],
     buffer: SignalBuffer<T>,
     
     # Statistics
@@ -96,7 +96,7 @@ impl<T> RingBuffer<T> {
 
     push :: (&mut self, item: T) -> !none => {
         if self.size >= self.capacity {
-            ret std_err(StdError::Message { message: "Ring buffer full" })
+            ret err StdError::Message { message: "Ring buffer full" }
         }
         
         self.data.set(self.write_pos, item)
@@ -154,17 +154,17 @@ impl<T> Signal<T> {
                 }
             },
             BufferingStrategy::Unbounded => {
-                SignalBuffer::Unbounded { queue: Vec::new() }
+                SignalBuffer::Unbounded { queue: [] }
             },
-            _ => SignalBuffer::Unbounded { queue: Vec::new() },
+            _ => SignalBuffer::Unbounded { queue: [] },
         }
         
         Signal<T> {
             name: name,
             topology: topology,
             buffering: buffering,
-            senders: Vec::new(),
-            receivers: Vec::new(),
+            senders: [],
+            receivers: [],
             buffer: buffer,
             messages_sent: 0,
             messages_received: 0,
@@ -223,14 +223,16 @@ impl<T> Signal<T> {
         }
         
         # Handle based on buffering strategy
-        result := match &mut self.buffer {
+        match match &mut self.buffer {
             SignalBuffer::FIFO { queue, .. } => {
                 queue.push(message)
             },
             SignalBuffer::Overwrite { queue, .. } => {
                 if queue.is_full() {
-                    # Discard oldest message
-                    _ := queue.pop()
+                    match queue.pop() {
+                        ok _ => {},
+                        err _ => {},
+                    }
                     self.messages_dropped += 1
                 }
                 queue.push(message)
@@ -240,13 +242,13 @@ impl<T> Signal<T> {
                 ok none
             },
             _ => ok none,
+        } {
+            ok value => {
+                self.messages_sent += 1
+                ok value
+            },
+            err error => err error,
         }
-        
-        if result.is_ok() {
-            self.messages_sent += 1
-        }
-        
-        result
     }
 
     # Receive a message (blocking)
@@ -260,7 +262,7 @@ impl<T> Signal<T> {
         }
         
         # Get message from buffer
-        message := match &mut self.buffer {
+        match match &mut self.buffer {
             SignalBuffer::FIFO { queue, .. } => {
                 queue.pop()
             },
@@ -275,13 +277,13 @@ impl<T> Signal<T> {
                 }
             },
             _ => err StdError::Message { message: "Receive not supported" },
+        } {
+            ok value => {
+                self.messages_received += 1
+                ok value
+            },
+            err error => err error,
         }
-        
-        if message.is_ok() {
-            self.messages_received += 1
-        }
-        
-        message
     }
 
     # Try receive (non-blocking)

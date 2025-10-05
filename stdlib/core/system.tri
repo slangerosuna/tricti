@@ -5,7 +5,6 @@ use prelude
 use core::table
 use core::signal
 use core::errors
-use core::result
 
 # =============================================================================
 # SYSTEM DEFINITION
@@ -142,8 +141,8 @@ impl DAGCompiler {
 
     # Compile systems into a DAG
     compile :: (&self, trigger_systems: [String]) -> !SystemDAG => {
-        nodes := Vec::new()
-        edges := Vec::new()
+    mut nodes := []
+    mut edges := []
         
         # Build DAG from trigger systems
         for system_name in trigger_systems {

@@ -3,7 +3,6 @@
 
 use prelude
 use core::errors
-use core::result
 
 # =============================================================================
 # TABLE SCHEMA AND METADATA
@@ -282,10 +281,10 @@ impl Table {
         # Verify dependencies exist
         for dep in col.dependencies {
             if ~self.schema.has_column(dep) {
-                ret std_err(StdError::InvalidArgument {
+                ret err StdError::InvalidArgument {
                     parameter: "dependencies",
                     message: "Dependent column does not exist: " + dep,
-                })
+                }
             }
         }
         
@@ -314,7 +313,7 @@ impl Table {
             }
         }
         
-        std_ok(results)
+        ok results
     }
 }
 
