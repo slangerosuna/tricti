@@ -3,6 +3,7 @@
 
 use core::traits
 use core::string
+use io::path::Path
 use io::posix
 
 # =============================================================================
@@ -10,9 +11,9 @@ use io::posix
 # =============================================================================
 
 # File handle wrapping POSIX file descriptor
-File :: struct {
+File :: {
     fd: i32,
-    path: String,
+    path: Path,
     is_open: bool,
 }
 
@@ -54,7 +55,7 @@ impl File {
     # Close file and release file descriptor
     # Returns true on success, false on error
     close :: (file: &mut File) -> bool => {
-        if !file.is_open { ret true }
+        if ~file.is_open { ret true }
         result := posix_close(file.fd)
         file.is_open = false
         ret result == 0
@@ -63,7 +64,7 @@ impl File {
     # Read bytes from file into buffer
     # Returns Some(bytes_read) on success, None on error
     read_bytes :: (file: &mut File, buf: *u8, len: u64) -> ?u64 => {
-        if !file.is_open { ret none }
+        if ~file.is_open { ret none }
         bytes_read := posix_read(file.fd, buf, len)
         if bytes_read < 0 { ret none }
         ret some (bytes_read as u64)
@@ -72,7 +73,7 @@ impl File {
     # Write bytes from buffer to file
     # Returns Some(bytes_written) on success, None on error
     write_bytes :: (file: &mut File, buf: *u8, len: u64) -> ?u64 => {
-        if !file.is_open { ret none }
+        if ~file.is_open { ret none }
         bytes_written := posix_write(file.fd, buf, len)
         if bytes_written < 0 { ret none }
         ret some (bytes_written as u64)
@@ -83,7 +84,7 @@ impl File {
     # whence: SEEK_SET (from start), SEEK_CUR (from current), SEEK_END (from end)
     # Returns Some(new_position) on success, None on error
     seek_pos :: (file: &mut File, pos: i64, whence: i32) -> ?i64 => {
-        if !file.is_open { ret none }
+        if ~file.is_open { ret none }
         result := posix_lseek(file.fd, pos, whence)
         if result < 0 { ret none }
         ret some result
@@ -92,7 +93,7 @@ impl File {
     # Get current position in file
     # Returns Some(position) on success, None on error
     position :: (file: &File) -> ?i64 => {
-        if !file.is_open { ret none }
+        if ~file.is_open { ret none }
         result := posix_lseek(file.fd, 0, SEEK_CUR)
         if result < 0 { ret none }
         ret some result
@@ -101,7 +102,7 @@ impl File {
     # Get file size
     # Returns Some(size) on success, None on error
     size :: (file: &File) -> ?i64 => {
-        if !file.is_open { ret none }
+        if ~file.is_open { ret none }
         current_pos := posix_lseek(file.fd, 0, SEEK_CUR)
         if current_pos < 0 { ret none }
         
@@ -115,14 +116,14 @@ impl File {
     # Synchronize file data to disk
     # Returns true on success, false on error
     sync :: (file: &mut File) -> bool => {
-        if !file.is_open { ret false }
+        if ~file.is_open { ret false }
         ret posix_fsync(file.fd) == 0
     }
     
     # Read entire file to string
     # Returns Some(content) on success, None on error
     read_to_string :: (path: String) -> ?String => {
-        mut file := File::open(path)? else { ret none }
+        file := File::open(path)? else { ret none }
         
         file_size := File::size(&file)? else {
             File::close(&mut file)
@@ -149,7 +150,7 @@ impl File {
     # Write string to file (truncates existing file)
     # Returns true on success, false on error
     write_string :: (path: String, content: String) -> bool => {
-        mut file := File::create(path)? else { ret false }
+        file := File::create(path)? else { ret false }
         
         bytes_written := File::write_bytes(&mut file, content.data, content.len)? else {
             File::close(&mut file)
@@ -164,7 +165,7 @@ impl File {
     # Append string to file
     # Returns true on success, false on error
     append_string :: (path: String, content: String) -> bool => {
-        mut file := File::append(path)? else { ret false }
+        file := File::append(path)? else { ret false }
         
         bytes_written := File::write_bytes(&mut file, content.data, content.len)? else {
             File::close(&mut file)
@@ -194,7 +195,7 @@ impl Read for File {
     }
     
     read_exact :: (&mut self, buf: *u8, len: u64) -> bool => {
-        mut total := 0u64
+        total := 0u64
         loop {
             if total >= len { ret true }
             
@@ -214,7 +215,7 @@ impl Write for File {
     }
     
     write_all :: (&mut self, buf: *u8, len: u64) -> bool => {
-        mut total := 0u64
+        total := 0u64
         loop {
             if total >= len { ret true }
             

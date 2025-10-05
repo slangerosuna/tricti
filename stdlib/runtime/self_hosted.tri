@@ -39,10 +39,10 @@ tricti_main :: () -> i32 => {
 
 TriCTIRuntime :: {
     # Core components
-    tables: HashMap<string, Table>,
-    signals: HashMap<string, Signal<*none>>,
-    systems: HashMap<string, SystemDef>,
-    triggers: HashMap<string, TriggerDef>,
+    tables: HashMap<String, Table>,
+    signals: HashMap<String, Signal<*none>>,
+    systems: HashMap<String, SystemDef>,
+    triggers: HashMap<String, TriggerDef>,
     
     # Execution state
     scheduler: SystemScheduler,
@@ -52,27 +52,27 @@ TriCTIRuntime :: {
     allocator: Allocator,
     
     # Compiled functions
-    functions: HashMap<string, CompiledFunction>,
+    functions: HashMap<String, CompiledFunction>,
     
     # Global constants
-    constants: HashMap<string, *none>,
+    constants: HashMap<String, *none>,
 }
 
 CompiledFunction :: {
-    name: string,
+    name: String,
     signature: FunctionSignature,
     code_ptr: *none,
     is_async: bool,
 }
 
 FunctionSignature :: {
-    parameters: Vec<Parameter>,
-    return_type: ?string,
+    parameters: [Parameter],
+    return_type: ?String,
 }
 
 Parameter :: {
-    name: string,
-    param_type: string,
+    name: String,
+    param_type: String,
 }
 
 impl TriCTIRuntime {
@@ -98,7 +98,7 @@ impl TriCTIRuntime {
     }
 
     # Initialize runtime components
-    initialize :: (&mut self) -> StdResult<none> => {
+    initialize :: (&mut self) !none   => {
         # Set up default allocator
         self.allocator.initialize()?
         
@@ -108,11 +108,11 @@ impl TriCTIRuntime {
         # Initialize signal backends
         self.initialize_signal_backends()?
         
-        std_ok(none)
+        ok none
     }
 
     # Register built-in functions
-    register_builtins :: (&mut self) -> StdResult<none> => {
+    register_builtins :: (&mut self) -> !none => {
         # println
         self.register_builtin("println", builtin_println)?
         
@@ -123,10 +123,10 @@ impl TriCTIRuntime {
         self.register_builtin("alloc", builtin_alloc)?
         self.register_builtin("dealloc", builtin_dealloc)?
         
-        std_ok(none)
+        ok none
     }
 
-    register_builtin :: (&mut self, name: string, func_ptr: *none) -> StdResult<none> => {
+    register_builtin :: (&mut self, name: String, func_ptr: *none) -> !none => {
         func := CompiledFunction {
             name: name,
             signature: FunctionSignature {
@@ -138,33 +138,33 @@ impl TriCTIRuntime {
         }
         
         self.functions.insert(name, func)
-        std_ok(none)
+        ok none
     }
 
     # Initialize signal backends
-    initialize_signal_backends :: (&mut self) -> StdResult<none> => {
+    initialize_signal_backends :: (&mut self) -> !none => {
         # TODO: Set up QUIC, WebRTC, etc. based on configuration
-        std_ok(none)
+        ok none
     }
 
     # Find entry point function
-    find_entry_point :: (&self, name: string) -> StdResult<CompiledFunction> => {
+    find_entry_point :: (&self, name: String) -> !CompiledFunction => {
         match self.functions.get(name) {
-            some func => std_ok(func?),
-            none => std_err(StdError::Message {
+            some func => ok func?,
+            none => err StdError::Message {
                 message: "Entry point not found: " + name,
-            }),
+            },
         }
     }
 
     # Call a function
-    call_function :: (&mut self, func: CompiledFunction, args: Vec<*none>) -> StdResult<*none> => {
+    call_function :: (&mut self, func: CompiledFunction, args: [*none]) -> !*none => {
         # TODO: Set up stack frame, call function, return result
-        std_ok(unsafe { none })
+        ok unsafe { none }
     }
 
     # Shutdown runtime
-    shutdown :: (&mut self) -> StdResult<none> => {
+    shutdown :: (&mut self) -> !none => {
         # Close all signal connections
         for (_, signal) in self.signals {
             # TODO: Close signal
@@ -173,33 +173,33 @@ impl TriCTIRuntime {
         # Cleanup allocator
         self.allocator.shutdown()?
         
-        std_ok(none)
+        ok none
     }
 
     # Register a table at runtime
-    register_table :: (&mut self, name: string, schema: TableSchema) -> StdResult<none> => {
+    register_table :: (&mut self, name: String, schema: TableSchema) -> !none => {
         table := Table::new(schema)
         self.tables.insert(name, table)
-        std_ok(none)
+        ok none
     }
 
     # Register a signal at runtime
-    register_signal<T> :: (&mut self, name: string, signal: Signal<T>) -> StdResult<none> => {
+    register_signal<T> :: (&mut self, name: String, signal: Signal<T>) -> !none => {
         # Type-erase signal for storage
         self.signals.insert(name, unsafe { signal as Signal<*none> })
-        std_ok(none)
+        ok none
     }
 
     # Register a system
-    register_system :: (&mut self, system: SystemDef) -> StdResult<none> => {
+    register_system :: (&mut self, system: SystemDef) -> !none => {
         self.systems.insert(system.name, system)
-        std_ok(none)
+        ok none
     }
 
     # Register a trigger
-    register_trigger :: (&mut self, trigger: TriggerDef) -> StdResult<none> => {
+    register_trigger :: (&mut self, trigger: TriggerDef) -> !none => {
         self.trigger_executor.register_trigger(trigger)?
-        std_ok(none)
+        ok none
     }
 }
 
@@ -239,7 +239,7 @@ impl Allocator {
         }
     }
 
-    initialize :: (&mut self) -> StdResult<none> => {
+    initialize :: (&mut self) -> !none => {
         # Request heap from OS
         heap_size := 1024 * 1024 * 100  # 100MB initial heap
         heap := platform_allocate_heap(heap_size)?
@@ -253,11 +253,11 @@ impl Allocator {
             (*self.free_list.head?).size = heap_size
             (*self.free_list.head?).next = none
         }
-        
-        std_ok(none)
+
+        ok none
     }
 
-    allocate :: (&mut self, size: u64, align: u64) -> StdResult<*none> => {
+    allocate :: (&mut self, size: u64, align: u64) -> !*none => {
         # Find free block using first-fit strategy
         prev := none
         current := self.free_list.head
@@ -277,20 +277,20 @@ impl Allocator {
                 
                 # TODO: Split block if there's remaining space
                 # TODO: Remove block from free list or update size
-                
-                ret std_ok(aligned_ptr)
+
+                ret ok aligned_ptr
             }
             
             prev = current
             current = unsafe { (*block).next }
         }
         
-        std_err(StdError::Message {
+        err StdError::Message {
             message: "Out of memory",
-        })
+        }
     }
 
-    deallocate :: (&mut self, ptr: *none, size: u64) -> StdResult<none> => {
+    deallocate :: (&mut self, ptr: *none, size: u64) -> !none => {
         # Add block back to free list
         block := ptr as *FreeBlock
         
@@ -303,17 +303,17 @@ impl Allocator {
         self.freed_bytes += size
         
         # TODO: Coalesce adjacent free blocks
-        
-        std_ok(none)
+
+        ok none
     }
 
-    shutdown :: (&mut self) -> StdResult<none> => {
+    shutdown :: (&mut self) -> !none => {
         # Return heap to OS
         if self.heap_start != unsafe { none as *u8 } {
             platform_deallocate_heap(self.heap_start, self.heap_size)?
         }
-        
-        std_ok(none)
+
+        ok none
     }
 }
 
@@ -349,8 +349,8 @@ builtin_dealloc :: (*none) -> *none => {
 # PLATFORM SYSCALLS
 # =============================================================================
 
-extern platform_allocate_heap :: (size: u64) -> StdResult<*u8>
-extern platform_deallocate_heap :: (ptr: *u8, size: u64) -> StdResult<none>
+extern platform_allocate_heap :: (size: u64) -> !u8
+extern platform_deallocate_heap :: (ptr: *u8, size: u64) -> !none
 
 # =============================================================================
 # STARTUP INITIALIZATION

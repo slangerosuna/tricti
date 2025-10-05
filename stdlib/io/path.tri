@@ -10,7 +10,7 @@ use io::posix
 # =============================================================================
 
 # Path represents a filesystem path
-Path :: struct {
+Path :: {
     path: String,
 }
 
@@ -27,7 +27,7 @@ impl Path {
     
     # Check if path is a regular file
     is_file :: (path: &Path) -> bool => {
-        mut stat_buf: [u8; 144] = [0; 144]
+        stat_buf: [u8; 144] = [0; 144]
         if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) != 0 {
             ret false
         }
@@ -41,7 +41,7 @@ impl Path {
     
     # Check if path is a directory
     is_dir :: (path: &Path) -> bool => {
-        mut stat_buf: [u8; 144] = [0; 144]
+        stat_buf: [u8; 144] = [0; 144]
         if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) != 0 {
             ret false
         }
@@ -57,7 +57,7 @@ impl Path {
     file_name :: (path: &Path) -> ?String => {
         if path.path.len == 0 { ret none }
         
-        mut last_slash := -1i64
+        last_slash := -1i64
         for i in 0:path.path.len {
             if path.path.data[i] == 47 {
                 last_slash = i as i64
@@ -87,7 +87,7 @@ impl Path {
     parent :: (path: &Path) -> ?Path => {
         if path.path.len == 0 { ret none }
         
-        mut last_slash := -1i64
+        last_slash := -1i64
         for i in 0:path.path.len {
             if path.path.data[i] == 47 {
                 last_slash = i as i64
@@ -106,7 +106,7 @@ impl Path {
     
     # Join path with another component
     join :: (path: &Path, other: String) -> Path => {
-        mut result := String::clone(&path.path)
+        result := String::clone(&path.path)
         
         if result.len > 0 && result.data[result.len - 1] != 47 {
             String::push_char(&result, 47)

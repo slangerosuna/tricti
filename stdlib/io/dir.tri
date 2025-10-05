@@ -12,7 +12,7 @@ use io::path
 # =============================================================================
 
 # DirEntry represents an entry in a directory
-DirEntry :: struct {
+DirEntry :: {
     name: String,
     path: String,
     is_dir: bool,
@@ -62,10 +62,12 @@ impl Display for DirEntry {
 impl Debug for DirEntry {
     debug_string :: (&self) -> String => {
         result := String::from_cstr("DirEntry { name: \"" as *u8)
+
         String::push_str(&result, &self.name)
         String::push_str(&result, &String::from_cstr("\", path: \"" as *u8))
         String::push_str(&result, &self.path)
         String::push_str(&result, &String::from_cstr("\" }" as *u8))
+
         result
     }
 }
@@ -161,7 +163,7 @@ read_dirent_name :: (dirent_ptr: *u8) -> String => {
     name_ptr := dirent_ptr + 19
     
     result := String::new()
-    mut i := 0u64
+    i := 0u64
     loop {
         if i >= 256 { break }
         

@@ -10,7 +10,7 @@ use io::posix
 # =============================================================================
 
 # Metadata contains file/directory information
-Metadata :: struct {
+Metadata :: {
     size: u64,
     is_file: bool,
     is_dir: bool,
