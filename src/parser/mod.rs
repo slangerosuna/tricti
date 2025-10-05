@@ -342,6 +342,18 @@ assert :: (cond: bool, msg: string) -> none => {
         PnParser::parse(Rule::expression, "none as ?i64")
             .expect("failed to parse expression with optional scalar cast");
     }
+
+    #[test]
+    fn parses_raw_pointer_cast_expression() {
+        PnParser::parse(Rule::expression, "alloc(8) as *i64")
+            .expect("failed to parse expression with raw pointer cast");
+    }
+
+    #[test]
+    fn parses_raw_pointer_cast_statement() {
+        PnParser::parse(Rule::statement, "ptr := alloc(8) as *i64;")
+            .expect("failed to parse statement with raw pointer cast");
+    }
 }
 
 fn parse_variable_decl(pair: pest::iterators::Pair<Rule>) -> Statement {

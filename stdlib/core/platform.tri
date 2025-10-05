@@ -5,7 +5,7 @@ use prelude
 use core::errors
 
 # Global counter for timestamps (since we don't have real time yet)
-global_timestamp_counter: u64 = 0
+global_timestamp_counter: u64 := 0
 
 # Get current timestamp (monotonically increasing counter for now)
 current_timestamp :: () -> u64 => {
@@ -19,11 +19,11 @@ reset_timestamp :: () -> none => {
 }
 
 # Memory allocation (extern functions provided by runtime)
-extern alloc :: (size: u64) -> *none
-extern dealloc :: (ptr: *none) -> none
+extern alloc :: (size: u64) -> *raw none
+extern dealloc :: (ptr: *raw none) -> none
 
 # Platform capabilities
-platform_has_feature :: (feature: string) -> bool => {
+platform_has_feature :: (feature: String) -> bool => {
     match feature {
         "timestamp" => true,
         "alloc" => true,

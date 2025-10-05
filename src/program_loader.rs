@@ -163,8 +163,8 @@ fn expand_modules(
                     tried.push(parent.join("src").join(format!("{}.tri", name)));
                     tried.push(parent.join("stdlib").join(format!("{}.tri", name)));
                 }
-                    for candidate in tried {
-                        if let Ok(canonical) = fs::canonicalize(&candidate) {
+                for candidate in tried {
+                    if let Ok(canonical) = fs::canonicalize(&candidate) {
                         if visited.contains(&canonical) {
                             continue;
                         }
@@ -173,7 +173,7 @@ fn expand_modules(
                             loaded = Some((content, canonical));
                             break;
                         }
-                        }
+                    }
                 }
 
                 if let Some((content, canonical)) = loaded {

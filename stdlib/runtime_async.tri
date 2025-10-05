@@ -16,49 +16,49 @@ ResourceAccess :: enum {
 
 AsyncExecutionError :: enum {
     ResourceConflict {
-        system: string,
-        resource: string,
-        reason: string,
+        system: String,
+        resource: String,
+        reason: String,
     },
     SchedulingError {
-        message: string,
+        message: String,
     },
     TableError {
-        message: string,
+        message: String,
     },
     SystemError {
-        system: string,
-        message: string,
+        system: String,
+        message: String,
     },
     Timeout {
-        system: string,
+        system: String,
         duration_ms: i64,
     },
     Cancelled {
-        system: string,
+        system: String,
     },
     ResourceLifecycleError {
-        resource: string,
-        phase: string,
-        reason: string,
+        resource: String,
+        phase: String,
+        reason: String,
     },
 }
 
 YieldPoint :: enum {
     AwaitingResource {
-        resource_name: string,
+        resource_name: String,
         access_type: ResourceAccess,
     },
     AwaitingTableQuery {
-        table_name: string,
-        query_type: string,
+        table_name: String,
+        query_type: String,
     },
     AwaitingSystemCompletion {
-        system_name: string,
+        system_name: String,
         task_id: u64,
     },
     AwaitingSignal {
-        signal_name: string,
+        signal_name: String,
     },
     Sleeping {
         duration_ms: i64,
@@ -90,9 +90,9 @@ TaskState :: enum {
 
 SystemExecutionResult :: enum {
     Success {
-        return_value: ?string,
-        resources_modified: [string],
-        tables_modified: [string],
+        return_value: ?String,
+        resources_modified: [String],
+        tables_modified: [String],
     },
     Partial {
         intermediate_state: [ParameterValue],
@@ -120,26 +120,26 @@ RuntimeStats :: {
 }
 
 ResourceHandle :: {
-    resource_name: string,
+    resource_name: String,
     access_type: ResourceAccess,
     acquired_at_ms: i64,
     lease_duration_ms: ?i64,
 }
 
 ResourceRequest :: {
-    resource_name: string,
+    resource_name: String,
     access_type: ResourceAccess,
     lease_duration_ms: ?i64,
 }
 
 TaskWaker :: {
     task_id: u64,
-    token: string,
+    token: String,
 }
 
 ParameterValue :: {
-    name: string,
-    payload: string,
+    name: String,
+    payload: String,
 }
 
 ParameterBag :: {
@@ -166,7 +166,7 @@ default_runtime_config :: () -> RuntimeConfig => {
 
 AsyncTask :: {
     id: u64,
-    system_name: string,
+    system_name: String,
     parameters: ParameterBag,
     state: TaskState,
     priority: TaskPriority,
@@ -195,7 +195,7 @@ CompletedTaskRecord :: {
 }
 
 ActiveResourceLease :: {
-    resource_name: string,
+    resource_name: String,
     task_id: u64,
     access_type: ResourceAccess,
     acquired_at_ms: i64,
@@ -203,7 +203,7 @@ ActiveResourceLease :: {
 }
 
 ResourceWaiter :: {
-    resource_name: string,
+    resource_name: String,
     task_id: u64,
     access_type: ResourceAccess,
     requested_at_ms: i64,
@@ -244,7 +244,7 @@ new_async_runtime :: (config: ?RuntimeConfig) -> AsyncRuntimeState => {
 
 submit_task :: (
     runtime: &mut AsyncRuntimeState,
-    system_name: string,
+    system_name: String,
     parameters: ParameterBag,
     priority: TaskPriority,
     timeout_ms: ?i64,
@@ -264,8 +264,8 @@ submit_task :: (
         dependencies: [],
     }
 
-    runtime.active_tasks = array_append(runtime.active_tasks, task)
-    runtime.queued_task_ids = array_append(runtime.queued_task_ids, id)
+    runtime.active_tasks = runtime.active_tasks.push(task)
+    runtime.queued_task_ids = runtime.queued_task_ids.push(id)
 
     runtime.resource_summary.total_tasks_created = runtime.resource_summary.total_tasks_created + 1
     runtime.resource_summary.active_tasks = runtime.resource_summary.active_tasks + 1

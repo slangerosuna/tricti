@@ -2747,12 +2747,74 @@ fn numeric_rank(name: &str) -> Option<usize> {
     NUMERIC_PROMOTION_ORDER.iter().position(|n| *n == name)
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum NumericKind {
+    Unsigned,
+    Signed,
+    Float,
+}
+
+fn numeric_info(name: &str) -> Option<(usize, NumericKind)> {
+    match name {
+        "u8" => Some((8, NumericKind::Unsigned)),
+        "i8" => Some((8, NumericKind::Signed)),
+        "u16" => Some((16, NumericKind::Unsigned)),
+        "i16" => Some((16, NumericKind::Signed)),
+        "u32" => Some((32, NumericKind::Unsigned)),
+        "i32" => Some((32, NumericKind::Signed)),
+        "u64" => Some((64, NumericKind::Unsigned)),
+        "i64" => Some((64, NumericKind::Signed)),
+        "f32" => Some((32, NumericKind::Float)),
+        "f64" => Some((64, NumericKind::Float)),
+        _ => None,
+    }
+}
+
+fn signed_type_for_bits(bits: usize) -> Option<&'static str> {
+    match bits {
+        0..=8 => Some("i8"),
+        9..=16 => Some("i16"),
+        17..=32 => Some("i32"),
+        33..=64 => Some("i64"),
+        _ => None,
+    }
+}
+
 fn promote_numeric_types(left: &Type, right: &Type) -> Type {
     let left_name = numeric_type_name(left);
     let right_name = numeric_type_name(right);
 
     match (left_name, right_name) {
         (Some(ln), Some(rn)) => {
+            if let (Some((l_bits, l_kind)), Some((r_bits, r_kind))) =
+                (numeric_info(ln), numeric_info(rn))
+            {
+                if l_kind == NumericKind::Float || r_kind == NumericKind::Float {
+                    let target_bits = if l_kind == NumericKind::Float && r_kind == NumericKind::Float {
+                        l_bits.max(r_bits)
+                    } else if l_kind == NumericKind::Float {
+                        l_bits
+                    } else {
+                        r_bits
+                    };
+                    let target = if target_bits >= 64 { "f64" } else { "f32" };
+                    return Type::Identifier {
+                        name: target.to_string(),
+                        type_args: vec![],
+                    };
+                }
+
+                if (l_kind == NumericKind::Signed && r_kind == NumericKind::Unsigned)
+                    || (l_kind == NumericKind::Unsigned && r_kind == NumericKind::Signed)
+                {
+                    let max_bits = l_bits.max(r_bits);
+                    let target = signed_type_for_bits(max_bits).unwrap_or("i64");
+                    return Type::Identifier {
+                        name: target.to_string(),
+                        type_args: vec![],
+                    };
+                }
+            }
             let l_rank = numeric_rank(ln).unwrap_or(0);
             let r_rank = numeric_rank(rn).unwrap_or(0);
             let target = if l_rank >= r_rank { ln } else { rn };

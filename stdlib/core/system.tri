@@ -12,7 +12,7 @@ use core::result
 # =============================================================================
 
 SystemDef :: {
-    name: string,
+    name: String,
     is_async: bool,
     
     # Resources accessed by this system
@@ -22,7 +22,7 @@ SystemDef :: {
     parameters: [SystemParameter],
     
     # Return type
-    return_type: ?string,
+    return_type: ?String,
     
     # System implementation (closure or reference to compiled function)
     implementation: SystemImpl,
@@ -33,8 +33,8 @@ SystemDef :: {
 }
 
 ResourceQuery :: {
-    query_name: string,
-    table_name: string,
+    query_name: String,
+    table_name: String,
     access_mode: ResourceAccessMode,
     query_ast: QueryOp,  # From query.tri
 }
@@ -46,8 +46,8 @@ ResourceAccessMode :: enum {
 }
 
 SystemParameter :: {
-    name: string,
-    param_type: string,
+    name: String,
+    param_type: String,
     is_trigger_input: bool,
 }
 
@@ -68,14 +68,14 @@ TaskPriority :: enum {
 # =============================================================================
 
 SystemDAG :: {
-    nodes: Vec<DAGNode>,
-    edges: Vec<DAGEdge>,
-    execution_order: Vec<u64>,  # Topologically sorted node indices
+    nodes: [DAGNode],
+    edges: [DAGEdge],
+    execution_order: [u64],  # Topologically sorted node indices
     
     # Analysis results
     max_parallelism: u64,
     critical_path_length: u64,
-    resource_conflicts: Vec<ResourceConflict>,
+    resource_conflicts: [ResourceConflict],
 }
 
 DAGNode :: {
@@ -95,15 +95,15 @@ DAGEdge :: {
 }
 
 EdgeType :: enum {
-    DataDependency { signal_name: string },
-    ResourceDependency { resource_name: string },
+    DataDependency { signal_name: String },
+    ResourceDependency { resource_name: String },
     ExplicitOrdering,
 }
 
 ResourceConflict :: {
-    system_a: string,
-    system_b: string,
-    resource: string,
+    system_a: String,
+    system_b: String,
+    resource: String,
     conflict_type: ConflictType,
 }
 
@@ -136,12 +136,12 @@ impl DAGCompiler {
     }
 
     # Register a signal
-    register_signal :: (&mut self, name: string, signal: Signal<*none>) => {
+    register_signal :: (&mut self, name: String, signal: Signal<*none>) => {
         self.signals.insert(name, signal)
     }
 
     # Compile systems into a DAG
-    compile :: (&self, trigger_systems: [string]) -> StdResult<SystemDAG> => {
+    compile :: (&self, trigger_systems: [String]) -> !SystemDAG => {
         nodes := Vec::new()
         edges := Vec::new()
         
@@ -174,19 +174,19 @@ impl DAGCompiler {
         # Calculate max parallelism
         max_parallelism := self.calculate_max_parallelism(&nodes, &edges)?
         
-        std_ok(SystemDAG {
+        ok SystemDAG {
             nodes: nodes,
             edges: edges,
             execution_order: execution_order,
             max_parallelism: max_parallelism,
             critical_path_length: critical_path,
             resource_conflicts: conflicts,
-        })
+        }
     }
 
     # Analyze data and resource dependencies
-    analyze_dependencies :: (&self, nodes: &mut Vec<DAGNode>, 
-                             edges: &mut Vec<DAGEdge>) -> StdResult<none> => {
+    analyze_dependencies :: (&self, nodes: &mut [DAGNode], 
+                             edges: &mut [DAGEdge]) -> !none => {
         # For each pair of systems, check:
         # 1. Signal dependencies (data flow)
         # 2. Resource dependencies (table access)
@@ -204,7 +204,7 @@ impl DAGCompiler {
                     for query_b in system_b.resource_queries {
                         if query_a.table_name == query_b.table_name {
                             # Same table accessed - check for conflicts
-                            if query_a.access_mode == ResourceAccessMode::Write ||
+                            if query_a.access_mode == ResourceAccessMode::Write or
                                query_b.access_mode == ResourceAccessMode::Write {
                                 # Add dependency edge
                                 edges.push(DAGEdge {
@@ -221,13 +221,13 @@ impl DAGCompiler {
             }
         }
         
-        std_ok(none)
+        ok none
     }
 
     # Topological sort using Kahn's algorithm
-    topological_sort :: (&self, nodes: &Vec<DAGNode>, 
-                         edges: &Vec<DAGEdge>) -> StdResult<Vec<u64>> => {
-        in_degree := Vec::with_capacity(nodes.len())
+    topological_sort :: (&self, nodes: &[DAGNode], 
+                         edges: &[DAGEdge]) -> ![u64] => {
+        in_degree := [u64]::with_capacity(nodes.len())
         for _ in 0..nodes.len() {
             in_degree.push(0)
         }
@@ -238,14 +238,14 @@ impl DAGCompiler {
         }
         
         # Queue of nodes with no incoming edges
-        queue := Vec::new()
+        queue := [u64]::new()
         for i in 0..nodes.len() {
             if in_degree[i] == 0 {
                 queue.push(i)
             }
         }
         
-        result := Vec::new()
+        result := [u64]::new()
         
         while ~queue.is_empty() {
             node_id := queue.remove(0)?
@@ -264,17 +264,17 @@ impl DAGCompiler {
         
         # Check for cycles
         if result.len() != nodes.len() {
-            ret std_err(StdError::Message {
+            ret err StdError::Message {
                 message: "Cycle detected in system DAG",
-            })
+            }
         }
-        
-        std_ok(result)
+
+        ok result
     }
 
     # Detect resource conflicts between systems
-    detect_conflicts :: (&self, nodes: &Vec<DAGNode>) -> StdResult<Vec<ResourceConflict>> => {
-        conflicts := Vec::new()
+    detect_conflicts :: (&self, nodes: &[DAGNode]) -> ![ResourceConflict] => {
+        conflicts := [ResourceConflict]::new()
         
         for i in 0..nodes.len() {
             for j in (i+1)..nodes.len() {
@@ -311,20 +311,20 @@ impl DAGCompiler {
                 }
             }
         }
-        
-        std_ok(conflicts)
+
+        ok conflicts
     }
 
     # Calculate critical path length
-    calculate_critical_path :: (&self, nodes: &Vec<DAGNode>, 
-                                edges: &Vec<DAGEdge>) -> StdResult<u64> => {
+    calculate_critical_path :: (&self, nodes: &[DAGNode], 
+                                edges: &[DAGEdge]) -> !u64 => {
         # TODO: Implement critical path analysis using longest path algorithm
-        std_ok(0)
+        ok 0u64  # Placeholder
     }
 
     # Calculate maximum parallelism
-    calculate_max_parallelism :: (&self, nodes: &Vec<DAGNode>, 
-                                  edges: &Vec<DAGEdge>) -> StdResult<u64> => {
+    calculate_max_parallelism :: (&self, nodes: &[DAGNode], 
+                                  edges: &[DAGEdge]) -> !u64 => {
         # Group nodes by level (distance from root)
         max_at_level := 0u64
         
@@ -338,8 +338,8 @@ impl DAGCompiler {
                 max_at_level = count + 1
             }
         }
-        
-        std_ok(max_at_level)
+
+        ok max_at_level
     }
 }
 
@@ -353,7 +353,7 @@ SystemScheduler :: {
     
     # Scheduling state
     running_systems: HashMap<u64, TaskHandle>,
-    completed_systems: Vec<u64>,
+    completed_systems: [u64],
 }
 
 TaskHandle :: {
@@ -368,12 +368,12 @@ impl SystemScheduler {
             dag: dag,
             executor: SystemExecutor::new(),
             running_systems: HashMap::new(),
-            completed_systems: Vec::new(),
+            completed_systems: [u64]::new(),
         }
     }
 
     # Execute the DAG
-    execute :: (&mut self) -> StdResult<none> => {
+    execute :: (&mut self) -> !none => {
         # Execute systems in topological order, respecting parallelism
         for node_id in self.dag.execution_order {
             # Check if dependencies are satisfied
@@ -382,34 +382,34 @@ impl SystemScheduler {
                 self.execute_system(node_id)?
             }
         }
-        
-        std_ok(none)
+
+        ok none
     }
 
     # Check if all dependencies for a system are satisfied
-    dependencies_satisfied :: (&self, node_id: u64) -> StdResult<bool> => {
+    dependencies_satisfied :: (&self, node_id: u64) -> !bool => {
         # Check all incoming edges
         for edge in self.dag.edges {
             if edge.to == node_id {
                 # Check if source system is completed
                 if ~self.completed_systems.contains(edge.from) {
-                    ret std_ok(false)
+                    ret ok false
                 }
             }
         }
-        
-        std_ok(true)
+
+        ok true
     }
 
     # Execute a single system
-    execute_system :: (&mut self, node_id: u64) -> StdResult<none> => {
+    execute_system :: (&mut self, node_id: u64) -> !none => {
         node := &self.dag.nodes[node_id]
         
         # TODO: Actually execute the system
         # For now, just mark as completed
         self.completed_systems.push(node_id)
-        
-        std_ok(none)
+
+        ok none
     }
 }
 
@@ -419,7 +419,7 @@ impl SystemScheduler {
 
 SystemExecutor :: {
     # Runtime context
-    tables: HashMap<string, Table>,
+    tables: HashMap<String, Table>,
 }
 
 impl SystemExecutor {
@@ -430,14 +430,14 @@ impl SystemExecutor {
     }
 
     # Execute a system with given parameters
-    execute :: (&mut self, system: SystemDef, params: HashMap<string, *none>) -> StdResult<*none> => {
+    execute :: (&mut self, system: SystemDef, params: HashMap<String, *none>) -> !*raw none => {
         # TODO: Execute system implementation
         # This would:
         # 1. Bind parameters
         # 2. Execute queries
         # 3. Call system function
         # 4. Return result
-        
-        std_ok(unsafe { none })
+
+        ok unsafe { none }
     }
 }

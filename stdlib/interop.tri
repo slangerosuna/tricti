@@ -1,2 +1,0 @@
-# Interop namespace placeholder for TriCTI stdlib.
-# Provides a resolving target for `use interop` and `use std::interop`.

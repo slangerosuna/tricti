@@ -1,17 +1,14 @@
-# HashMap<K,V> - Generic hash map with open addressing and linear probing
-# Production-ready hash-based collection for TriCTI stdlib
-
 use prelude
 use core::traits
 
 # External C functions
-extern malloc :: (size: u64) -> *u8
-extern free :: (ptr: *u8) -> none
-extern memcpy :: (dest: *u8, src: *u8, n: u64) -> *u8
-extern memset :: (s: *u8, c: i32, n: u64) -> *u8
+extern malloc :: (size: u64) -> *raw u8
+extern free :: (ptr: *raw u8) -> none
+extern memcpy :: (dest: *raw u8, src: *raw u8, n: u64) -> *raw u8
+extern memset :: (s: *raw u8, c: i32, n: u64) -> *raw u8
 
 # Hash entry structure with tombstone support
-MapEntry<K, V> :: struct {
+MapEntry<K, V> :: {
     key: K,
     value: V,
     occupied: bool,
@@ -20,8 +17,8 @@ MapEntry<K, V> :: struct {
 }
 
 # HashMap structure with open addressing
-HashMap<K, V> :: struct {
-    buckets: *MapEntry<K, V>,
+HashMap<K, V> :: {
+    buckets: *raw MapEntry<K, V>,
     capacity: u64,
     len: u64,
     load_factor: f64
@@ -33,20 +30,22 @@ HASHMAP_LOAD_FACTOR :: 0.75
 HASHMAP_GROWTH_FACTOR :: 2
 
 # HashMap implementation with associated functions
-impl HashMap {
+impl HashMap<K, V> 
+    where K: Hash + Eq
+{
     # Constructor: Create new empty HashMap
-    new :: <K, V>() -> HashMap<K, V> => {
-        HashMap::with_capacity::<K, V>(HASHMAP_INITIAL_CAPACITY)
+    new :: () -> Self => {
+        Self::with_capacity(HASHMAP_INITIAL_CAPACITY)
     }
 
     # Constructor: Create HashMap with specific capacity
-    with_capacity :: <K, V>(cap: u64) -> HashMap<K, V> => {
+    with_capacity :: (cap: u64) -> Self => {
         if cap < HASHMAP_INITIAL_CAPACITY {
             cap = HASHMAP_INITIAL_CAPACITY
         }
         
         size := cap * sizeof(MapEntry<K, V>)
-        buckets := malloc(size) as *MapEntry<K, V>
+        buckets := unsafe { malloc(size) as *raw MapEntry<K, V> }
         
         for i in 0:cap {
             buckets[i].occupied = false
@@ -63,22 +62,22 @@ impl HashMap {
     }
 
     # Get length (number of entries)
-    len :: <K, V>(self: *HashMap<K, V>) -> u64 => {
+    len :: (&self) -> u64 => {
         self.len
     }
 
     # Check if empty
-    is_empty :: <K, V>(self: *HashMap<K, V>) -> bool => {
+    is_empty :: (&self) -> bool => {
         self.len == 0
     }
 
     # Get capacity
-    capacity :: <K, V>(self: *HashMap<K, V>) -> u64 => {
+    capacity :: (&self) -> u64 => {
         self.capacity
     }
 
     # Get current load factor
-    load :: <K, V>(self: *HashMap<K, V>) -> f64 => {
+    load :: (&self) -> f64 => {
         if self.capacity == 0 {
             ret 0.0
         }
@@ -86,8 +85,7 @@ impl HashMap {
     }
 
     # Find index for key using linear probing with tombstone reuse
-    find_slot :: <K, V>(self: *HashMap<K, V>, key: K, hash: u64) -> u64 
-        where K: Hash + Eq => {
+    find_slot :: (&self, key: &K, hash: u64) -> u64 => {
         index := hash % self.capacity
         start := index
         first_tombstone := self.capacity
@@ -96,12 +94,12 @@ impl HashMap {
             entry := &self.buckets[index]
             
             # Track first tombstone for potential reuse
-            if entry.tombstone && !entry.occupied && first_tombstone == self.capacity {
+            if entry.tombstone && ~entry.occupied && first_tombstone == self.capacity {
                 first_tombstone = index
             }
             
             # Empty slot (not occupied, not tombstone) - end of probe sequence
-            if !entry.occupied && !entry.tombstone {
+            if ~entry.occupied && ~entry.tombstone {
                 # Return first tombstone if we found one, otherwise this empty slot
                 if first_tombstone ~= self.capacity {
                     ret first_tombstone
@@ -111,7 +109,7 @@ impl HashMap {
             
             # Found occupied slot with matching hash - check key equality
             if entry.occupied && entry.hash == hash {
-                if Eq::eq(&entry.key, &key) {
+                if Eq::eq(&entry.key, key) {
                     ret index
                 }
                 # Hash collision - different keys with same hash, continue probing
@@ -132,13 +130,12 @@ impl HashMap {
     }
 
     # Resize and rehash the map
-    resize :: <K, V>(self: *HashMap<K, V>, new_cap: u64) 
-        where K: Hash + Eq => {
+    resize :: (&mut self, new_cap: u64) => {
         old_buckets := self.buckets
         old_capacity := self.capacity
         
         size := new_cap * sizeof(MapEntry<K, V>)
-        new_buckets := malloc(size) as *MapEntry<K, V>
+        new_buckets := unsafe { malloc(size) as *raw MapEntry<K, V> }
         
         for i in 0:new_cap {
             new_buckets[i].occupied = false
@@ -154,17 +151,16 @@ impl HashMap {
         for i in 0:old_capacity {
             entry := &old_buckets[i]
             if entry.occupied {
-                HashMap::insert::<K, V>(self, entry.key, entry.value)
+                self.insert(entry.key, entry.value)
             }
         }
         
         self.len = old_len
-        free(old_buckets as *u8)
+    unsafe { free(old_buckets as *raw u8) }
     }
 
     # Reserve capacity for additional elements
-    reserve :: <K, V>(self: *HashMap<K, V>, additional: u64) 
-        where K: Hash + Eq => {
+    reserve :: (&mut self, additional: u64) => {
         needed := self.len + additional
         threshold := (self.capacity as f64 * self.load_factor) as u64
         
@@ -173,15 +169,14 @@ impl HashMap {
             while (new_cap as f64 * self.load_factor) as u64 < needed {
                 new_cap = new_cap * HASHMAP_GROWTH_FACTOR
             }
-            HashMap::resize::<K, V>(self, new_cap)
+            self.resize(new_cap)
         }
     }
 
     # Shrink capacity to fit current size
-    shrink_to_fit :: <K, V>(self: *HashMap<K, V>) 
-        where K: Hash + Eq => {
+    shrink_to_fit :: (&mut self) => {
         if self.len == 0 {
-            HashMap::resize::<K, V>(self, HASHMAP_INITIAL_CAPACITY)
+            self.resize(HASHMAP_INITIAL_CAPACITY)
             ret none
         }
         
@@ -191,26 +186,29 @@ impl HashMap {
         }
         
         if min_cap < self.capacity {
-            HashMap::resize::<K, V>(self, min_cap)
+            self.resize(min_cap)
         }
     }
 
     # Insert or update key-value pair
-    insert :: <K, V>(self: *HashMap<K, V>, key: K, value: V) 
-        where K: Hash + Eq => {
+    insert :: (&mut self, key: K, value: V) => {
         threshold := (self.capacity as f64 * self.load_factor) as u64
         if self.len >= threshold {
-            HashMap::resize::<K, V>(self, self.capacity * HASHMAP_GROWTH_FACTOR)
+            self.resize(self.capacity * HASHMAP_GROWTH_FACTOR)
         }
         
-        hash := Hash::hash(&key)
-        index := HashMap::find_slot::<K, V>(self, key, hash)
-        
-        if index >= self.capacity {
+        if self.capacity == 0 {
             ret none
         }
+
+        hash := key.hash()
+        index := self.find_slot(&key, hash)
+
+        if index >= self.capacity {
+            ret
+        }
         
-        entry := &self.buckets[index]
+        entry := &mut self.buckets[index]
         was_occupied := entry.occupied
         
         entry.key = key
@@ -219,78 +217,109 @@ impl HashMap {
         entry.tombstone = false
         entry.hash = hash
         
-        if !was_occupied {
+        if ~was_occupied {
             self.len = self.len + 1
         }
     }
 
-    # Get value by key (returns null pointer if not found)
-    get :: <K, V>(self: *HashMap<K, V>, key: K) -> *V 
-        where K: Hash + Eq => {
-        hash := Hash::hash(&key)
+    get<'a> :: (&'a self, key: K) -> ?&'a V => {
+        if self.capacity == 0 {
+            ret none
+        }
+
+        hash := key.hash()
         index := hash % self.capacity
         start := index
-        
+
         loop {
             entry := &self.buckets[index]
-            
+
             # Empty slot - key not found
-            if !entry.occupied && !entry.tombstone {
-                ret 0 as *V
+            if ~entry.occupied && ~entry.tombstone {
+                ret none
             }
-            
+
             # Check both hash AND key equality
             if entry.occupied && entry.hash == hash {
                 if Eq::eq(&entry.key, &key) {
-                    ret &entry.value
+                    ret some &entry.value
                 }
                 # Hash collision - different keys with same hash, continue probing
             }
-            
+
             index = (index + 1) % self.capacity
-            
+
             if index == start {
-                ret 0 as *V
+                ret none
             }
         }
-        
-        0 as *V
+
+        none
     }
 
     # Get mutable value by key
-    get_mut :: <K, V>(self: *HashMap<K, V>, key: K) -> *V 
-        where K: Hash + Eq => {
-        HashMap::get::<K, V>(self, key)
+    get_mut<'a> :: (&'a mut self, key: K) -> ?&'a mut V => {
+        if self.capacity == 0 {
+            ret none
+        }
+
+        hash := key.hash()
+        index := hash % self.capacity
+        start := index
+
+        loop {
+            entry := &mut self.buckets[index]
+
+            # Empty slot - key not found
+            if ~entry.occupied && ~entry.tombstone {
+                ret none
+            }
+
+            if entry.occupied && entry.hash == hash {
+                if Eq::eq(&entry.key, &key) {
+                    ret some &mut entry.value
+                }
+            }
+
+            index = (index + 1) % self.capacity
+
+            if index == start {
+                ret none
+            }
+        }
+
+        none
     }
 
     # Get value or default
-    get_or_default :: <K, V>(self: *HashMap<K, V>, key: K, default: V) -> V 
-        where K: Hash + Eq => {
-        val := HashMap::get::<K, V>(self, key)
-        if val == (0 as *V) {
-            ret default
+    get_or_default :: (&self, key: K, default: V) -> V
+        where V: Copy => {
+        match self.get(key) {
+            some value => *value,
+            none => default,
         }
-        val[0]
     }
 
     # Check if key exists
-    contains_key :: <K, V>(self: *HashMap<K, V>, key: K) -> bool 
-        where K: Hash + Eq => {
-        HashMap::get::<K, V>(self, key) ~= (0 as *V)
+    contains_key :: (&self, key: K) -> bool => {
+        self.get(key) ~= none
     }
 
     # Remove key-value pair
-    remove :: <K, V>(self: *HashMap<K, V>, key: K) -> bool 
-        where K: Hash + Eq => {
-        hash := Hash::hash(&key)
+    remove :: (&mut self, key: K) -> bool => {
+        if self.capacity == 0 {
+            ret false
+        }
+
+        hash := key.hash()
         index := hash % self.capacity
         start := index
         
         loop {
-            entry := &self.buckets[index]
+            entry := &mut self.buckets[index]
             
             # Empty slot - key not found
-            if !entry.occupied && !entry.tombstone {
+            if ~entry.occupied && ~entry.tombstone {
                 ret false
             }
             
@@ -316,7 +345,7 @@ impl HashMap {
     }
 
     # Clear all entries
-    clear :: <K, V>(self: *HashMap<K, V>) -> none => {
+    clear :: (&mut self) -> none => {
         for i in 0:self.capacity {
             self.buckets[i].occupied = false
             self.buckets[i].tombstone = false
@@ -326,146 +355,113 @@ impl HashMap {
     }
 
     # Get all keys count
-    keys_count :: <K, V>(self: *HashMap<K, V>) -> u64 => {
-        self.len
-    }
+    keys_count :: (&self) -> u64 => self.len
 
     # Collect key at index (returns default-initialized value if out of bounds)
-    key_at :: <K, V>(self: *HashMap<K, V>, idx: u64) -> K => {
+    key_at<'a> :: (&'a self, idx: u64) -> ?&'a K => {
         # Bounds check
         if idx >= self.len {
-            # Find first occupied entry to return its key as fallback
-            for i in 0:self.capacity {
-                if self.buckets[i].occupied {
-                    ret self.buckets[i].key
-                }
-            }
-            # If no occupied entries, return default value
-            default: K
-            ret default
+            ret none
         }
         
         count := 0
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
                 if count == idx {
-                    ret self.buckets[i].key
+                    ret some &self.buckets[i].key
                 }
                 count = count + 1
             }
         }
-        
-        # Fallback
-        default: K
-        ret default
+
+        none
     }
 
     # Get all values count
-    values_count :: <K, V>(self: *HashMap<K, V>) -> u64 => {
-        self.len
-    }
+    values_count :: (&self) -> u64 => self.len
 
-    # Collect value at index (returns default-initialized value if out of bounds)
-    value_at :: <K, V>(self: *HashMap<K, V>, idx: u64) -> V => {
-        # Bounds check
+    # Collect value at index (returns none if out of bounds)
+    value_at<'a> :: (&'a self, idx: u64) -> ?&'a V => {
         if idx >= self.len {
-            # Find first occupied entry to return its value as fallback
-            for i in 0:self.capacity {
-                if self.buckets[i].occupied {
-                    ret self.buckets[i].value
-                }
-            }
-            # If no occupied entries, return default value
-            default: V
-            ret default
+            ret none
         }
         
         count := 0
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
                 if count == idx {
-                    ret self.buckets[i].value
+                    ret some &self.buckets[i].value
                 }
                 count = count + 1
             }
         }
         
-        # Fallback
-        default: V
-        ret default
+        none
     }
 
-    # Get entries count
-    entries_count :: <K, V>(self: *HashMap<K, V>) -> u64 => {
-        self.len
+    entries_count :: (&self) -> u64 => self.len
+
+    entry_key_at<'a> :: (&'a self, idx: u64) -> ?&'a K => {
+        self.key_at(idx)
     }
 
-    # Get entry key at index
-    entry_key_at :: <K, V>(self: *HashMap<K, V>, idx: u64) -> K => {
-        HashMap::key_at::<K, V>(self, idx)
-    }
-
-    # Get entry value at index
-    entry_value_at :: <K, V>(self: *HashMap<K, V>, idx: u64) -> V => {
-        HashMap::value_at::<K, V>(self, idx)
+    entry_value_at<'a> :: (&'a self, idx: u64) -> ?&'a V => {
+        self.value_at(idx)
     }
 
     # Iterate with callback
-    each :: <K, V>(self: *HashMap<K, V>, callback: (K, V) -> none) -> none => {
+    each :: (&self, callback: (&K, &V) -> none) => {
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
-                callback(self.buckets[i].key, self.buckets[i].value)
+                callback(&self.buckets[i].key, &self.buckets[i].value)
             }
         }
     }
 
     # Iterate keys with callback
-    each_key :: <K, V>(self: *HashMap<K, V>, callback: (K) -> none) -> none => {
+    each_key :: (&self, callback: (&K) -> none) => {
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
-                callback(self.buckets[i].key)
+                callback(&self.buckets[i].key)
             }
         }
     }
 
     # Iterate values with callback
-    each_value :: <K, V>(self: *HashMap<K, V>, callback: (V) -> none) -> none => {
+    each_value :: (&self, callback: (&V) -> none) => {
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
-                callback(self.buckets[i].value)
+                callback(&self.buckets[i].value)
             }
         }
     }
 
-    # Clone/copy the map
-    clone :: <K, V>(self: *HashMap<K, V>) -> HashMap<K, V> 
-        where K: Hash + Eq => {
-        new_map := HashMap::with_capacity::<K, V>(self.capacity)
-        
+    clone :: (&self) -> HashMap<K, V>
+        where K: Clone + Hash + Eq, V: Clone => {
+        new_map := Self::with_capacity(self.capacity)
+
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
-                HashMap::insert::<K, V>(&new_map, self.buckets[i].key, self.buckets[i].value)
+                new_map.insert(self.buckets[i].key.clone(), self.buckets[i].value.clone())
             }
         }
-        
+
         new_map
     }
 
-    # Destroy and free memory
-    destroy :: <K, V>(self: *HashMap<K, V>) -> none => {
-        if self.buckets ~= (0 as *MapEntry<K, V>) {
-            free(self.buckets as *u8)
-            self.buckets = 0 as *MapEntry<K, V>
+    destroy :: (&mut self) => {
+        if self.buckets ~= (unsafe { 0 as *raw MapEntry<K, V> }) {
+            unsafe { free(self.buckets as *raw u8) }
+            self.buckets = unsafe { 0 as *raw MapEntry<K, V> }
         }
         self.capacity = 0
         self.len = 0
     }
 
-    # Retain only elements that match predicate
-    retain :: <K, V>(self: *HashMap<K, V>, predicate: (K, V) -> bool) -> none => {
+    retain :: (&mut self, predicate: (&K, &V) -> bool) => {
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
-                keep := predicate(self.buckets[i].key, self.buckets[i].value)
+                keep := predicate(&self.buckets[i].key, &self.buckets[i].value)
                 if !keep {
                     self.buckets[i].occupied = false
                     self.buckets[i].tombstone = true
@@ -475,11 +471,10 @@ impl HashMap {
         }
     }
 
-    # Check if any entry matches predicate
-    any :: <K, V>(self: *HashMap<K, V>, predicate: (K, V) -> bool) -> bool => {
+    any :: (&self, predicate: (&K, &V) -> bool) -> bool => {
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
-                if predicate(self.buckets[i].key, self.buckets[i].value) {
+                if predicate(&self.buckets[i].key, &self.buckets[i].value) {
                     ret true
                 }
             }
@@ -487,11 +482,10 @@ impl HashMap {
         false
     }
 
-    # Check if all entries match predicate
-    all :: <K, V>(self: *HashMap<K, V>, predicate: (K, V) -> bool) -> bool => {
+    all :: (&self, predicate: (&K, &V) -> bool) -> bool => {
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
-                if !predicate(self.buckets[i].key, self.buckets[i].value) {
+                if !predicate(&self.buckets[i].key, &self.buckets[i].value) {
                     ret false
                 }
             }
@@ -499,12 +493,11 @@ impl HashMap {
         true
     }
 
-    # Count entries matching predicate
-    count_if :: <K, V>(self: *HashMap<K, V>, predicate: (K, V) -> bool) -> u64 => {
+    count_if :: (&self, predicate: (&K, &V) -> bool) -> u64 => {
         count := 0
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
-                if predicate(self.buckets[i].key, self.buckets[i].value) {
+                if predicate(&self.buckets[i].key, &self.buckets[i].value) {
                     count = count + 1
                 }
             }
@@ -512,24 +505,22 @@ impl HashMap {
         count
     }
 
-    # Find first key matching predicate
-    find_key :: <K, V>(self: *HashMap<K, V>, predicate: (K, V) -> bool) -> *K => {
+    find_key<'a> :: (&'a self, predicate: (&K, &V) -> bool) -> ?&'a K => {
         for i in 0:self.capacity {
             if self.buckets[i].occupied {
-                if predicate(self.buckets[i].key, self.buckets[i].value) {
-                    ret &self.buckets[i].key
+                if predicate(&self.buckets[i].key, &self.buckets[i].value) {
+                    ret some &self.buckets[i].key
                 }
             }
         }
-        0 as *K
+        none
     }
 
-    # Extend with entries from another map
-    extend :: <K, V>(self: *HashMap<K, V>, other: *HashMap<K, V>) 
-        where K: Hash + Eq => {
+    extend :: (&mut self, other: &HashMap<K, V>)
+        where K: Clone, V: Clone => {
         for i in 0:other.capacity {
             if other.buckets[i].occupied {
-                HashMap::insert::<K, V>(self, other.buckets[i].key, other.buckets[i].value)
+                self.insert(other.buckets[i].key.clone(), other.buckets[i].value.clone())
             }
         }
     }

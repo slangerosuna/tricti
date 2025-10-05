@@ -4,37 +4,37 @@
 use prelude
 
 # Core String struct
-String :: struct {
-    data: *u8,
+String :: {
+    data: *raw u8,
     len: u64,
     capacity: u64
 }
 
 # Extern C standard library functions
-extern malloc :: (size: u64) -> *u8
-extern free :: (ptr: *u8) -> none
-extern memcpy :: (dest: *u8, src: *u8, n: u64) -> *u8
-extern memmove :: (dest: *u8, src: *u8, n: u64) -> *u8
-extern memset :: (s: *u8, c: i32, n: u64) -> *u8
-extern strlen :: (s: *u8) -> u64
-extern strcmp :: (s1: *u8, s2: *u8) -> i32
-extern strncmp :: (s1: *u8, s2: *u8, n: u64) -> i32
-extern strcpy :: (dest: *u8, src: *u8) -> *u8
-extern strncpy :: (dest: *u8, src: *u8, n: u64) -> *u8
-extern strstr :: (haystack: *u8, needle: *u8) -> *u8
-extern strchr :: (s: *u8, c: i32) -> *u8
-extern strcat :: (dest: *u8, src: *u8) -> *u8
-extern atoi :: (s: *u8) -> i32
-extern atof :: (s: *u8) -> f64
-extern sprintf :: (str: *u8, format: *u8, ...) -> i32
-extern snprintf :: (str: *u8, size: u64, format: *u8, ...) -> i32
+extern malloc :: (size: u64) -> *raw u8
+extern free :: (ptr: *raw u8) -> none
+extern memcpy :: (dest: *raw u8, src: *raw u8, n: u64) -> *raw u8
+extern memmove :: (dest: *raw u8, src: *raw u8, n: u64) -> *raw u8
+extern memset :: (s: *raw u8, c: i32, n: u64) -> *raw u8
+extern strlen :: (s: *raw u8) -> u64
+extern strcmp :: (s1: *raw u8, s2: *raw u8) -> i32
+extern strncmp :: (s1: *raw u8, s2: *raw u8, n: u64) -> i32
+extern strcpy :: (dest: *raw u8, src: *raw u8) -> *raw u8
+extern strncpy :: (dest: *raw u8, src: *raw u8, n: u64) -> *raw u8
+extern strstr :: (haystack: *raw u8, needle: *raw u8) -> *raw u8
+extern strchr :: (s: *raw u8, c: i32) -> *raw u8
+extern strcat :: (dest: *raw u8, src: *raw u8) -> *raw u8
+extern atoi :: (s: *raw u8) -> i32
+extern atof :: (s: *raw u8) -> f64
+extern sprintf :: (str: *raw u8, format: *raw u8, ...) -> i32
+extern snprintf :: (str: *raw u8, size: u64, format: *raw u8, ...) -> i32
 extern toupper :: (c: i32) -> i32
 extern tolower :: (c: i32) -> i32
 extern isspace :: (c: i32) -> i32
 
 # Helper to convert pointer offset
-ptr_offset :: (base: *u8, offset: u64) -> *u8 => {
-    (base as u64 + offset) as *u8
+ptr_offset :: unsafe (base: *raw u8, offset: u64) -> *raw u8 => {
+    unsafe { base as u64 + offset }
 }
 
 # String implementation with associated functions
@@ -51,8 +51,8 @@ impl String {
     }
 
     # Constructor: Create string from C string
-    from_cstr :: (cstr: *u8) -> String => {
-        if cstr == (0 as *u8) {
+    from_cstr :: (cstr: *raw u8) -> String => {
+        if cstr == (0 as *raw u8) {
             ret String::new()
         }
         
@@ -89,22 +89,22 @@ impl String {
     }
 
     # Get length
-    len :: (self: *String) -> u64 => {
+    len :: (self: &String) -> u64 => {
         self.len
     }
 
     # Check if empty
-    is_empty :: (self: *String) -> bool => {
+    is_empty :: (self: &String) -> bool => {
         self.len == 0
     }
 
     # Get capacity
-    capacity :: (self: *String) -> u64 => {
+    capacity :: (self: &String) -> u64 => {
         self.capacity
     }
 
     # Reserve additional capacity
-    reserve :: (self: *String, additional: u64) -> none => {
+    reserve :: (self: &mut String, additional: u64) -> none => {
         needed := self.len + additional + 1
         if needed <= self.capacity {
             ret none
@@ -124,9 +124,9 @@ impl String {
     }
 
     # Shrink capacity to fit current length
-    shrink_to_fit :: (self: *String) -> none => {
+    shrink_to_fit :: (self: &mut String) -> none => {
         if self.len == 0 {
-            if self.data ~= (0 as *u8) {
+            if self.data ~= (0 as *raw u8) {
                 free(self.data)
             }
             self.data = malloc(1)
@@ -150,7 +150,7 @@ impl String {
     }
 
     # Access character at index
-    char_at :: (self: *String, index: u64) -> u8 => {
+    char_at :: (self: &String, index: u64) -> u8 => {
         if index >= self.len {
             panic("String index out of bounds")
         }
@@ -158,20 +158,20 @@ impl String {
     }
 
     # Get bytes as C string
-    as_cstr :: (self: *String) -> *u8 => {
-        if self.data == (0 as *u8) {
-            ret "" as *u8
+    as_cstr :: (self: &String) -> *raw u8 => {
+        if self.data == (0 as *raw u8) {
+            ret "" as *raw u8
         }
         self.data
     }
 
     # Get raw bytes pointer
-    bytes :: (self: *String) -> *u8 => {
+    bytes :: (self: &String) -> *raw u8 => {
         self.data
     }
 
     # Push string
-    push_str :: (self: *String, other: *String) -> none => {
+    push_str :: (self: &mut String, other: &String) -> none => {
         if other.len == 0 {
             ret none
         }
@@ -263,7 +263,7 @@ impl String {
         if needle.len == 0 {
             ret true
         }
-        if self.len == 0 || needle.len > self.len {
+        if self.len == 0 or needle.len > self.len {
             ret false
         }
         

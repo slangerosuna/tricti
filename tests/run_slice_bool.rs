@@ -42,11 +42,7 @@ main :: () => {
 main()
     "#;
 
-    let stdout = compile_and_run(
-        source,
-        "tests/tmp_slice_bool.o",
-        "tests/tmp_slice_bool.out",
-    );
+    let stdout = compile_and_run(source, "tests/tmp_slice_bool.o", "tests/tmp_slice_bool.out");
     assert_eq!(stdout, "3\n");
 }
 

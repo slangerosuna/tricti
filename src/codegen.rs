@@ -1380,7 +1380,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 if matches!(target, Expression::Index { .. }) {
-                    eprintln!("generate assignment target kind: INDEX, value kind: {:?}", value);
+                    eprintln!(
+                        "generate assignment target kind: INDEX, value kind: {:?}",
+                        value
+                    );
                 }
                 let value_result = self.generate_expression(value)?;
 
@@ -2938,8 +2941,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                     let iv = self.cast_to_int(v, i64_ty)?;
                     let offset = i64_ty.const_int((i + 1) as u64, false);
                     let elem_ptr = unsafe {
-                        self.builder
-                            .build_in_bounds_gep(i64_ty, cast_ptr, &[offset], "vec_lit_elem")
+                        self.builder.build_in_bounds_gep(
+                            i64_ty,
+                            cast_ptr,
+                            &[offset],
+                            "vec_lit_elem",
+                        )
                     }
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     self.builder
@@ -6398,22 +6405,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                             if let Some(ty) = self.local_types.get(name) {
                                 eprintln!(
                                     "println pointer arg {} local type {:?}, is_string_arg={}",
-                                    name,
-                                    ty,
-                                    is_string_arg
+                                    name, ty, is_string_arg
                                 );
                             } else if let Some(ty) = self.semantic.get_variable_type(name) {
                                 eprintln!(
                                     "println pointer arg {} semantic type {:?}, is_string_arg={}",
-                                    name,
-                                    ty,
-                                    is_string_arg
+                                    name, ty, is_string_arg
                                 );
                             } else {
                                 eprintln!(
                                     "println pointer arg {} type <unknown>, is_string_arg={}",
-                                    name,
-                                    is_string_arg
+                                    name, is_string_arg
                                 );
                             }
                         }

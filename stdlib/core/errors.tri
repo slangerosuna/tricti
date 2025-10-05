@@ -3,11 +3,21 @@
 
 use prelude
 
+Error :: trait {
+    to_string :: (&self) -> String
+}
+
 StdError :: enum {
     Message: String,
     Panic: String,
     InvalidArgument: String,
     Unsupported: String,
+}
+
+impl Error for StdError {
+    to_string :: (&self) -> String => {
+        std_error_message(*self)
+    }
 }
 
 std_error_message :: (err: StdError) -> String => {

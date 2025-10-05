@@ -5,23 +5,23 @@ use ffi
 
 # Convert TriCTI String to C string (null-terminated)
 # Caller is responsible for freeing with free_cstr
-string_to_cstr :: (s: String) -> *u8 => {
+string_to_cstr :: (s: String) -> *raw u8 => {
     len := String::len(&s)
     ptr := ffi::malloc(len + 1)
     ffi::memcpy(ptr, String::as_ptr(&s), len)
-    *(ptr + len) = 0
+    unsafe { *(ptr + len) = 0 }
     ret ptr
 }
 
 # Convert C string to TriCTI String
-cstr_to_string :: (cstr: *u8) -> String => {
-    if cstr == (0 as *u8) {
+cstr_to_string :: (cstr: *raw u8) -> String => {
+    if cstr == (unsafe { 0 as *raw u8 }) {
         ret String::new()
     }
     
     mut len := 0u64
     loop {
-        if *(cstr + len) == 0 { break }
+        if unsafe { *(cstr + len) == 0 } { break }
         len = len + 1
     }
     
@@ -29,48 +29,48 @@ cstr_to_string :: (cstr: *u8) -> String => {
 }
 
 # Free C string allocated by string_to_cstr
-free_cstr :: (cstr: *u8) => {
-    if cstr != (0 as *u8) {
+free_cstr :: (cstr: *raw u8) => {
+    if cstr != (unsafe { 0 as *raw u8 }) {
         ffi::free(cstr)
     }
 }
 
 # Convert TriCTI array to C array
 # Caller is responsible for freeing with ffi_free
-array_to_c :: <T>(arr: &[T]) -> *T => {
+array_to_c :: <T>(arr: &[T]) -> *raw T => {
     if arr.len == 0 {
-        ret 0 as *T
+        ret unsafe { 0 as *raw T }
     }
     size := arr.len * sizeof::<T>()
-    ptr := ffi::malloc(size) as *T
-    ffi::memcpy(ptr as *u8, arr.data as *u8, size)
+    ptr := ffi::malloc(size) as *raw T
+    ffi::memcpy(ptr as *raw u8, arr.data as *raw u8, size)
     ret ptr
 }
 
 # Convert C array to TriCTI vector
-c_array_to_vec :: <T>(ptr: *T, len: u64) -> [T] => {
+c_array_to_vec :: <T>(ptr: *raw T, len: u64) -> [T] => {
     mut vec := new [T; len]
     size := len * sizeof::<T>()
-    ffi::memcpy(vec.data as *u8, ptr as *u8, size)
+    ffi::memcpy(vec.data as *raw u8, ptr as *raw u8, size)
     ret vec
 }
 
 # Allocate C-compatible memory
-c_alloc :: <T>() -> *T => {
-    ffi::malloc(sizeof::<T>()) as *T
+c_alloc :: <T>() -> *raw T => {
+    ffi::malloc(sizeof::<T>()) as *raw T
 }
 
 # Allocate array of C-compatible memory
-c_alloc_array :: <T>(count: u64) -> *T => {
-    ffi::malloc(count * sizeof::<T>()) as *T
+c_alloc_array :: <T>(count: u64) -> *raw T => {
+    ffi::malloc(count * sizeof::<T>()) as *raw T
 }
 
 # Free C-allocated memory
-c_free :: <T>(ptr: *T) => {
-    ffi::free(ptr as *u8)
+c_free :: <T>(ptr: *raw T) => {
+    ffi::free(ptr as *raw u8)
 }
 
 # Zero-initialize memory
-c_zero :: <T>(ptr: *T) => {
-    ffi::memset(ptr as *u8, 0, sizeof::<T>())
+c_zero :: <T>(ptr: *raw T) => {
+    ffi::memset(ptr as *raw u8, 0, sizeof::<T>())
 }

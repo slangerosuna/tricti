@@ -8,7 +8,7 @@ use prelude
 # =============================================================================
 
 Vec<T> :: {
-    data: *i64,
+    data: *raw T,
     len: u64,
     capacity: u64,
 }
@@ -16,7 +16,7 @@ Vec<T> :: {
 impl<T> Vec<T> {
     new :: () -> Vec<T> => {
         Vec<T> {
-            data: unsafe { 0 as *i64 },
+            data: unsafe { 0 as *raw T },
             len: 0,
             capacity: 0,
         }
@@ -46,7 +46,7 @@ impl<T> Vec<T> {
 
     with_capacity :: (capacity: u64) -> Vec<T> => {
         cap := ceil_power_2(capacity)
-    data := unsafe { alloc(sizeof<T>() * cap) }
+    data := unsafe { alloc(sizeof<T>() * cap) as *raw T }
 
         Vec<T> {
             data: data,
@@ -75,15 +75,15 @@ impl<T> Vec<T> {
         if capacity == 0 {
             # free old storage and reset pointer
             if self.capacity > 0 {
-                unsafe { dealloc(self.data) }
+                unsafe { dealloc(self.data as *raw u8) }
             }
-            self.data = unsafe { 0 as *T }
+            self.data = unsafe { 0 as *raw T }
             self.capacity = 0
             ret
         }
 
         # Allocate new buffer
-    var new_data := unsafe { alloc(sizeof<T>() * capacity) as *T }
+    new_data := unsafe { alloc(sizeof<T>() * capacity) as *raw T }
 
         # Workaround for parser < bug
         if self.len >= 1 {
@@ -97,7 +97,7 @@ impl<T> Vec<T> {
 
         # free old buffer
         if self.capacity > 0 {
-            unsafe { dealloc(self.data) }
+            unsafe { dealloc(self.data as *raw u8) }
         }
 
         self.data = new_data
@@ -155,8 +155,8 @@ impl Drop for Vec<T> {
             unsafe { drop(*(self.data + i)) }
         }
 
-        unsafe { dealloc(self.data) }
-        self.data = unsafe { 0 as *T }
+    unsafe { dealloc(self.data as *raw u8) }
+    self.data = unsafe { 0 as *raw T }
         self.len = 0
         self.capacity = 0
     }
@@ -515,14 +515,14 @@ hash_u64 :: (key: u64) -> u64 => {
 # =============================================================================
 
 Vec_u64 :: struct {
-    data: *u64,
+    data: *raw u64,
     len: u64,
     capacity: u64,
 }
 
 Vec_u64_new :: () -> *Vec_u64 => {
-    v := alloc(24) as *Vec_u64
-    v.data = unsafe { 0 as *u64 }
+    v := unsafe { alloc(24) as *Vec_u64 }
+    v.data = unsafe { 0 as *raw u64 }
     v.len = 0
     v.capacity = 0
     v
@@ -535,7 +535,7 @@ Vec_u64_len :: (v: *Vec_u64) -> u64 => {
 Vec_u64_push :: (v: *Vec_u64, value: u64) => {
     if v.len >= v.capacity {
         new_cap := if v.capacity == 0 { 16 } else { v.capacity * 2 }
-        new_data := alloc(new_cap * 8) as *u64
+    new_data := unsafe { alloc(new_cap * 8) as *raw u64 }
         
         # Copy old data
         for i in 0:v.len {
@@ -546,7 +546,7 @@ Vec_u64_push :: (v: *Vec_u64, value: u64) => {
         
         # Free old data if it exists
         if v.capacity > 0 {
-            dealloc(v.data as *i64)
+            dealloc(v.data as *raw u8)
         }
         
         v.data = new_data
@@ -554,7 +554,7 @@ Vec_u64_push :: (v: *Vec_u64, value: u64) => {
     }
     
     unsafe {
-        *((v.data as *u64) + v.len) = value
+        *(v.data + v.len) = value
     }
     v.len = v.len + 1
 }
@@ -598,7 +598,7 @@ HashEntry_u64_u64 :: struct {
 }
 
 HashMap_u64_u64 :: struct {
-    buckets: *HashEntry_u64_u64,
+    buckets: *raw HashEntry_u64_u64,
     capacity: u64,
     size: u64,
 }
@@ -608,11 +608,11 @@ hash_u64_simple :: (key: u64) -> u64 => {
 }
 
 HashMap_u64_u64_new :: () -> *HashMap_u64_u64 => {
-    m := alloc(24) as *HashMap_u64_u64
+    m := unsafe { alloc(24) as *HashMap_u64_u64 }
     capacity := 64
     
     # Allocate buckets
-    m.buckets = alloc(capacity * 24) as *HashEntry_u64_u64
+    m.buckets = unsafe { alloc(capacity * 24) as *raw HashEntry_u64_u64 }
     
     # Initialize all buckets as unoccupied
     for i in 0:capacity {

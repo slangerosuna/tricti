@@ -11,7 +11,7 @@ LogLevel :: enum {
     Error,
 }
 
-log_message :: (level: LogLevel, message: string) -> none => {
+log_message :: (level: LogLevel, message: String) -> none => {
     label := match level {
         LogLevel::Trace => "[trace]",
         LogLevel::Debug => "[debug]",
@@ -23,10 +23,10 @@ log_message :: (level: LogLevel, message: string) -> none => {
     println(message)
 }
 
-log_info :: (message: string) -> none => {
+log_info :: (message: String) -> none => {
     log_message(LogLevel::Info, message)
 }
 
-log_error :: (message: string) -> none => {
+log_error :: (message: String) -> none => {
     log_message(LogLevel::Error, message)
 }

@@ -85,8 +85,8 @@ std_default_config :: () -> StdConfig => {
 print :: (x) => { println(x) }
 
 # Basic memory helpers (compiler maps to malloc/free for now)
-extern alloc :: (i64) -> *i64
-extern dealloc :: (*i64) -> none
+extern alloc :: (i64) -> *raw u8
+extern dealloc :: (*raw u8) -> none
 
 # Vector utilities (stubs)
 # Placeholder utility
@@ -188,15 +188,21 @@ slice_get_bool :: (s: slice_bool, idx: i64) -> bool => {
 
 # Dynamic arrays (Vec)
 # This version is temporary until generics are implemented
-Vec_i64 :: struct { len: i64, ptr: *i64, cap: i64 }
-new_vec_i64 :: () -> Vec_i64 => { { len: 0, ptr: 0, cap: 0 } }
+Vec_i64 :: struct { len: i64, ptr: *raw i64, cap: i64 }
+ new_vec_i64 :: () -> Vec_i64 => {
+        {
+                len: 0,
+                ptr: unsafe { 0 as *raw i64 },
+                cap: 0,
+        }
+}
 
-realloc_i64 :: (old_ptr: *i64, len: i64, new_cap: i64) -> *i64 => {
-        new_ptr := alloc(new_cap * 8)
+realloc_i64 :: (old_ptr: *raw i64, len: i64, new_cap: i64) -> *raw i64 => {
+        new_ptr := unsafe { alloc(new_cap * 8) as *raw i64 }
         for i in 0:len {
                 new_ptr[i] = old_ptr[i]
         }
-        if old_ptr ~= 0 { dealloc(old_ptr) }
+        if old_ptr ~= 0 { dealloc(old_ptr as *raw u8) }
         new_ptr
 }
 

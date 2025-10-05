@@ -10,7 +10,7 @@ use core::traits
 
 # Count elements in an iterator
 iter_count :: <T, I: Iterator<T>>(iter: &mut I) -> u64 => {
-    mut count := 0
+    count := 0
     loop {
         match Iterator::next(iter) {
             some _ => { count = count + 1 }
@@ -22,7 +22,7 @@ iter_count :: <T, I: Iterator<T>>(iter: &mut I) -> u64 => {
 
 # Sum numeric iterator (for u64)
 iter_sum_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => {
-    mut total := 0
+    total := 0
     loop {
         match Iterator::next(iter) {
             some val => { total = total + val }
@@ -34,7 +34,7 @@ iter_sum_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => {
 
 # Sum numeric iterator (for i64)
 iter_sum_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => {
-    mut total := 0
+    total := 0
     loop {
         match Iterator::next(iter) {
             some val => { total = total + val }
@@ -46,7 +46,7 @@ iter_sum_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => {
 
 # Product numeric iterator (for u64)
 iter_product_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => {
-    mut product := 1
+    product := 1
     loop {
         match Iterator::next(iter) {
             some val => { product = product * val }
@@ -58,7 +58,7 @@ iter_product_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => {
 
 # Product numeric iterator (for i64)
 iter_product_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => {
-    mut product := 1
+    product := 1
     loop {
         match Iterator::next(iter) {
             some val => { product = product * val }
@@ -70,7 +70,7 @@ iter_product_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => {
 
 # Find first element (returns index, or -1 if not found) - for u64 elements
 iter_find_u64 :: <I: Iterator<u64>>(iter: &mut I, target: u64) -> i64 => {
-    mut index := 0
+    index := 0
     loop {
         match Iterator::next(iter) {
             some val => {
@@ -98,13 +98,13 @@ iter_is_exhausted :: <T, I: Iterator<T>>(iter: &mut I) -> bool => {
 # =============================================================================
 
 # Take adapter - takes first n elements
-Take<I> :: struct {
+Take<I> :: {
     iter: I,
     remaining: u64,
 }
 
 impl<T, I: Iterator<T>> Iterator<T> for Take<I> {
-    next :: (self: &mut Take<I>) -> ?T => {
+    next :: (&mut self) -> ?T => {
         if self.remaining == 0 {
             ret none
         }
@@ -125,16 +125,16 @@ iter_take :: <T, I: Iterator<T>>(iter: I, n: u64) -> Take<I> => {
 }
 
 # Skip adapter - skips first n elements
-Skip<I> :: struct {
+Skip<I> :: {
     iter: I,
     to_skip: u64,
     skipped: bool,
 }
 
 impl<T, I: Iterator<T>> Iterator<T> for Skip<I> {
-    next :: (self: &mut Skip<I>) -> ?T => {
-        if !self.skipped {
-            mut count := 0
+    next :: (&mut self) -> ?T => {
+        if ~self.skipped {
+            count := 0
             loop {
                 if count >= self.to_skip {
                     break
@@ -181,22 +181,22 @@ iter_enumerate :: <T, I: Iterator<T>>(iter: I) -> Enumerate<I> => {
 }
 
 # Chain adapter - chains two iterators
-Chain<A, B> :: struct {
+Chain<A, B> :: {
     first: A,
     second: B,
     first_exhausted: bool,
 }
 
 impl<T, A: Iterator<T>, B: Iterator<T>> Iterator<T> for Chain<A, B> {
-    next :: (self: &mut Chain<A, B>) -> ?T => {
-        if !self.first_exhausted {
-            match Iterator::next(&mut self.first) {
+    next :: (&mut self) -> ?T => {
+        if ~self.first_exhausted {
+            match self.first.next() {
                 some val => { ret some val }
                 none => { self.first_exhausted = true }
             }
         }
         
-        Iterator::next(&mut self.second)
+        self.second.next()
     }
 }
 
@@ -206,18 +206,18 @@ iter_chain :: <T, A: Iterator<T>, B: Iterator<T>>(first: A, second: B) -> Chain<
 }
 
 # Fuse adapter - ensures iterator stays exhausted after first none
-Fuse<I> :: struct {
+Fuse<I> :: {
     iter: I,
     exhausted: bool,
 }
 
 impl<T, I: Iterator<T>> Iterator<T> for Fuse<I> {
-    next :: (self: &mut Fuse<I>) -> ?T => {
+    next :: (&mut self) -> ?T => {
         if self.exhausted {
             ret none
         }
-        
-        match Iterator::next(&mut self.iter) {
+
+        match self.iter.next() {
             some val => { ret some val }
             none => {
                 self.exhausted = true

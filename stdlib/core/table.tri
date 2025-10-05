@@ -23,29 +23,29 @@ ColumnConstraint :: enum {
     PrimaryKey,
     NotNull,
     Unique,
-    ForeignKey { table: string, column: string },
-    Check { predicate: string },
-    Default { value: string },
+    ForeignKey { table_: String, column: String },
+    Check { predicate: String },
+    Default { value: String },
 }
 
 ColumnDef :: {
-    name: string,
+    name: String,
     column_type: ColumnType,
     constraints: [ColumnConstraint],
     is_computed: bool,
-    compute_expr: ?string,
+    compute_expr: ?String,
 }
 
 TableSchema :: {
-    name: string,
+    name: String,
     columns: [ColumnDef],
-    primary_key: ?string,
+    primary_key: ?String,
     indexes: [IndexDef],
 }
 
 IndexDef :: {
-    name: string,
-    columns: [string],
+    name: String,
+    columns: [String],
     is_unique: bool,
 }
 
@@ -77,7 +77,7 @@ TransactionLog :: {
 }
 
 RowReference :: {
-    table: string,
+    table: String,
     row_id: u64,
     version: u64,
 }
@@ -132,7 +132,7 @@ impl Table {
     }
 
     # Commit a transaction, making all writes visible
-    commit_transaction :: (&mut self, tx_id: TransactionId) -> StdResult<none> => {
+    commit_transaction :: (&mut self, tx_id: TransactionId) -> !none => {
         tx_log := self.active_transactions.get(tx_id)?
         
         # Update transaction state
@@ -147,11 +147,11 @@ impl Table {
         }
         
         self.active_transactions.remove(tx_id)
-        std_ok(none)
+        ok none
     }
 
     # Abort a transaction, rolling back all writes
-    abort_transaction :: (&mut self, tx_id: TransactionId) -> StdResult<none> => {
+    abort_transaction :: (&mut self, tx_id: TransactionId) -> !none => {
         tx_log := self.active_transactions.get(tx_id)?
         
         # Mark all written row versions as deleted
@@ -162,11 +162,11 @@ impl Table {
         }
         
         self.active_transactions.remove(tx_id)
-        std_ok(none)
+        ok none
     }
 
     # Insert a row (within a transaction)
-    insert :: (&mut self, tx_id: TransactionId, data: *none) -> StdResult<u64> => {
+    insert :: (&mut self, tx_id: TransactionId, data: *none) -> !u64 => {
         row_id := self.next_row_id
         self.next_row_id += 1
         
@@ -191,16 +191,16 @@ impl Table {
         # Add to transaction write set
         tx_log := self.active_transactions.get_mut(tx_id)?
         tx_log.write_set.push(RowReference {
-            table: self.schema.name,
+            table_: self.schema.name,
             row_id: row_id,
             version: version_id,
         })
-        
-        std_ok(row_id)
+
+        ok row_id
     }
 
     # Get row visible to a transaction (snapshot isolation)
-    get :: (&self, tx_id: TransactionId, row_id: u64) -> StdResult<?*none> => {
+    get :: (&self, tx_id: TransactionId, row_id: u64) -> !?*none => {
         tx_log := self.active_transactions.get(tx_id)?
         row := self.rows.get(row_id)?
         
@@ -208,16 +208,16 @@ impl Table {
         for version in row.versions.iter().rev() {
             if version.created_at <= tx_log.read_snapshot {
                 if version.deleted_at.is_none() || version.deleted_at? > tx_log.read_snapshot {
-                    ret std_ok(some version.row_data)
+                    ret ok some version.row_data
                 }
             }
         }
-        
-        std_ok(none)
+
+        ok none
     }
 
     # Update a row (creates new version)
-    update :: (&mut self, tx_id: TransactionId, row_id: u64, data: *none) -> StdResult<none> => {
+    update :: (&mut self, tx_id: TransactionId, row_id: u64, data: *none) -> !none => {
         row := self.rows.get_mut(row_id)?
         
         version_id := self.next_version
@@ -237,16 +237,16 @@ impl Table {
         # Add to transaction write set
         tx_log := self.active_transactions.get_mut(tx_id)?
         tx_log.write_set.push(RowReference {
-            table: self.schema.name,
+            table_: self.schema.name,
             row_id: row_id,
             version: version_id,
         })
         
-        std_ok(none)
+        ok none
     }
 
     # Delete a row (marks current version as deleted)
-    delete :: (&mut self, tx_id: TransactionId, row_id: u64) -> StdResult<none> => {
+    delete :: (&mut self, tx_id: TransactionId, row_id: u64) -> !none => {
         row := self.rows.get_mut(row_id)?
         
         # Mark latest version as deleted
@@ -256,12 +256,12 @@ impl Table {
         # Add to transaction write set
         tx_log := self.active_transactions.get_mut(tx_id)?
         tx_log.write_set.push(RowReference {
-            table: self.schema.name,
+            table_: self.schema.name,
             row_id: row_id,
             version: row.current_version,
         })
         
-        std_ok(none)
+        ok none
     }
 }
 
@@ -270,15 +270,15 @@ impl Table {
 # =============================================================================
 
 ComputedColumn :: {
-    name: string,
-    dependencies: [string],  # column names this depends on
+    name: String,
+    dependencies: [String],  # column names this depends on
     compute_fn: (row: *none) -> *none,
     is_lazy: bool,
 }
 
 impl Table {
     # Add a computed column to the schema
-    add_computed_column :: (&mut self, col: ComputedColumn) -> StdResult<none> => {
+    add_computed_column :: (&mut self, col: ComputedColumn) -> !none => {
         # Verify dependencies exist
         for dep in col.dependencies {
             if ~self.schema.has_column(dep) {
@@ -299,11 +299,11 @@ impl Table {
         }
         
         self.schema.columns.push(col_def)
-        std_ok(none)
+        ok none
     }
 
     # Evaluate computed columns for a row
-    evaluate_computed :: (&self, row_id: u64) -> StdResult<HashMap<string, *none>> => {
+    evaluate_computed :: (&self, row_id: u64) -> !HashMap<String, *none> => {
         results := HashMap::new()
         
         for col in self.schema.columns {

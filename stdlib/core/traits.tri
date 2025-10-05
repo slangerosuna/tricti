@@ -90,12 +90,12 @@ Into<T> :: trait {
 
 # Fallible conversion from T to Self
 TryFrom<T> :: trait {
-    try_from : (T) -> StdResult<Self>,
+    try_from : (T) -> ?Self,
 }
 
 # Fallible conversion from Self to T
 TryInto<T> :: trait {
-    try_into : (Self) -> StdResult<T>,
+    try_into : (Self) -> ?T,
 }
 
 # Blanket implementation: Into<U> for any T where U: From<T>
@@ -109,7 +109,7 @@ impl<T, U: From<T>> Into<U> for T {
 # Blanket implementation: TryInto<U> for any T where U: TryFrom<T>
 # This means if you implement TryFrom<T> for U, you automatically get TryInto<U> for T
 impl<T, U: TryFrom<T>> TryInto<U> for T {
-    try_into :: (self: T) -> StdResult<U> => {
+    try_into :: (self: T) -> ?U => {
         ret U::try_from(self)
     }
 }
@@ -143,17 +143,20 @@ Neg :: trait {
     neg : (Self) -> Self,
 }
 
-# Bitwise Operators
-BitAnd :: trait {
-    bitand : (Self, Self) -> Self,
+And :: trait {
+    and_ : (Self, Self) -> Self,
 }
 
-BitOr :: trait {
-    bitor : (Self, Self) -> Self,
+Or :: trait {
+    or_ : (Self, Self) -> Self,
 }
 
-BitXor :: trait {
-    bitxor : (Self, Self) -> Self,
+Xor :: trait {
+    xor_ : (Self, Self) -> Self,
+}
+
+Not :: trait {
+    not_ : (Self) -> Self,
 }
 
 Shl :: trait {
@@ -162,10 +165,6 @@ Shl :: trait {
 
 Shr :: trait {
     shr : (Self, u64) -> Self,
-}
-
-Not :: trait {
-    not : (Self) -> Self,
 }
 
 # Indexing Operators (definitions only, implementations deferred)
@@ -313,10 +312,10 @@ impl PartialOrd for bool {
         if *self == *other { ret some 0 }
         if *self { some 1 } else { some (-1) }
     }
-    lt :: (&self, other: &bool) -> bool => { ~(*self) && *other }
-    le :: (&self, other: &bool) -> bool => { ~(*self) || *self == *other }
-    gt :: (&self, other: &bool) -> bool => { *self && ~(*other) }
-    ge :: (&self, other: &bool) -> bool => { *self || *self == *other }
+    lt :: (&self, other: &bool) -> bool => { ~(*self) and *other }
+    le :: (&self, other: &bool) -> bool => { ~(*self) or *self == *other }
+    gt :: (&self, other: &bool) -> bool => { *self and ~(*other) }
+    ge :: (&self, other: &bool) -> bool => { *self or *self == *other }
 }
 
 impl Ord for bool {
@@ -324,8 +323,8 @@ impl Ord for bool {
         if *self == *other { ret 0 }
         if *self { 1 } else { -1 }
     }
-    max :: (self, other: bool) -> bool => { self || other }
-    min :: (self, other: bool) -> bool => { self && other }
+    max :: (self, other: bool) -> bool => { self or other }
+    min :: (self, other: bool) -> bool => { self and other }
 }
 
 impl Copy for bool {}
@@ -357,21 +356,21 @@ impl Hash for bool {
 }
 
 # Bitwise operators for bool
-impl BitAnd for bool {
-    bitand :: (self, other: bool) -> bool => {
-        self && other
+impl And for bool {
+    and :: (self, other: bool) -> bool => {
+        self and other
     }
 }
 
-impl BitOr for bool {
-    bitor :: (self, other: bool) -> bool => {
-        self || other
+impl Or for bool {
+    or :: (self, other: bool) -> bool => {
+        self or other
     }
 }
 
-impl BitXor for bool {
-    bitxor :: (self, other: bool) -> bool => {
-        (self || other) && ~(self && other)
+impl Xor for bool {
+    xor :: (self, other: bool) -> bool => {
+        (self or other) and ~(self and other)
     }
 }
 
@@ -478,20 +477,20 @@ impl Neg for i64 {
 }
 
 # Bitwise operators for i64
-impl BitAnd for i64 {
-    bitand :: (self, other: i64) -> i64 => {
-        self & other
+impl And for i64 {
+    and_ :: (self, other: i64) -> i64 => {
+        self and other
     }
 }
 
-impl BitOr for i64 {
-    bitor :: (self, other: i64) -> i64 => {
-        self | other
+impl Or for i64 {
+    or_ :: (self, other: i64) -> i64 => {
+        self or other
     }
 }
 
-impl BitXor for i64 {
-    bitxor :: (self, other: i64) -> i64 => {
+impl Xor for i64 {
+    xor_ :: (self, other: i64) -> i64 => {
         self ^ other
     }
 }

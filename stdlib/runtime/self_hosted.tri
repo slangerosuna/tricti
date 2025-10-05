@@ -19,7 +19,7 @@ use core::traits
 tricti_main :: () -> i32 => {
     # Initialize runtime components
     runtime := TriCTIRuntime::new()
-    
+
     # Initialize global state
     runtime.initialize()?
     
