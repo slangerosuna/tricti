@@ -468,6 +468,7 @@ fn parse_trait_type_and_impl_for() {
             type_name,
             methods,
             type_params,
+            self_type: _,
         } => {
             assert_eq!(trait_name.as_deref(), Some("my_iterator"));
             assert_eq!(type_name, "my_struct");

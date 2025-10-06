@@ -3,6 +3,8 @@ use pest::*;
 use pest_derive::*;
 use std::collections::HashMap;
 
+mod indentation;
+
 #[derive(Parser)]
 #[grammar = "src/parser/grammar.pest"]
 pub struct PnParser;
@@ -10,7 +12,27 @@ pub struct PnParser;
 fn type_name_str(ty: &Type) -> String {
     match ty {
         Type::Identifier { name, .. } => name.clone(),
-        _ => panic!("Expected identifier type for impl"),
+        Type::Optional { inner } => format!("?{}", type_name_str(inner)),
+        Type::Pointer {
+            is_mutable,
+            pointee,
+        } => {
+            if *is_mutable {
+                format!("*mut {}", type_name_str(pointee))
+            } else {
+                format!("*{}", type_name_str(pointee))
+            }
+        }
+        Type::RawPointer { pointee } => format!("*raw {}", type_name_str(pointee)),
+        Type::Reference { is_mutable, inner } => {
+            if *is_mutable {
+                format!("&mut {}", type_name_str(inner))
+            } else {
+                format!("&{}", type_name_str(inner))
+            }
+        }
+        Type::Result { inner } => format!("!{}", type_name_str(inner)),
+        other => panic!("Unsupported type in impl head: {:?}", other),
     }
 }
 
@@ -72,7 +94,9 @@ fn parse_attributes(pair: pest::iterators::Pair<Rule>) -> Vec<Attribute> {
 }
 
 pub fn parse(file: String) -> Program {
-    let successful_parse = match PnParser::parse(Rule::program, &file) {
+    let desugared = indentation::desugar_indentation(&file);
+
+    let successful_parse = match PnParser::parse(Rule::program, &desugared) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Pest parse error: {}", e);
@@ -211,6 +235,31 @@ mod tests {
         let src = "assert :: (cond: bool, msg: string) -> none => { ret none }";
         let mut pairs =
             PnParser::parse(Rule::statement, src).expect("failed to parse const statement");
+        let statement_pair = pairs.next().expect("expected statement pair");
+        assert_eq!(statement_pair.as_rule(), Rule::statement);
+    }
+
+    #[test]
+    fn parses_typed_variable_decl_with_equals() {
+        let src = "foo: i64 = 42";
+        let mut pairs =
+            PnParser::parse(Rule::statement, src).expect("failed to parse typed variable decl");
+        let statement_pair = pairs.next().expect("expected statement pair");
+        assert_eq!(statement_pair.as_rule(), Rule::statement);
+    }
+
+    #[test]
+    fn parses_static_method_call_with_refs() {
+        let src = "if String::equals(&trimmed, &true_str) { ret some true }";
+        PnParser::parse(Rule::statement, src)
+            .expect("failed to parse static method call with references");
+    }
+
+    #[test]
+    fn parses_variadic_extern_declaration() {
+        let src = "extern sprintf :: (str: *raw u8, format: *raw u8, ...) -> i32";
+        let mut pairs =
+            PnParser::parse(Rule::statement, src).expect("failed to parse extern declaration");
         let statement_pair = pairs.next().expect("expected statement pair");
         assert_eq!(statement_pair.as_rule(), Rule::statement);
     }
@@ -1451,8 +1500,14 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
             match inner.as_rule() {
                 Rule::function_type_params => {
                     for param in inner.into_inner() {
-                        if param.as_rule() == Rule::function_type_param {
-                            params.push(parse_function_type_param(param));
+                        match param.as_rule() {
+                            Rule::function_type_param => {
+                                params.push(parse_function_type_param(param));
+                            }
+                            Rule::variadic_param => {
+                                // Variadic parameters are currently ignored for function type signatures
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -1594,6 +1649,9 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
                                 param_type: ty,
                                 default_value,
                             });
+                        }
+                        Rule::variadic_param => {
+                            // Variadic arguments are currently ignored in parameter lists
                         }
                         _ => { /* self variants ignored for now */ }
                     }
@@ -1849,24 +1907,33 @@ fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut type_params: Vec<TypeParam> = Vec::new();
     let first = it.next().expect("impl missing content");
 
-    let first_type = if first.as_rule() == Rule::type_params {
+    let first_type_pair = if first.as_rule() == Rule::type_params {
         type_params = parse_type_params(first);
         it.next().expect("impl missing type after type_params")
     } else {
         first
     };
 
-    let mut trait_name: Option<String> = None;
-    let type_name: String;
+    let first_type = parse_type(first_type_pair);
 
-    // Collect rest
+    // Collect rest of pairs (trait target type and body)
     let mut rest: Vec<pest::iterators::Pair<Rule>> = it.collect();
-    if !rest.is_empty() && rest[0].as_rule() == Rule::r#type {
-        trait_name = Some(type_name_str(&parse_type(first_type)));
-        type_name = type_name_str(&parse_type(rest.remove(0)));
-    } else {
-        type_name = type_name_str(&parse_type(first_type));
-    }
+
+    let (trait_name, type_name, self_type) =
+        if !rest.is_empty() && rest[0].as_rule() == Rule::r#type {
+            let trait_type = first_type;
+            let trait_name = match trait_type {
+                Type::Identifier { name, .. } => name,
+                other => panic!("Trait names must be identifiers, got {:?}", other),
+            };
+            let target_pair = rest.remove(0);
+            let target_type = parse_type(target_pair);
+            let type_name = type_name_str(&target_type);
+            (Some(trait_name), type_name, target_type)
+        } else {
+            let type_name = type_name_str(&first_type);
+            (None, type_name, first_type)
+        };
 
     let mut methods: Vec<Statement> = Vec::new();
     for inner in rest.into_iter() {
@@ -1880,6 +1947,7 @@ fn parse_impl_block(pair: pest::iterators::Pair<Rule>) -> Statement {
         type_params,
         trait_name,
         type_name,
+        self_type,
         methods,
     }
 }
@@ -1921,6 +1989,9 @@ fn parse_impl_method(pair: pest::iterators::Pair<Rule>) -> Statement {
                                 param_type: ty,
                                 default_value,
                             });
+                        }
+                        Rule::variadic_param => {
+                            // Variadic parameters are ignored for now
                         }
                         _ => { /* self variants ignored */ }
                     }

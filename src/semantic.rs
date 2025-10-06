@@ -904,6 +904,7 @@ fn collect_definitions(
             type_params: _,
             trait_name,
             type_name,
+            self_type,
             methods,
         } => {
             let is_trait_impl = trait_name.is_some();
@@ -937,10 +938,7 @@ fn collect_definitions(
                             if trait_name.is_none() && !parameters.is_empty() {
                                 params.push(Type::Pointer {
                                     is_mutable: false,
-                                    pointee: Box::new(Type::Identifier {
-                                        name: type_name.clone(),
-                                        type_args: vec![],
-                                    }),
+                                    pointee: Box::new(self_type.clone()),
                                 });
                             }
                             params.extend(parameters.iter().map(|p| {
@@ -1245,6 +1243,7 @@ fn analyze_statement(
             type_params: _,
             trait_name,
             type_name,
+            self_type,
             methods,
         } => {
             // Validate impls and collect associated types + methods into impl registries
@@ -1346,7 +1345,7 @@ fn analyze_statement(
                     }
                     // Check params/return with associated type substitution
                     for (a, b) in parameters.iter().zip(&impl_sig.parameters) {
-                        if !types_match_with_assoc_and_self(a, b, &provided_assoc, type_name) {
+                        if !types_match_with_assoc_and_self(a, b, &provided_assoc, self_type) {
                             return Err(SemanticError::TypeMismatch {
                                 expected: a.clone(),
                                 found: b.clone(),
@@ -1357,7 +1356,7 @@ fn analyze_statement(
                         return_type,
                         &impl_sig.return_type,
                         &provided_assoc,
-                        type_name,
+                        self_type,
                     ) {
                         return Err(SemanticError::TypeMismatch {
                             expected: (*return_type.clone()).clone(),
@@ -1448,15 +1447,12 @@ fn types_match_with_assoc_and_self(
     expected: &Type,
     found: &Type,
     assoc: &HashMap<String, Type>,
-    self_type: &str,
+    self_type: &Type,
 ) -> bool {
-    fn subst(t: &Type, assoc: &HashMap<String, Type>, self_type: &str) -> Type {
+    fn subst(t: &Type, assoc: &HashMap<String, Type>, self_type: &Type) -> Type {
         match t {
-            Type::Identifier { name, type_args } if name == "self" => Type::Identifier {
-                name: self_type.to_string(),
-                type_args: type_args.clone(),
-            },
-            Type::Identifier { name, type_args: _ } if assoc.contains_key(name) => {
+            Type::Identifier { name, .. } if name == "self" => self_type.clone(),
+            Type::Identifier { name, .. } if assoc.contains_key(name) => {
                 assoc.get(name).unwrap().clone()
             }
             Type::Pointer {
@@ -1475,6 +1471,12 @@ fn types_match_with_assoc_and_self(
             Type::Result { inner } => Type::Result {
                 inner: Box::new(subst(inner, assoc, self_type)),
             },
+            Type::Tuple(items) => Type::Tuple(
+                items
+                    .iter()
+                    .map(|item| subst(item, assoc, self_type))
+                    .collect(),
+            ),
             Type::Function {
                 parameters,
                 return_type,
@@ -1485,13 +1487,40 @@ fn types_match_with_assoc_and_self(
                     .collect(),
                 return_type: Box::new(subst(return_type, assoc, self_type)),
             },
+            Type::Struct { fields } => Type::Struct {
+                fields: fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), subst(v, assoc, self_type)))
+                    .collect(),
+            },
+            Type::Enum { variants, order } => Type::Enum {
+                variants: variants
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.as_ref().map(|ty| subst(ty, assoc, self_type))))
+                    .collect(),
+                order: order.clone(),
+            },
+            Type::Trait {
+                associated_types,
+                methods,
+            } => Type::Trait {
+                associated_types: associated_types.clone(),
+                methods: methods
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), subst(ty, assoc, self_type)))
+                    .collect(),
+            },
+            Type::Reference { is_mutable, inner } => Type::Reference {
+                is_mutable: *is_mutable,
+                inner: Box::new(subst(inner, assoc, self_type)),
+            },
             other => other.clone(),
         }
     }
 
-    let e = subst(expected, assoc, self_type);
-    let f = subst(found, assoc, self_type);
-    e == f
+    let expected_subst = subst(expected, assoc, self_type);
+    let found_subst = subst(found, assoc, self_type);
+    expected_subst == found_subst
 }
 
 fn infer_expression_type(

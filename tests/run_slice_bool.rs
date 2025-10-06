@@ -16,7 +16,7 @@ fn iterate_vec_bool() {
     let source = r#"
 use core::collections
 
-main :: () => {
+main :: () => do
     v := Vec<bool>::new()
     v.push(true)
     v.push(false)
@@ -26,18 +26,13 @@ main :: () => {
 
     count := 0
     len := v.len()
-    for i in 0..len {
-        match v.get(i) {
-            some value => {
-                if value {
+    for i in 0..len:
+        match v.get(i):
+            some value => do
+                if value:
                     count = count + 1
-                }
-            },
-            none => panic("vec index out of bounds"),
-        }
-    }
+            none => panic("vec index out of bounds")
     println(count)
-}
 
 main()
     "#;
@@ -55,7 +50,7 @@ fn vec_bool_helpers() {
     let source = r#"
 use core::collections
 
-main :: () => {
+main :: () => do
     v := Vec<i64>::new()
     v.push(1)
     v.push(1)
@@ -68,7 +63,6 @@ main :: () => {
     println(v.get(0) == some 1)
 
     println(v.get(2) == some 1)
-}
 
 main()
     "#;

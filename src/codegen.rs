@@ -487,7 +487,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                             if element_types.is_empty() {
                                 self.context.struct_type(&[], false).as_basic_type_enum()
                             } else {
-                                self.context.struct_type(&element_types, false).as_basic_type_enum()
+                                self.context
+                                    .struct_type(&element_types, false)
+                                    .as_basic_type_enum()
                             }
                         }
                         _ => {
@@ -668,12 +670,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             if let Some((st, order)) = self.struct_types.get(struct_name) {
                 let struct_ty = *st;
                 let field_order = order.clone();
-                let sval = self.build_struct_literal_value(
-                    struct_name,
-                    fields,
-                    struct_ty,
-                    &field_order,
-                )?;
+                let sval =
+                    self.build_struct_literal_value(struct_name, fields, struct_ty, &field_order)?;
                 self.bind_identifier_value(name, sval, annotation_ref)?;
                 return Ok(());
             }
@@ -1386,8 +1384,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 struct_ty,
                                 &order_clone,
                             )?;
-                            let alloca =
-                                self.create_entry_block_alloca(name, struct_ty.into())?;
+                            let alloca = self.create_entry_block_alloca(name, struct_ty.into())?;
                             self.builder
                                 .build_store(alloca, sval)
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -7076,6 +7073,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     type_params: _,
                     trait_name,
                     type_name,
+                    self_type: _,
                     methods,
                 } => {
                     for m in methods {
@@ -7526,6 +7524,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     type_params: _,
                     trait_name,
                     type_name,
+                    self_type,
                     methods,
                 } => {
                     for m in methods {
@@ -7578,12 +7577,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                                 "self".to_string(),
                                                 crate::ast::Type::Pointer {
                                                     is_mutable: false,
-                                                    pointee: Box::new(
-                                                        crate::ast::Type::Identifier {
-                                                            name: type_name.clone(),
-                                                            type_args: vec![],
-                                                        },
-                                                    ),
+                                                    pointee: Box::new(self_type.clone()),
                                                 },
                                             );
                                             param_index = 1;

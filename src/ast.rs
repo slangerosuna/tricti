@@ -45,6 +45,7 @@ pub enum Statement {
         type_params: Vec<TypeParam>,
         trait_name: Option<String>,
         type_name: String,
+        self_type: Type,
         methods: Vec<Statement>,
     },
     ImplMethod {

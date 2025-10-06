@@ -208,8 +208,9 @@ type_param    = { identifier ~ trait_bounds? }
 trait_bounds  = { ":" ~ type ~ ("+" ~ type)* }
 type_args     = { !(" " | "\t" | "\n" | "\r") ~ "<" ~ type ~ ("," ~ type)* ~ ">" }
 function      = { attributes? ~ "async"? ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
-function_params = { (function_param | ("self" | "&self" | "&mut self" | "*self")) ~ ("," ~ function_param)* ~ ","? }
+function_params = { (function_param | variadic_param | ("self" | "&self" | "&mut self" | "*self")) ~ ("," ~ (function_param | variadic_param))* ~ ","? }
 function_param = { identifier ~ (":" ~ type)? ~ ("=" ~ expression)? }
+variadic_param = { "..." }
 return_type   = { "->" ~ type}
 function_body = { block | expression }
 
@@ -217,7 +218,10 @@ assignment_op = { "=" | "*=" | "/=" | "+=" | "-=" | ".*=" | "./=" | "\\=" }
 assignment    = { expression ~ WHITESPACE* ~ assignment_op ~ WHITESPACE* ~ expression }
 binding_pattern = { binding_tuple | "_" | identifier }
 binding_tuple = { "(" ~ WHITESPACE* ~ binding_pattern ~ (WHITESPACE* ~ "," ~ WHITESPACE* ~ binding_pattern)* ~ WHITESPACE* ~ ","? ~ ")" }
-variable_decl = { binding_pattern ~ (":" ~ type)? ~ ":=" ~ expression }
+variable_decl = {
+    binding_pattern ~ ":" ~ !":" ~ type ~ "=" ~ expression
+    | binding_pattern ~ (":" ~ type)? ~ ":=" ~ expression
+}
 
 shader        = { ("vert" | "frag" | "comp") ~ "{" ~ (const_decl | shader_field)* ~ "}" }
 shader_field  = { identifier ~ ":" ~ type ~ ","? }
@@ -237,7 +241,7 @@ optional      = { "?" ~ type }
 result        = { "!" ~ type }
 
 function_type_param = { (identifier ~ ":" ~ WHITESPACE*)? ~ type }
-function_type_params = { function_type_param ~ ("," ~ WHITESPACE* ~ function_type_param)* ~ ","? }
+function_type_params = { (function_type_param | variadic_param) ~ ("," ~ WHITESPACE* ~ (function_type_param | variadic_param))* ~ ","? }
 function_type = { "(" ~ WHITESPACE* ~ function_type_params? ~ ")" ~ return_type ~ !"=>" }
 
 enum          = { "enum" ~ "{" ~ (enum_variant ~ ("," ~ enum_variant)*)? ~ ","? ~ "}" }
