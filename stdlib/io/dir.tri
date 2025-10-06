@@ -12,55 +12,41 @@ use io::path
 # =============================================================================
 
 # DirEntry represents an entry in a directory
-DirEntry :: {
+DirEntry :: struct
     name: String,
     path: String,
     is_dir: bool,
     is_file: bool,
-}
 
 impl DirEntry {
     # Get entry name (file or directory name)
-    name :: (entry: &DirEntry) -> String => {
-        String::clone(&entry.name)
-    }
-    
+    name :: (entry: &DirEntry) -> String => String::clone(&entry.name)
+
     # Get full path to entry
-    path :: (entry: &DirEntry) -> String => {
-        String::clone(&entry.path)
-    }
+    path :: (entry: &DirEntry) -> String => String::clone(&entry.path)
     
     # Check if entry is a directory
-    is_dir :: (entry: &DirEntry) -> bool => {
-        entry.is_dir
-    }
+    is_dir :: (entry: &DirEntry) -> bool => entry.is_dir
     
     # Check if entry is a file
-    is_file :: (entry: &DirEntry) -> bool => {
-        entry.is_file
-    }
-}
+    is_file :: (entry: &DirEntry) -> bool => entry.is_file
 
 # Trait implementations for DirEntry
-impl Clone for DirEntry {
-    clone :: (&self) -> DirEntry => {
+impl Clone for DirEntry:
+    clone :: (&self) -> DirEntry =>
         DirEntry {
             name: String::clone(&self.name),
             path: String::clone(&self.path),
             is_dir: self.is_dir,
             is_file: self.is_file,
         }
-    }
-}
 
-impl Display for DirEntry {
-    to_string :: (&self) -> String => {
+impl Display for DirEntry:
+    to_string :: (&self) -> String =>
         String::clone(&self.name)
-    }
-}
 
-impl Debug for DirEntry {
-    debug_string :: (&self) -> String => {
+impl Debug for DirEntry:
+    debug_string :: (&self) -> String => do
         result := String::from_cstr("DirEntry { name: \"" as *u8)
 
         String::push_str(&result, &self.name)
@@ -68,16 +54,12 @@ impl Debug for DirEntry {
         String::push_str(&result, &self.path)
         String::push_str(&result, &String::from_cstr("\" }" as *u8))
 
-        result
-    }
-}
+        ret result
 
-impl Drop for DirEntry {
-    drop :: (*self) => {
+impl Drop for DirEntry:
+    drop :: (*self) => do
         String::destroy(&mut self.name)
         String::destroy(&mut self.path)
-    }
-}
 
 # =============================================================================
 # DIRECTORY OPERATIONS
@@ -85,72 +67,59 @@ impl Drop for DirEntry {
 
 # Create directory with default permissions (0755)
 # Returns true on success, false on error
-create_dir :: (path: String) -> bool => {
-    ret posix_mkdir(String::as_ptr(&path), 493) == 0
-}
+create_dir :: (path: String) -> bool =>
+    posix_mkdir(String::as_ptr(&path), 493) == 0
 
 # Create directory with custom permissions
 # mode: permission bits (e.g., 0755 = 493)
 # Returns true on success, false on error
-create_dir_with_mode :: (path: String, mode: u32) -> bool => {
-    ret posix_mkdir(String::as_ptr(&path), mode) == 0
-}
+create_dir_with_mode :: (path: String, mode: u32) -> bool =>
+    posix_mkdir(String::as_ptr(&path), mode) == 0
 
 # Remove empty directory
 # Returns true on success, false on error
-remove_dir :: (path: String) -> bool => {
-    ret posix_rmdir(String::as_ptr(&path)) == 0
-}
+remove_dir :: (path: String) -> bool =>
+    posix_rmdir(String::as_ptr(&path)) == 0
 
 # Remove file
 # Returns true on success, false on error
-remove_file :: (path: String) -> bool => {
-    ret posix_unlink(String::as_ptr(&path)) == 0
-}
+remove_file :: (path: String) -> bool =>
+    posix_unlink(String::as_ptr(&path)) == 0
 
 # Rename/move file or directory
 # Returns true on success, false on error
-rename :: (from: String, to: String) -> bool => {
-    ret posix_rename(String::as_ptr(&from), String::as_ptr(&to)) == 0
-}
+rename :: (from: String, to: String) -> bool =>
+    posix_rename(String::as_ptr(&from), String::as_ptr(&to)) == 0
 
 # Copy file from source to destination
 # Returns true on success, false on error
-copy_file :: (from: String, to: String) -> bool => {
-    content := File::read_to_string(from)? else { ret false }
+copy_file :: (from: String, to: String) -> bool => do
+    content := File::read_to_string(from)? else: ret false
     ret File::write_string(to, content)
-}
 
 # Move file from source to destination (rename or copy+delete)
 # Returns true on success, false on error
-move_file :: (from: String, to: String) -> bool => {
-    if rename(String::clone(&from), String::clone(&to)) {
+move_file :: (from: String, to: String) -> bool => do
+    if rename(String::clone(&from), String::clone(&to)):
         ret true
-    }
     
-    if copy_file(String::clone(&from), String::clone(&to)) {
+    if copy_file(String::clone(&from), String::clone(&to)):
         ret remove_file(from)
-    }
     
     ret false
-}
 
 # Check if path exists (file or directory)
-exists :: (path: String) -> bool => {
-    ret posix_access(String::as_ptr(&path), F_OK) == 0
-}
+exists :: (path: String) -> bool => posix_access(String::as_ptr(&path), F_OK) == 0
 
 # Check if path is a file
-is_file :: (path: String) -> bool => {
+is_file :: (path: String) -> bool => do
     p := Path::new(path)
     ret Path::is_file(&p)
-}
 
 # Check if path is a directory
-is_dir :: (path: String) -> bool => {
+is_dir :: (path: String) -> bool => do
     p := Path::new(path)
     ret Path::is_dir(&p)
-}
 
 # Helper: Read directory entry name from dirent structure
 # dirent structure layout (simplified):
@@ -159,29 +128,25 @@ is_dir :: (path: String) -> bool => {
 #   u16 d_reclen
 #   u8  d_type
 #   char d_name[256]
-read_dirent_name :: (dirent_ptr: *u8) -> String => {
+read_dirent_name :: (dirent_ptr: *u8) -> String => do
     name_ptr := dirent_ptr + 19
     
     result := String::new()
     i := 0u64
-    loop {
-        if i >= 256 { break }
+    loop:
+        if i >= 256: break
         
         ch := *(name_ptr + i)
-        if ch == 0 { break }
-        
+        if ch == 0: break
+
         String::push_char(&result, ch)
-        i = i + 1
-    }
-    
-    result
-}
+        i += 1
+    ret result
 
 # Helper: Get directory entry type from dirent structure
-read_dirent_type :: (dirent_ptr: *u8) -> u8 => {
+read_dirent_type :: (dirent_ptr: *u8) -> u8 => do
     type_ptr := dirent_ptr + 18
-    *type_ptr
-}
+    ret *type_ptr
 
 # Note: Full read_dir implementation would require Vec or dynamic arrays
 # For now, this is a simplified stub that indicates the approach

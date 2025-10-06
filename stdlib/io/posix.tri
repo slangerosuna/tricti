@@ -1,4 +1,4 @@
-# POSIX FFI Layer for TriCTI I/O
+# a POSIX FFI Layer for TriCTI I/O
 # Provides low-level bindings to POSIX file and directory operations
 
 # =============================================================================
@@ -11,19 +11,19 @@
 #   flags: O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_APPEND, etc.
 #   mode: permission bits (e.g., 0644, 0755)
 # Returns: file descriptor on success, -1 on error
-extern fn posix_open(path: *u8, flags: i32, mode: i32) -> i32
+extern posix_open :: (path: *raw u8, flags: i32, mode: i32) -> i32
 
 # Close a file descriptor
 # Returns: 0 on success, -1 on error
-extern fn posix_close(fd: i32) -> i32
+extern posix_close :: (fd: i32) -> i32
 
 # Read from file descriptor into buffer
 # Returns: number of bytes read, -1 on error
-extern fn posix_read(fd: i32, buf: *u8, count: u64) -> i64
+extern posix_read :: (fd: i32, buf: *raw u8, count: u64) -> i64
 
 # Write from buffer to file descriptor
 # Returns: number of bytes written, -1 on error
-extern fn posix_write(fd: i32, buf: *u8, count: u64) -> i64
+extern posix_write :: (fd: i32, buf: *raw u8, count: u64) -> i64
 
 # Seek to position in file
 # Parameters:
@@ -31,11 +31,11 @@ extern fn posix_write(fd: i32, buf: *u8, count: u64) -> i64
 #   offset: offset to seek to
 #   whence: SEEK_SET, SEEK_CUR, or SEEK_END
 # Returns: new offset on success, -1 on error
-extern fn posix_lseek(fd: i32, offset: i64, whence: i32) -> i64
+extern posix_lseek :: (fd: i32, offset: i64, whence: i32) -> i64
 
 # Synchronize file data to disk
 # Returns: 0 on success, -1 on error
-extern fn posix_fsync(fd: i32) -> i32
+extern posix_fsync :: (fd: i32) -> i32
 
 # =============================================================================
 # FILE STATUS
@@ -46,18 +46,18 @@ extern fn posix_fsync(fd: i32) -> i32
 #   path: null-terminated path string
 #   buf: pointer to stat structure buffer (144 bytes)
 # Returns: 0 on success, -1 on error
-extern fn posix_stat(path: *u8, buf: *u8) -> i32
+extern posix_stat :: (path: *raw u8, buf: *raw u8) -> i32
 
 # Get file status by file descriptor
 # Returns: 0 on success, -1 on error
-extern fn posix_fstat(fd: i32, buf: *u8) -> i32
+extern posix_fstat :: (fd: i32, buf: *raw u8) -> i32
 
 # Check file accessibility
 # Parameters:
 #   path: null-terminated path string
 #   mode: F_OK, R_OK, W_OK, X_OK
 # Returns: 0 if accessible, -1 if not
-extern fn posix_access(path: *u8, mode: i32) -> i32
+extern posix_access :: (path: *raw u8, mode: i32) -> i32
 
 # =============================================================================
 # DIRECTORY OPERATIONS
@@ -65,26 +65,26 @@ extern fn posix_access(path: *u8, mode: i32) -> i32
 
 # Open directory for reading
 # Returns: DIR* pointer on success, null on error
-extern fn posix_opendir(path: *u8) -> *u8
+extern posix_opendir :: (path: *raw u8) -> *raw u8
 
 # Read next directory entry
 # Returns: dirent* pointer on success, null at end or error
-extern fn posix_readdir(dir: *u8) -> *u8
+extern posix_readdir :: (dir: *raw u8) -> *raw u8
 
 # Close directory
 # Returns: 0 on success, -1 on error
-extern fn posix_closedir(dir: *u8) -> i32
+extern posix_closedir :: (dir: *raw u8) -> i32
 
 # Create directory
 # Parameters:
 #   path: null-terminated path string
 #   mode: permission bits (e.g., 0755)
 # Returns: 0 on success, -1 on error
-extern fn posix_mkdir(path: *u8, mode: u32) -> i32
+extern posix_mkdir :: (path: *raw u8, mode: u32) -> i32
 
 # Remove empty directory
 # Returns: 0 on success, -1 on error
-extern fn posix_rmdir(path: *u8) -> i32
+extern posix_rmdir :: (path: *raw u8) -> i32
 
 # =============================================================================
 # FILE MANAGEMENT
@@ -92,11 +92,11 @@ extern fn posix_rmdir(path: *u8) -> i32
 
 # Remove file
 # Returns: 0 on success, -1 on error
-extern fn posix_unlink(path: *u8) -> i32
+extern posix_unlink :: (path: *raw u8) -> i32
 
 # Rename/move file or directory
 # Returns: 0 on success, -1 on error
-extern fn posix_rename(old: *u8, new: *u8) -> i32
+extern posix_rename :: (old: *raw u8, new: *raw u8) -> i32
 
 # =============================================================================
 # CONSTANTS - File Open Flags

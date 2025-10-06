@@ -2,10 +2,9 @@
 # Eventually this file will implement _start and allocator hooks in tricti itself.
 
 # Signal to the compiler that runtime entry may be requested
-Runtime :: { }
+Runtime :: struct
 
 # Expose start as a normal function for now; the Rust host will map it to _start when runtime mode is enabled
-start :: () -> i32 => {
+start :: () -> i32 => do
     main()
     ret 0i32 
-}

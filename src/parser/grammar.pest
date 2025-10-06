@@ -126,29 +126,18 @@ db_def = { "db" ~ "{" ~ db_entries? ~ "}" }
 db_entries = { db_entry ~ ("," ~ db_entry)* ~ ","? }
 db_entry = { identifier ~ (":" ~ identifier)? }
 
-expression    = { or }
-expression_no_block    = { or_no_block }
+expression    = { binary_expression }
+expression_no_block    = { binary_expression }
 
+binary_expression = { unary ~ (WHITESPACE* ~ binary_operator ~ WHITESPACE* ~ unary)* }
+binary_operator = _{ op_or | op_and | op_cmp | op_shift | op_add | op_mul | op_range }
 op_or         = { "or" | "xor" }
-or            = { and ~ (WHITESPACE* ~ op_or ~ WHITESPACE* ~ and)* }
-or_no_block   = { and_no_block ~ (WHITESPACE* ~ op_or ~ WHITESPACE* ~ and_no_block)* }
 op_and        = { "and" }
-and           = { comparison ~ (WHITESPACE* ~ op_and ~ WHITESPACE* ~ comparison)* }
-and_no_block  = { comparison_no_block ~ (WHITESPACE* ~ op_and ~ WHITESPACE* ~ comparison_no_block)* }
 op_cmp        = { "==" | "~=" | "<=" | ">=" | ">" | "<" }
-comparison    = { shift ~ (WHITESPACE* ~ op_cmp ~ WHITESPACE* ~ shift)* }
-comparison_no_block = { shift_no_block ~ (WHITESPACE* ~ op_cmp ~ WHITESPACE* ~ shift_no_block)* }
 op_shift      = { "<<" | ">>" }
-shift         = { addition ~ (WHITESPACE* ~ op_shift ~ WHITESPACE* ~ addition)* }
-shift_no_block = { addition_no_block ~ (WHITESPACE* ~ op_shift ~ WHITESPACE* ~ addition_no_block)* }
 op_add        = { "+" | "-" }
-addition      = { multiplication ~ (WHITESPACE* ~ op_add ~ WHITESPACE* ~ multiplication)* }
-addition_no_block = { multiplication_no_block ~ (WHITESPACE* ~ op_add ~ WHITESPACE* ~ multiplication_no_block)* }
 op_mul        = { "*" | ".*" | "/" | "./" | "\\" | "%" | ".%" }
-multiplication= { with_range ~ (WHITESPACE* ~ op_mul ~ WHITESPACE* ~ with_range)* }
-multiplication_no_block = { with_range_no_block ~ (WHITESPACE* ~ op_mul ~ WHITESPACE* ~ with_range_no_block)* }
-with_range    = { unary ~ (WHITESPACE* ~ ".." ~ WHITESPACE* ~ unary ~ (WHITESPACE* ~ ".." ~ WHITESPACE* ~ unary)?)? }
-with_range_no_block = { unary_no_block ~ (WHITESPACE* ~ ".." ~ WHITESPACE* ~ unary_no_block ~ (WHITESPACE* ~ ".." ~ WHITESPACE* ~ unary_no_block)?)? }
+op_range      = { ".." }
 op_unary      = { "-" | "~" | "*" | "&mut" | "&" | "!" | "some" | "ok" | "err" | "not" }
 unary         = { op_unary? ~ cast_expr }
 unary_no_block = { op_unary? ~ cast_expr_no_block }
@@ -164,8 +153,8 @@ post_fix      = { primary ~ (WHITESPACE* ~ (call_suffix | static_path_suffix | f
 post_fix_no_block = { primary_no_block ~ (WHITESPACE* ~ (call_suffix | static_path_suffix | field_suffix | postfix_question | postfix_bang | index_suffix) )* }
 tuple_expr    = { "(" ~ expression ~ ("," ~ expression)+ ~ ","? ~ ")" }
 primary_struct = { identifier ~ type_args ~ struct_literal | identifier ~ struct_literal }
-primary       = { conditional | inline_conditional | primary_struct | unsafe_block | block | number | loop | match | function | literal | vec_new | vec_literal | matrix | shader | tuple_expr | path_struct | static_path | identifier | "(" ~ expression ~ ")" }
-primary_no_block = { conditional | inline_conditional | unsafe_block | number | loop | match | function | literal_no_struct | vec_new | vec_literal | matrix | shader | tuple_expr | static_path | identifier | "(" ~ expression ~ ")" }
+primary       = { conditional | inline_conditional | unsafe_block | block | number | loop | match | function | literal | vec_new | vec_literal | matrix | shader | tuple_expr | path_struct | static_path | primary_struct | identifier | "(" ~ expression ~ ")" }
+primary_no_block = { conditional | inline_conditional | unsafe_block | number | loop | match | function | literal_no_struct | vec_new | vec_literal | matrix | shader | tuple_expr | static_path | primary_struct | identifier | "(" ~ expression ~ ")" }
 path_struct    = { identifier ~ ("::" ~ identifier)+ ~ struct_literal }
 static_path    = { identifier ~ type_args? ~ ("::" ~ identifier)+ }
 

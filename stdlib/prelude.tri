@@ -3,389 +3,61 @@
 
 # Errors and assertions
 # Assert a condition holds; otherwise panic with message
-assert :: (cond: bool, msg: string) -> none => {
-        if ~cond { panic(msg) }
-};
-
-# Assert equality for i64 values; otherwise panic
-assert_eq_i64 :: (a: i64, b: i64, msg: string) -> none => {
-        if a ~= b { panic(msg) }
-};
+assert :: (cond: bool, msg: String) => if not cond: panic(msg)
 
 # Print a message and terminate the process with non-zero status
-panic :: (msg: string) -> none => {
-        println("Assertion failed:", msg)
+panic :: (msg: String) => do
+        println(msg)
         exit(1)
-}
-
-# Identity function
-id<T> :: (value: T) -> T => value
 
 # String functions
-streq :: (a: string, b: string) -> bool => {
+streq :: (a: string, b: string) -> bool => do
         len_a := len(a)
-        if len_a ~= len(b) {
-                ret false
-        }
+        if len_a ~= len(b): ret false
 
-        for i in 0..len_a {
-                if a[i] ~= b[i] {
-                        ret false
-                }
-        }
-        true
-}
+        for i in 0..len_a:
+                if a[i] ~= b[i]: ret false
+        ret true
 
 # Simple error message functions for immediate use
 # TODO: Add rich error types when pattern matching supports value extraction
 
-std_error_message_only :: (message: string) -> string => {
-    message
-}
-
-std_error_unsupported :: (feature: string) -> string => {
-        feature
-}
-
-LogLevel :: enum {
+LogLevel :: enum
         Trace,
         Debug,
         Info,
         Warn,
         Error,
-}
 
-log_message :: (level: LogLevel, message: string) -> none => {
+log_message :: (level: LogLevel, message: String) => do
         # Pattern matching on enum variants isn't supported in the analyzer yet;
         # keep logging simple for now.
         println("[log]")
         println(message)
-}
 
-log_info :: (message: string) -> none => {
-        log_message(LogLevel::Info, message)
-}
+log_info :: (message: String) => log_message(LogLevel::Info, message)
 
-log_error :: (message: string) -> none => {
-        log_message(LogLevel::Error, message)
-}
+log_error :: (message: String) => log_message(LogLevel::Error, message)
 
-RuntimeConfigOptions :: struct {
+RuntimeConfigOptions :: struct
         enable_preemption: bool,
         scheduling_quantum_ms: i64,
-}
 
-IOConfigOptions :: struct {
+IOConfigOptions :: struct
         default_timeout_ms: i64,
         enable_tracing: bool,
-}
 
-StdConfig :: struct {
+StdConfig :: struct
         runtime: RuntimeConfigOptions,
         io: IOConfigOptions,
+
+std_default_config :: () -> StdConfig => StdConfig {
+        runtime: RuntimeConfigOptions {
+                enable_preemption: true,
+                scheduling_quantum_ms: 10,
+        },
+        io: IOConfigOptions {
+                default_timeout_ms: 5_000,
+                enable_tracing: false,
+        },
 }
-
-std_default_config :: () -> StdConfig => {
-        {
-                runtime: {
-                        enable_preemption: true,
-                        scheduling_quantum_ms: 10,
-                },
-                io: {
-                        default_timeout_ms: 5_000,
-                        enable_tracing: false,
-                },
-        }
-}
-
-# println is a builtin, but we expose a convenient alias
-print :: (x) => { println(x) }
-
-# Basic memory helpers (compiler maps to malloc/free for now)
-extern alloc :: (size: i64) -> *raw u8
-extern dealloc :: (ptr: *raw u8) -> none
-
-# Vector utilities (stubs)
-# Placeholder utility
-id :: (x: i64) -> i64 => x
-
-
-# Integer remainder until `%` operator is supported
-rem_i64 :: (a: i64, b: i64) -> i64 => {
-        if b == 0 { ret 0 }
-
-        q := a / b
-        r := a - (q * b)
-
-        if r < 0 {
-                # Ensure remainder has the same sign as the divisor
-                r = r + b
-        }
-
-        r
-}
-
-# Small math helpers (replace with non-branching versions when xor, or, and, etc. added) (also generics when added)
-# Workaround for parser < bug: use negated >= or flipped comparisons
-abs_i64 :: (x: i64) -> i64 => { if ~(x >= 0) { -x } else { x } }
-min_i64 :: (a: i64, b: i64) -> i64 => { if ~(a > b) { a } else { b } }
-max_i64 :: (a: i64, b: i64) -> i64 => { if a > b { a } else { b } }
-
-# Extended math helpers
-# Workaround for parser < bug
-clamp_i64 :: (value: i64, min_value: i64, max_value: i64) -> i64 => {
-        if min_value >= value {
-                ret min_value
-        }
-        if value >= max_value {
-                ret max_value
-        }
-        value
-}
-
-sign_i64 :: (value: i64) -> i64 => {
-        if ~(value >= 0) { ret -1 }
-        if value >= 1 { ret 1 }
-        0
-}
-
-is_even_i64 :: (value: i64) -> bool => {
-        rem_i64(value, 2) == 0
-}
-
-is_odd_i64 :: (value: i64) -> bool => {
-        rem_i64(value, 2) ~= 0
-}
-
-
-# Slices (prototype): minimal constructor for i64 slices
-# Given a pointer to i64 (e.g., an array decays to &i64) and a length, build a slice_i64 value.
-# For now, accept a fixed-size array [i64; 5]; future iterations will generalize.
-slice_i64_from :: (arr: [i64; 5], len: i64) -> slice_i64 => {
-        { ptr: arr, len: len }
-}
-
-# Prototype slice for bool
-slice_bool :: struct {
-        ptr: &bool,
-        len: i64,
-}
-
-slice_bool_from :: (arr: [bool; 5], len: i64) -> slice_bool => {
-        { ptr: arr, len: len }
-}
-
-slice_len_bool :: (s: slice_bool) -> i64 => s.len
-
-slice_is_empty_bool :: (s: slice_bool) -> bool => s.len == 0
-
-slice_get_bool :: (s: slice_bool, idx: i64) -> bool => {
-        if ~(idx >= 0) { panic("slice_bool index negative") }
-        if idx >= s.len { panic("slice_bool index out of bounds") }
-        s.ptr[idx]
-}
-
-# Dynamic arrays (Vec)
-# This version is temporary until generics are implemented
-Vec_i64 :: struct { len: i64, ptr: *raw i64, cap: i64 }
- new_vec_i64 :: () -> Vec_i64 => {
-        {
-                len: 0,
-                ptr: unsafe { 0 as *raw i64 },
-                cap: 0,
-        }
-}
-
-realloc_i64 :: (old_ptr: *raw i64, len: i64, new_cap: i64) -> *raw i64 => {
-        new_ptr := unsafe { alloc(new_cap * 8) as *raw i64 }
-        for i in 0..len {
-                new_ptr[i] = old_ptr[i]
-        }
-        if old_ptr ~= 0 { dealloc(old_ptr as *raw u8) }
-        new_ptr
-}
-
-vec_push_i64 :: (v: *Vec_i64, val: i64) -> none => {
-        if v.len == v.cap {
-                new_cap := if v.cap == 0 { 1 } else { v.cap * 2 }
-                v.ptr = realloc_i64(v.ptr, v.len, new_cap)
-                v.cap = new_cap
-        }
-        v.ptr[v.len] = val
-        v.len = v.len + 1
-}
-
-vec_pop_i64 :: (v: *Vec_i64) -> i64 => {
-        if v.len == 0 { panic("pop from empty vec") }
-        v.len = v.len - 1
-        v.ptr[v.len]
-}
-
-vec_len_i64 :: (v: *Vec_i64) -> i64 => { v.len }
-
-
-# Generic array helpers
-
-array_append<T> :: (items: [T], value: T) -> [T] => {
-        new_len := len(items) + 1
-        output := new [T; new_len]
-        for i in 0..len(items) {
-                output[i] = items[i]
-        }
-        output[new_len - 1] = value
-        output
-}
-
-array_set_at<T> :: (items: [T], idx: i64, value: T) -> [T] => {
-        output := new [T; len(items)]
-        for i in 0..len(items) {
-                if i == idx {
-                        output[i] = value
-                } else {
-                        output[i] = items[i]
-                }
-        }
-        output
-}
-
-array_remove_at<T> :: (items: [T], remove_idx: i64) -> [T] => {
-        len := len(items)
-        if len == 0 {
-                ret new [T; 0]
-        }
-
-        # Workaround for parser < bug
-        if ~(remove_idx >= 0) or remove_idx >= len {
-                copy := new [T; len]
-                for i in 0..len {
-                        copy[i] = items[i]
-                }
-                ret copy
-        }
-
-        new_len := len - 1
-        if new_len <= 0 {
-                ret new [T; 0]
-        }
-
-        output := new [T; new_len]
-        out_idx := 0
-        for i in 0..len {
-                if i == remove_idx {
-                        continue
-                }
-                output[out_idx] = items[i]
-                out_idx = out_idx + 1
-        }
-        output
-}
-
-array_remove_where<T> :: (items: [T], predicate: (T) -> bool) -> [T] => {
-        keep_count := 0
-        for i in 0..len(items) {
-                if ~predicate(items[i]) {
-                        keep_count = keep_count + 1
-                }
-        }
-
-        if keep_count == 0 {
-                ret new [T; 0]
-        }
-
-        output := new [T; keep_count]
-        out_idx := 0
-        for i in 0..len(items) {
-                item := items[i]
-                if predicate(item) {
-                        continue
-                }
-                output[out_idx] = item
-                out_idx = out_idx + 1
-        }
-        output
-}
-
-array_filter<T> :: (items: [T], predicate: (T) -> bool) -> [T] => {
-        match array_find_index(items, predicate) {
-                none => ret new [T; 0]
-                _ => {}
-        }
-
-        # Collect matches
-        count := 0
-        for i in 0..len(items) {
-                if predicate(items[i]) {
-                        count = count + 1
-                }
-        }
-
-        output := new [T; count]
-        out_idx := 0
-        for i in 0..len(items) {
-                item := items[i]
-                if predicate(item) {
-                        output[out_idx] = item
-                        out_idx = out_idx + 1
-                }
-        }
-        output
-}
-
-array_find_index<T> :: (items: [T], predicate: (T) -> bool) -> ?i64 => {
-        for i in 0..len(items) {
-                if predicate(items[i]) {
-                        ret some i
-                }
-        }
-        none
-}
-
-array_contains<T> :: (items: [T], predicate: (T) -> bool) -> bool => {
-        result := array_find_index(items, predicate)
-        # Check if result is some using a workaround
-        for i in 0..len(items) {
-                if predicate(items[i]) {
-                        ret true
-                }
-        }
-        ret false
-}
-
-array_map<T> :: (items: [T], transform: (T) -> T) -> [T] => {
-        if len(items) == 0 {
-                ret new [T; 0]
-        }
-        output := new [T; len(items)]
-        for i in 0..len(items) {
-                output[i] = transform(items[i])
-        }
-        output
-}
-
-array_all<T> :: (items: [T], predicate: (T) -> bool) -> bool => {
-        for i in 0..len(items) {
-                if ~predicate(items[i]) {
-                        ret false
-                }
-        }
-        true
-}
-
-array_any<T> :: (items: [T], predicate: (T) -> bool) -> bool => {
-        # Check if any item matches the predicate
-        for i in 0..len(items) {
-                if predicate(items[i]) {
-                        ret true
-                }
-        }
-        ret false
-}
-
-array_fold<T> :: (items: [T], initial: T, reducer: (T, T) -> T) -> T => {
-        acc := initial
-        for i in 0..len(items) {
-                acc = reducer(acc, items[i])
-        }
-        acc
-}
-

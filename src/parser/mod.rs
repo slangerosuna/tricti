@@ -1,5 +1,6 @@
 use crate::ast::*;
 use pest::*;
+use pest::pratt_parser::{Assoc, Op, PrattParser};
 use pest_derive::*;
 use std::collections::HashMap;
 
@@ -633,20 +634,8 @@ fn parse_assignment(pair: pest::iterators::Pair<Rule>) -> Statement {
 fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let rule = pair.as_rule();
     match rule {
-        Rule::or
-        | Rule::and
-        | Rule::comparison
-        | Rule::shift
-        | Rule::addition
-        | Rule::multiplication
-        | Rule::or_no_block
-        | Rule::and_no_block
-        | Rule::comparison_no_block
-        | Rule::shift_no_block
-        | Rule::addition_no_block
-        | Rule::multiplication_no_block => parse_binary_expression(pair),
-        Rule::with_range | Rule::with_range_no_block => parse_with_range(pair),
-        Rule::unary | Rule::unary_no_block => parse_unary(pair),
+    Rule::binary_expression => parse_binary_expression(pair),
+    Rule::unary | Rule::unary_no_block => parse_unary(pair),
         Rule::cast_expr | Rule::cast_expr_no_block => parse_cast_expression(pair),
         Rule::post_fix | Rule::post_fix_no_block => parse_postfix_expression(pair),
         Rule::primary | Rule::primary_no_block => parse_primary_expression(pair),
@@ -679,26 +668,6 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
                 panic!("Unexpected expression rule: {:?}", rule)
             }
         }
-    }
-}
-
-fn parse_with_range(pair: pest::iterators::Pair<Rule>) -> Expression {
-    // with_range = { unary ~ (".." ~ unary ~ (".." ~ unary)?)? }
-    let inners: Vec<_> = pair.into_inner().collect();
-    if inners.len() == 1 {
-        return parse_expression(inners[0].clone());
-    }
-    let start = parse_expression(inners[0].clone());
-    let end = parse_expression(inners[1].clone());
-    let step = if inners.len() >= 3 {
-        Some(Box::new(parse_expression(inners[2].clone())))
-    } else {
-        None
-    };
-    Expression::Range {
-        start: Box::new(start),
-        end: Box::new(end),
-        step,
     }
 }
 
