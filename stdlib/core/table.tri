@@ -8,45 +8,47 @@ use core::errors
 # TABLE SCHEMA AND METADATA
 # =============================================================================
 
-ColumnType :: enum {
-    I8, I16, I32, I64,
-    U8, U16, U32, U64,
-    F32, F64,
+ColumnType :: enum
+    I8,
+    I16,
+    I32,
+    I64,
+    U8,
+    U16,
+    U32,
+    U64,
+    F32,
+    F64,
     Bool,
     String,
     Bytes,
     Custom { type_name: string },
-}
 
-ColumnConstraint :: enum {
+ColumnConstraint :: enum
     PrimaryKey,
     NotNull,
     Unique,
     ForeignKey { table_: String, column: String },
     Check { predicate: String },
     Default { value: String },
-}
 
-ColumnDef :: {
+ColumnDef :: struct
     name: String,
     column_type: ColumnType,
     constraints: [ColumnConstraint],
     is_computed: bool,
     compute_expr: ?String,
-}
 
-TableSchema :: {
+TableSchema :: struct
     name: String,
     columns: [ColumnDef],
     primary_key: ?String,
     indexes: [IndexDef],
-}
 
-IndexDef :: {
+IndexDef :: struct
     name: String,
     columns: [String],
     is_unique: bool,
-}
 
 # =============================================================================
 # MVCC (Multi-Version Concurrency Control)
@@ -55,54 +57,48 @@ IndexDef :: {
 TransactionId :: u64
 Timestamp :: u64
 
-RowVersion :: {
+RowVersion :: struct
     transaction_id: TransactionId,
     created_at: Timestamp,
     deleted_at: ?Timestamp,
     row_data: *none,  # pointer to actual row data
-}
 
-TransactionState :: enum {
+TransactionState :: enum
     Active { started_at: Timestamp },
     Committed { committed_at: Timestamp },
     Aborted { aborted_at: Timestamp },
-}
 
-TransactionLog :: {
+TransactionLog :: struct
     transaction_id: TransactionId,
     state: TransactionState,
     read_snapshot: Timestamp,
     write_set: [RowReference],
-}
 
-RowReference :: {
+RowReference :: struct
     table: String,
     row_id: u64,
     version: u64,
-}
 
 # =============================================================================
 # TABLE STORAGE
 # =============================================================================
 
-TableRow :: {
+TableRow :: struct
     id: u64,
     versions: [RowVersion],
     current_version: u64,
-}
 
-Table :: {
+Table :: struct
     schema: TableSchema,
     rows: HashMap<u64, TableRow>,
     next_row_id: u64,
     next_version: u64,
     active_transactions: HashMap<TransactionId, TransactionLog>,
     next_transaction_id: TransactionId,
-}
 
-impl Table {
-    new :: (schema: TableSchema) -> Table => {
-        Table {
+impl Table:
+    new :: (schema: TableSchema) -> Table => do
+        ret Table {
             schema: schema,
             rows: HashMap::new(),
             next_row_id: 1,
@@ -110,83 +106,77 @@ impl Table {
             active_transactions: HashMap::new(),
             next_transaction_id: 1,
         }
-    }
 
     # Begin a new transaction with snapshot isolation
-    begin_transaction :: (&mut self) -> TransactionId => {
+    begin_transaction :: (&mut self) -> TransactionId => do
         tx_id := self.next_transaction_id
         self.next_transaction_id += 1
-        
+
         snapshot := current_timestamp()
-        
+
         log := TransactionLog {
             transaction_id: tx_id,
             state: TransactionState::Active { started_at: snapshot },
             read_snapshot: snapshot,
             write_set: [],
         }
-        
+
         self.active_transactions.insert(tx_id, log)
-        tx_id
-    }
+        ret tx_id
 
     # Commit a transaction, making all writes visible
-    commit_transaction :: (&mut self, tx_id: TransactionId) -> !none => {
+    commit_transaction :: (&mut self, tx_id: TransactionId) -> !none => do
         tx_log := self.active_transactions.get(tx_id)?
-        
+
         # Update transaction state
         commit_time := current_timestamp()
         tx_log.state = TransactionState::Committed { committed_at: commit_time }
-        
+
         # Mark all written row versions as committed
-        for row_ref in tx_log.write_set {
+        for row_ref in tx_log.write_set:
             row := self.rows.get_mut(row_ref.row_id)?
             version := row.versions.get_mut(row_ref.version)?
             version.deleted_at = none  # visible to future transactions
-        }
-        
+
         self.active_transactions.remove(tx_id)
-        ok none
-    }
+        ret ok none
 
     # Abort a transaction, rolling back all writes
-    abort_transaction :: (&mut self, tx_id: TransactionId) -> !none => {
+    abort_transaction :: (&mut self, tx_id: TransactionId) -> !none => do
         tx_log := self.active_transactions.get(tx_id)?
-        
+
         # Mark all written row versions as deleted
-        for row_ref in tx_log.write_set {
+        for row_ref in tx_log.write_set:
             row := self.rows.get_mut(row_ref.row_id)?
             version := row.versions.get_mut(row_ref.version)?
             version.deleted_at = some current_timestamp()
-        }
-        
+
         self.active_transactions.remove(tx_id)
-        ok none
-    }
+        ret ok none
 
     # Insert a row (within a transaction)
-    insert :: (&mut self, tx_id: TransactionId, data: *none) -> !u64 => {
+    insert :: (&mut self, tx_id: TransactionId, data: *none) -> !u64 => do
         row_id := self.next_row_id
         self.next_row_id += 1
-        
+
         version_id := self.next_version
         self.next_version += 1
-        
+
         version := RowVersion {
             transaction_id: tx_id,
             created_at: current_timestamp(),
             deleted_at: none,
             row_data: data,
         }
-        
+
         row := TableRow {
             id: row_id,
             versions: [version],
             current_version: version_id,
         }
-        
+
         self.rows.insert(row_id, row)
-        
+
         # Add to transaction write set
         tx_log := self.active_transactions.get_mut(tx_id)?
         tx_log.write_set.push(RowReference {
@@ -195,33 +185,28 @@ impl Table {
             version: version_id,
         })
 
-        ok row_id
-    }
+        ret ok row_id
 
     # Get row visible to a transaction (snapshot isolation)
-    get :: (&self, tx_id: TransactionId, row_id: u64) -> !?*none => {
+    get :: (&self, tx_id: TransactionId, row_id: u64) -> !?*none => do
         tx_log := self.active_transactions.get(tx_id)?
         row := self.rows.get(row_id)?
-        
-        # Find the latest version visible to this transaction
-        for version in row.versions.iter().rev() {
-            if version.created_at <= tx_log.read_snapshot {
-                if version.deleted_at.is_none() or version.deleted_at? > tx_log.read_snapshot {
-                    ret ok some version.row_data
-                }
-            }
-        }
 
-        ok none
-    }
+        # Find the latest version visible to this transaction
+        for version in row.versions.iter().rev():
+            if version.created_at <= tx_log.read_snapshot:
+                if version.deleted_at.is_none() or version.deleted_at? > tx_log.read_snapshot:
+                    ret ok some version.row_data
+
+        ret ok none
 
     # Update a row (creates new version)
-    update :: (&mut self, tx_id: TransactionId, row_id: u64, data: *none) -> !none => {
+    update :: (&mut self, tx_id: TransactionId, row_id: u64, data: *none) -> !none => do
         row := self.rows.get_mut(row_id)?
-        
+
         version_id := self.next_version
         self.next_version += 1
-        
+
         # Create new version
         version := RowVersion {
             transaction_id: tx_id,
@@ -229,10 +214,10 @@ impl Table {
             deleted_at: none,
             row_data: data,
         }
-        
+
         row.versions.push(version)
         row.current_version = version_id
-        
+
         # Add to transaction write set
         tx_log := self.active_transactions.get_mut(tx_id)?
         tx_log.write_set.push(RowReference {
@@ -240,18 +225,17 @@ impl Table {
             row_id: row_id,
             version: version_id,
         })
-        
-        ok none
-    }
+
+        ret ok none
 
     # Delete a row (marks current version as deleted)
-    delete :: (&mut self, tx_id: TransactionId, row_id: u64) -> !none => {
+    delete :: (&mut self, tx_id: TransactionId, row_id: u64) -> !none => do
         row := self.rows.get_mut(row_id)?
-        
+
         # Mark latest version as deleted
         latest := row.versions.last_mut()?
         latest.deleted_at = some current_timestamp()
-        
+
         # Add to transaction write set
         tx_log := self.active_transactions.get_mut(tx_id)?
         tx_log.write_set.push(RowReference {
@@ -259,35 +243,30 @@ impl Table {
             row_id: row_id,
             version: row.current_version,
         })
-        
-        ok none
-    }
-}
+
+        ret ok none
 
 # =============================================================================
 # COMPUTED COLUMNS
 # =============================================================================
 
-ComputedColumn :: {
+ComputedColumn :: struct
     name: String,
     dependencies: [String],  # column names this depends on
     compute_fn: (row: *none) -> *none,
     is_lazy: bool,
-}
 
-impl Table {
+impl Table:
     # Add a computed column to the schema
-    add_computed_column :: (&mut self, col: ComputedColumn) -> !none => {
+    add_computed_column :: (&mut self, col: ComputedColumn) -> !none => do
         # Verify dependencies exist
-        for dep in col.dependencies {
-            if ~self.schema.has_column(dep) {
+        for dep in col.dependencies:
+            if ~self.schema.has_column(dep):
                 ret err StdError::InvalidArgument {
                     parameter: "dependencies",
                     message: "Dependent column does not exist: " + dep,
                 }
-            }
-        }
-        
+
         # Add column def to schema
         col_def := ColumnDef {
             name: col.name,
@@ -296,32 +275,26 @@ impl Table {
             is_computed: true,
             compute_expr: none,
         }
-        
+
         self.schema.columns.push(col_def)
-        ok none
-    }
+        ret ok none
 
     # Evaluate computed columns for a row
-    evaluate_computed :: (&self, row_id: u64) -> !HashMap<String, *none> => {
+    evaluate_computed :: (&self, row_id: u64) -> !HashMap<String, *none> => do
         results := HashMap::new()
-        
-        for col in self.schema.columns {
-            if col.is_computed {
+
+        for col in self.schema.columns:
+            if col.is_computed:
                 # TODO: Execute compute_fn with row data
                 # For now, return placeholder
                 results.insert(col.name, unsafe { none })
-            }
-        }
-        
-        ok results
-    }
-}
+
+        ret ok results
 
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
 
-current_timestamp :: () -> Timestamp => {
+current_timestamp :: () -> Timestamp => do
     # TODO: Get actual timestamp from system
-    0u64
-}
+    ret 0u64

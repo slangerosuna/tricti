@@ -56,7 +56,7 @@ fn test_public_module_parsing() {
         pub mod public_module {
             public_function :: () -> i64 => 100
         }
-        
+
         pub use public_module::public_function as pf;
     "#;
 
@@ -99,7 +99,7 @@ fn test_nested_module_paths() {
                 nested_function :: () -> i64 => 200
             }
         }
-        
+
         use outer::inner::nested_function;
     "#;
 

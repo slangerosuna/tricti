@@ -309,41 +309,53 @@ mod tests {
     #[test]
     fn parses_assert_block() {
         let function_src = r"(cond: bool, msg: string) -> none => do
-    if ~cond: panic(msg)
+    if ~cond:
+        panic(msg)
 ";
-        PnParser::parse(Rule::function, function_src).expect("failed to parse function snippet");
+        let function_src = indentation::desugar_indentation(function_src);
+        PnParser::parse(Rule::function, &function_src)
+            .expect("failed to parse function snippet");
 
         let statement_src =
             r"assert :: (cond: bool, msg: string) -> none => do
-    if ~cond: panic(msg)
+    if ~cond:
+        panic(msg)
 ";
-        PnParser::parse(Rule::statement, statement_src)
+        let statement_src = indentation::desugar_indentation(statement_src);
+        PnParser::parse(Rule::statement, &statement_src)
             .expect("failed to parse assert statement snippet");
 
-        let single_program_src = "# Assert a condition holds; otherwise panic with message\nassert :: (cond: bool, msg: string) -> none => do\n    if ~cond: panic(msg)\n";
-        PnParser::parse(Rule::program, single_program_src)
+        let single_program_src = "# Assert a condition holds; otherwise panic with message\nassert :: (cond: bool, msg: string) -> none => do\n    if ~cond:\n        panic(msg)\n";
+        let single_program_src = indentation::desugar_indentation(single_program_src);
+        PnParser::parse(Rule::program, &single_program_src)
             .expect("failed to parse single assert program");
 
-        let two_simple_consts = "foo :: () -> none => do\nbar :: () -> none => do\n";
-        PnParser::parse(Rule::program, two_simple_consts)
+        let two_simple_consts = "foo :: () -> none => do\n    ret none\nbar :: () -> none => do\n    ret none\n";
+        let two_simple_consts = indentation::desugar_indentation(two_simple_consts);
+        PnParser::parse(Rule::program, &two_simple_consts)
             .expect("failed to parse two simple const declarations");
 
-        let blank_line_between_consts = "foo :: () -> none => do\n\nbar :: () -> none => do\n";
-        PnParser::parse(Rule::program, blank_line_between_consts)
+        let blank_line_between_consts = "foo :: () -> none => do\n    ret none\n\nbar :: () -> none => do\n    ret none\n";
+        let blank_line_between_consts = indentation::desugar_indentation(blank_line_between_consts);
+        PnParser::parse(Rule::program, &blank_line_between_consts)
             .expect("failed to parse const declarations separated by blank line");
 
         let comment_between_consts = r"foo :: () -> none => do
+    ret none
 # a helpful message
 bar :: () -> none => do
+    ret none
 ";
-        PnParser::parse(Rule::program, comment_between_consts)
+        let comment_between_consts = indentation::desugar_indentation(comment_between_consts);
+        PnParser::parse(Rule::program, &comment_between_consts)
             .expect("failed to parse const declarations separated by comment");
 
         let panic_only_const = r#"panic :: (msg: string) => do
     println("Assertion failed:", msg)
     exit(1)
 "#;
-        PnParser::parse(Rule::program, panic_only_const)
+        let panic_only_const = indentation::desugar_indentation(panic_only_const);
+        PnParser::parse(Rule::program, &panic_only_const)
             .expect("failed to parse panic-only const declaration");
 
         let two_nontrivial_consts = r#"foo :: () -> none => do
@@ -352,7 +364,8 @@ bar :: () -> none => do
 bar :: () -> none => do
     ret none
 "#;
-        PnParser::parse(Rule::program, two_nontrivial_consts)
+        let two_nontrivial_consts = indentation::desugar_indentation(two_nontrivial_consts);
+        PnParser::parse(Rule::program, &two_nontrivial_consts)
             .expect("failed to parse consecutive nontrivial const declarations");
 
         let src = r#"
@@ -361,10 +374,12 @@ panic :: (msg: string) -> none => do
     exit(1)
 
 assert :: (cond: bool, msg: string) -> none => do
-    if ~cond: panic(msg)
+    if ~cond:
+        panic(msg)
 "#;
+        let src = indentation::desugar_indentation(src);
 
-        let mut statement_pairs = PnParser::parse(Rule::statement, src)
+        let mut statement_pairs = PnParser::parse(Rule::statement, &src)
             .expect("failed to parse statement with consecutive const declarations");
         let statement_pair = statement_pairs
             .next()
@@ -374,7 +389,7 @@ assert :: (cond: bool, msg: string) -> none => do
             src.trim(),
             "two const declarations should not be parsed as a single statement",
         );
-        PnParser::parse(Rule::program, src).expect("failed to parse assert block snippet");
+    PnParser::parse(Rule::program, &src).expect("failed to parse assert block snippet");
     }
 
     #[test]

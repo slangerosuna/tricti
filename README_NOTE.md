@@ -1,1 +1,0 @@
-Temporary note: remove stray file.

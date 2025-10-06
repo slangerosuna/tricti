@@ -37,11 +37,18 @@ fn parses_char_literal() {
 #[test]
 fn parses_tuple_literal_and_pattern() {
     let src = r#"
-        main :: () => do
-            pair := (40, 2)
-            value := match pair:
-                (a, b) => a + b,
-    "#;
+main :: () => {
+    pair := (40, 2)
+    value := match pair {
+        (a, b) => {
+            ret a + b
+        }
+    }
+    ret value
+}
+"#
+    .trim()
+    .to_string();
 
     let program = parser::parse(src.to_string());
     assert_eq!(program.statements.len(), 1);
@@ -145,6 +152,7 @@ fn parse_attribute_with_identifier_arguments() {
     let src = r#"
     @trigger(ExampleSignal, Database)
         receiver_sys :: sys () => do
+            ret none
     "#;
 
     let program = parser::parse(src.to_string());
@@ -267,14 +275,36 @@ fn parse_integer_with_underscores() {
 #[test]
 fn parse_match_with_return_and_value_arms() {
     let src = r#"
-        result := match input:
-            some value => value,
-            none => ret default,
-    "#
+result := match input {
+    some value => {
+        ret value
+    }
+    none => {
+        ret default
+    }
+}
+ret result
+"#
+    .trim()
     .to_string();
 
     let program = parser::parse(src);
-    assert_eq!(program.statements.len(), 1);
+    assert_eq!(program.statements.len(), 2);
+    match &program.statements[0] {
+        Statement::VariableDecl { value, .. } => match value {
+            Expression::Match { arms, .. } => {
+                assert_eq!(arms.len(), 2);
+            }
+            other => panic!("expected match expression, got {:?}", other),
+        },
+        other => panic!("expected variable declaration, got {:?}", other),
+    }
+    match &program.statements[1] {
+        Statement::Return(Some(Expression::Identifier(name))) => {
+            assert_eq!(name, "result");
+        }
+        other => panic!("expected return of result identifier, got {:?}", other),
+    }
 }
 
 #[test]
@@ -432,15 +462,19 @@ fn parse_system_query_without_name_defaults() {
 #[test]
 fn parse_trait_type_and_impl_for() {
     let src = r#"
-        my_iterator :: trait {
-            T: type,
-            next: ( &mut self ) -> ?T,
-        }
-        my_struct :: { }
-        impl my_iterator for my_struct {
-            next :: (self: &mut my_struct) -> ?i32 => do
-        }
-    "#
+my_iterator :: trait {
+    next: (&mut Self) -> ?i32,
+}
+
+my_struct :: struct
+
+impl my_iterator for my_struct {
+    next :: (self: &mut my_struct) -> ?i32 => {
+        ret none
+    }
+}
+"#
+    .trim()
     .to_string();
 
     let program = parser::parse(src);
@@ -452,11 +486,7 @@ fn parse_trait_type_and_impl_for() {
         Statement::ConstDecl { name, value, .. } => {
             assert_eq!(name, "my_iterator");
             match value {
-                ConstValue::Type(Type::Trait {
-                    associated_types,
-                    methods,
-                }) => {
-                    assert!(associated_types.contains(&"T".to_string()));
+                ConstValue::Type(Type::Trait { methods, .. }) => {
                     assert!(methods.contains_key("next"));
                 }
                 other => panic!("expected trait type, got {:?}", other),
