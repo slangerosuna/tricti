@@ -354,11 +354,56 @@ assert :: (cond: bool, msg: string) -> none => {
         PnParser::parse(Rule::statement, "ptr := alloc(8) as *i64;")
             .expect("failed to parse statement with raw pointer cast");
     }
+
+    #[test]
+    fn parses_some_ref_pattern_in_match_arm() {
+        let src = r#"
+match *self {
+    some ref val => some val.clone(),
+    none => none,
+}
+"#;
+        PnParser::parse(Rule::expression, src)
+            .expect("failed to parse match expression with some ref pattern");
+    }
+
+    #[test]
+    fn parses_some_ref_match_arm() {
+    let src = "some ref value => some value.clone(),";
+        PnParser::parse(Rule::match_arm, src)
+            .expect("failed to parse match arm with some ref pattern");
+    }
+
+    #[test]
+    fn parses_some_plain_match_arm() {
+        let src = "some value => some value.clone(),";
+        PnParser::parse(Rule::match_arm, src)
+            .expect("failed to parse match arm with simple some pattern");
+    }
+
+    #[test]
+    fn parses_ref_pattern() {
+        PnParser::parse(Rule::pattern, "ref value")
+            .expect("failed to parse bare ref pattern");
+    }
+
+    #[test]
+    fn parses_some_option_with_ref_payload() {
+        PnParser::parse(Rule::some_option_pattern, "some ref value")
+            .expect("failed to parse some ref option pattern");
+    }
+
+    #[test]
+    fn parses_option_pattern_with_ref_payload_via_pattern_rule() {
+        PnParser::parse(Rule::pattern, "some ref value")
+            .expect("failed to parse pattern wrapping some ref payload");
+    }
 }
 
 fn parse_variable_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     let mut inner = pair.into_inner();
-    let name = inner.next().unwrap().as_str().to_string();
+    let pattern_pair = inner.next().unwrap();
+    let pattern = parse_binding_pattern(pattern_pair);
 
     let mut type_annotation = None;
     let mut value_pair = None;
@@ -374,7 +419,7 @@ fn parse_variable_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
     let value = parse_expression(value_pair.unwrap());
 
     Statement::VariableDecl {
-        name,
+        pattern,
         type_annotation,
         value,
     }
@@ -590,7 +635,7 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 }
 
 fn parse_with_range(pair: pest::iterators::Pair<Rule>) -> Expression {
-    // with_range = { unary ~ (":" ~ unary ~ (":" ~ unary)?)? }
+    // with_range = { unary ~ (".." ~ unary ~ (".." ~ unary)?)? }
     let inners: Vec<_> = pair.into_inner().collect();
     if inners.len() == 1 {
         return parse_expression(inners[0].clone());
@@ -953,6 +998,80 @@ fn parse_tuple_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     Expression::Tuple(elements)
 }
 
+fn parse_tuple_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let elements: Vec<Expression> = pair
+        .into_inner()
+        .filter(|inner| inner.as_rule() == Rule::pattern)
+        .map(parse_pattern)
+        .collect();
+    Expression::Tuple(elements)
+}
+
+fn parse_binding_pattern(pair: pest::iterators::Pair<Rule>) -> BindingPattern {
+    match pair.as_rule() {
+        Rule::binding_pattern => {
+            let inner = pair.into_inner().next().expect("binding pattern missing inner");
+            parse_binding_pattern(inner)
+        }
+        Rule::binding_tuple => {
+            let elements = pair
+                .into_inner()
+                .filter_map(|inner| match inner.as_rule() {
+                    Rule::binding_pattern | Rule::binding_tuple | Rule::identifier => {
+                        Some(parse_binding_pattern(inner))
+                    }
+                    _ => None,
+                })
+                .collect();
+            BindingPattern::Tuple(elements)
+        }
+        Rule::identifier => BindingPattern::Identifier(pair.as_str().to_string()),
+        _ if pair.as_str() == "_" => BindingPattern::Discard,
+        other => panic!("Unexpected binding pattern rule: {:?}", other),
+    }
+}
+
+fn parse_some_ref_option_pattern_pair(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let payload_pair = inner
+        .next()
+        .expect("some ref pattern must contain an inner pattern");
+    let payload_pattern = parse_pattern(payload_pair);
+
+    let ref_call = Expression::Call {
+        function: Box::new(Expression::Identifier("ref".to_string())),
+        type_args: vec![],
+        arguments: vec![Argument {
+            name: None,
+            value: payload_pattern,
+        }],
+    };
+
+    Expression::Call {
+        function: Box::new(Expression::Identifier("some".to_string())),
+        type_args: vec![],
+        arguments: vec![Argument {
+            name: None,
+            value: ref_call,
+        }],
+    }
+}
+
+fn parse_ref_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+    let target = inner
+        .next()
+        .expect("ref pattern missing inner pattern");
+    Expression::Call {
+        function: Box::new(Expression::Identifier("ref".to_string())),
+        type_args: vec![],
+        arguments: vec![Argument {
+            name: None,
+            value: parse_pattern(target),
+        }],
+    }
+}
+
 fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut it = pair.into_inner();
     // First inner expression is the scrutinee
@@ -968,7 +1087,18 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
             .next()
             .expect("match arm missing pattern expression");
         let body_pair = arm_inner.next().expect("match arm missing body expression");
-        let pattern = parse_pattern(pattern_pair);
+        let pattern = if pattern_pair.as_rule() == Rule::match_arm_pattern_text {
+            let raw_pattern = pattern_pair.as_str();
+            let trimmed = raw_pattern.trim();
+            let mut parsed_pairs = PnParser::parse(Rule::pattern, trimmed)
+                .unwrap_or_else(|err| panic!("failed to reparse match arm pattern '{}': {:?}", trimmed, err));
+            let parsed_pattern_pair = parsed_pairs
+                .next()
+                .expect("reparse of match arm pattern produced no pairs");
+            parse_pattern(parsed_pattern_pair)
+        } else {
+            parse_pattern(pattern_pair)
+        };
         let body = parse_match_arm_body(body_pair);
         arms.push(MatchArm { pattern, body });
     }
@@ -979,20 +1109,26 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
 }
 
 fn parse_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
-    let inner = pair.into_inner().next().unwrap();
-    match inner.as_rule() {
-        Rule::enum_payload_pattern => parse_enum_payload_pattern(inner),
+    match pair.as_rule() {
+        Rule::pattern | Rule::ref_payload_pattern | Rule::basic_pattern => {
+            let inner = pair.into_inner().next().unwrap();
+            parse_pattern(inner)
+        }
+        Rule::some_ref_option_pattern => parse_some_ref_option_pattern_pair(pair),
+        Rule::enum_payload_pattern => parse_enum_payload_pattern(pair),
+        Rule::tuple_pattern => parse_tuple_pattern(pair),
+        Rule::ref_pattern => parse_ref_pattern(pair),
         Rule::bare_identifier_pattern => {
-            let ident = inner.into_inner().next().unwrap().as_str().to_string();
+            let ident = pair.into_inner().next().unwrap().as_str().to_string();
             Expression::Identifier(ident)
         }
-        Rule::path_struct => parse_path_struct_expression(inner),
-        Rule::static_path => parse_static_path_expression(inner),
-        Rule::identifier => Expression::Identifier(inner.as_str().to_string()),
-        Rule::literal => parse_literal(inner),
-        Rule::option_pattern => parse_option_pattern(inner),
-        _ if inner.as_str() == "_" => Expression::Identifier("_".to_string()),
-        _ => panic!("Unexpected pattern rule: {:?}", inner.as_rule()),
+        Rule::path_struct => parse_path_struct_expression(pair),
+        Rule::static_path => parse_static_path_expression(pair),
+        Rule::identifier => Expression::Identifier(pair.as_str().to_string()),
+        Rule::literal => parse_literal(pair),
+        Rule::option_pattern => parse_option_pattern(pair),
+        _ if pair.as_str() == "_" => Expression::Identifier("_".to_string()),
+        other => panic!("Unexpected pattern rule: {:?}", other),
     }
 }
 
@@ -1038,6 +1174,7 @@ fn parse_option_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
     let variant = inner.next().expect("option pattern missing variant");
 
     match variant.as_rule() {
+        Rule::some_ref_option_pattern => parse_some_ref_option_pattern_pair(variant),
         Rule::some_option_pattern => {
             let mut some_inner = variant.into_inner();
             let value_pair = some_inner

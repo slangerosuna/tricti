@@ -5,6 +5,8 @@ Apps :: table {
     downloads: u64 = 0,
 }
 
+Gui :: @resource { }
+
 display_apps :: sys (
     query: (id: u64, name: String) from Apps where downloads > 1000,
     gui: res &mut Gui,

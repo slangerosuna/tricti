@@ -16,7 +16,7 @@ main :: () -> none => {
     println("Original: [1,2,3,4,5]")
     println("After add 10:")
     
-    for i in 0:result.len() {
+    for i in 0..result.len() {
         val := result.get(i)
         match val {
             some v => println(v)

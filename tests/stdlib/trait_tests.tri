@@ -139,13 +139,13 @@ test_hashmap_collision_handling :: () -> bool => {
     map := HashMap::new::<i64, i64>()
     
     # Insert many values to force collisions
-    for i in 0:100 {
+    for i in 0..100 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
     # Verify all values are retrievable
     all_correct := true
-    for i in 0:100 {
+    for i in 0..100 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
     if val == (0 as *i64) or val[0] ~= (i * 10) as i64 {
             all_correct = false

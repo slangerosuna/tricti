@@ -3,39 +3,39 @@
 
 main :: () -> i32 => {
     # Test Vec
-    vec := Vec_new();
-    vec.push(1);
-    vec.push(2);
-    vec.push(3);
+    vec := Vec::new()
+    vec.push(1)
+    vec.push(2)
+    vec.push(3)
 
-    assert(vec.len() == 3);
-    assert(vec.get(0) == some 1);
-    assert(vec.get(1) == some 2);
-    assert(vec.get(2) == some 3);
-    assert(vec.get(3) == none);
+    assert(vec.len() == 3)
+    assert(vec.get(0) == some 1)
+    assert(vec.get(1) == some 2)
+    assert(vec.get(2) == some 3)
+    assert(vec.get(3) == none)
 
     # Test HashMap
-    map := HashMap::new();
-    map.insert("key1", "value1");
-    map.insert("key2", "value2");
+    map := HashMap::new()
+    map.insert("key1", "value1")
+    map.insert("key2", "value2")
 
-    assert(map.len() == 2);
-    assert(map.get("key1") == some "value1");
-    assert(map.get("key2") == some "value2");
-    assert(map.get("key3") == none);
-    assert(map.contains_key("key1"));
-    assert(!map.contains_key("key3"));
+    assert(map.len() == 2)
+    assert(map.get("key1") == some "value1")
+    assert(map.get("key2") == some "value2")
+    assert(map.get("key3") == none)
+    assert(map.contains_key("key1"))
+    assert(!map.contains_key("key3"))
 
     # Test HashSet
-    set := HashSet::new();
-    set.insert("item1");
-    set.insert("item2");
+    set := HashSet::new()
+    set.insert("item1")
+    set.insert("item2")
 
-    assert(set.len() == 2);
-    assert(set.contains("item1"));
-    assert(set.contains("item2"));
-    assert(!set.contains("item3"));
+    assert(set.len() == 2)
+    assert(set.contains("item1"))
+    assert(set.contains("item2"))
+    assert(!set.contains("item3"))
 
-    println("All collection tests passed!");
+    println("All collection tests passed!")
     0
 }

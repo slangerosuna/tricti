@@ -156,13 +156,13 @@ test_collision_many_keys :: () -> bool => {
     map := HashMap::new::<i64, i64>()
     
     # Insert many keys to force collisions
-    for i in 0:20 {
+    for i in 0..20 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
     # Verify all keys are retrievable with correct values
     all_correct := true
-    for i in 0:20 {
+    for i in 0..20 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
     if val == (0 as *i64) or val[0] ~= (i * 10) as i64 {
             all_correct = false
@@ -195,7 +195,7 @@ test_collision_sequential_values :: () -> bool => {
     map := HashMap::new::<i64, i64>()
     
     # Sequential values often have similar hashes, test them
-    for i in 100:110 {
+    for i in 100..110 {
         HashMap::insert::<i64, i64>(&map, i as i64, i as i64)
     }
     
@@ -203,7 +203,7 @@ test_collision_sequential_values :: () -> bool => {
     result := HashMap::len::<i64, i64>(&map) == 10
     
     # Verify retrieval
-    for i in 100:110 {
+    for i in 100..110 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
     if val == (0 as *i64) or val[0] ~= i as i64 {
             result = false
@@ -304,17 +304,17 @@ test_tombstone_multiple_removals :: () -> bool => {
     map := HashMap::with_capacity::<i64, i64>(32)
     
     # Insert many keys
-    for i in 0:10 {
+    for i in 0..10 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
     # Remove half of them
-    for i in 0:5 {
+    for i in 0..5 {
         HashMap::remove::<i64, i64>(&map, i as i64)
     }
     
     # Insert new keys - should reuse tombstones
-    for i in 10:15 {
+    for i in 10..15 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
@@ -360,18 +360,18 @@ test_tombstone_after_resize :: () -> bool => {
     map := HashMap::with_capacity::<i64, i64>(16)
     
     # Insert many keys to force resize
-    for i in 0:20 {
+    for i in 0..20 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
     # Remove some keys
-    for i in 0:5 {
+    for i in 0..5 {
         HashMap::remove::<i64, i64>(&map, i as i64)
     }
     
     # Verify remaining keys are intact
     all_correct := true
-    for i in 5:20 {
+    for i in 5..20 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
     if val == (0 as *i64) or val[0] ~= (i * 10) as i64 {
             all_correct = false

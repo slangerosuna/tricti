@@ -194,7 +194,7 @@ test_generic_multi_inst :: () -> bool => {
     b := id(true)
     c := a
     d := b
-    (c == 10) && d
+    (c == 10) and d
 }
 
 # Test: generic parameter passing

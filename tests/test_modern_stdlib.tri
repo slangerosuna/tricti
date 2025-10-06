@@ -15,18 +15,18 @@ test_modern_errors :: () => {
     assert_eq(std_error_message(unsupported_err), "experimental feature")
 
     # Test result types
-    ok_result := std_ok(42)
-    err_result := std_err(msg_err)
+    ok_result := ok 42
+    err_result := err msg_err
 
     # Test result pattern matching
     match ok_result {
-        StdResult::Ok { value } => assert_eq(value, 42),
-        StdResult::Err { .. } => panic("Expected Ok result"),
+        ok value => assert_eq(value, 42),
+        err _ => panic("Expected Ok result"),
     }
 
     match err_result {
-        StdResult::Ok { .. } => panic("Expected Err result"),
-        StdResult::Err { error } => assert_eq(std_error_message(error), "simple message"),
+        ok _ => panic("Expected Err result"),
+        err error => assert_eq(std_error_message(error), "simple message"),
     }
 
     # Test result helper functions

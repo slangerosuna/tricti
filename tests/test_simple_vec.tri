@@ -6,7 +6,7 @@ Vec_new :: () -> i64 => {
 }
 
 main :: () -> i32 => {
-    result := Vec_new();
+    result := Vec::new();
     if result == 42 {
         println("Vec_new test passed!");
         0

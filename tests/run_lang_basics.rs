@@ -121,7 +121,7 @@ fn for_loop_with_range_start_end() {
     }
 
     let src = r#"
-        for i in 1:4 { println(i) }
+    for i in 1..4 { println(i) }
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_for_range1.o", "tests/tmp_for_range1.out");
@@ -136,7 +136,7 @@ fn for_loop_with_range_and_step() {
     }
 
     let src = r#"
-        for i in 0:6:2 { println(i) }
+    for i in 0..6..2 { println(i) }
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_for_range2.o", "tests/tmp_for_range2.out");
@@ -151,7 +151,7 @@ fn for_loop_negative_range() {
     }
 
     let src = r#"
-        for i in 3:0:-1 { println(i) }
+    for i in 3..0..-1 { println(i) }
     "#;
 
     let stdout = compile_and_run(
@@ -170,8 +170,8 @@ fn for_loop_dynamic_step() {
     }
 
     let src = r#"
-        step := 2
-        for i in 0:6:step { println(i) }
+    step := 2
+    for i in 0..6..step { println(i) }
     "#;
 
     let stdout = compile_and_run(
@@ -190,9 +190,9 @@ fn for_loop_with_dynamic_negative_step() {
     }
 
     let src = r#"
-        x := 2
-        step := -x
-        for i in 5:0:step { println(i) }
+    x := 2
+    step := -x
+    for i in 5..0..step { println(i) }
     "#;
 
     let stdout = compile_and_run(

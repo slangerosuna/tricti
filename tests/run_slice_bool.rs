@@ -26,7 +26,7 @@ main :: () => {
 
     count := 0
     len := v.len()
-    for i in 0:len {
+    for i in 0..len {
         match v.get(i) {
             some value => {
                 if value {

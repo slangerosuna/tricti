@@ -351,7 +351,7 @@ impl String {
             ret true
         }
         
-        for i in 0:self.len {
+    for i in 0..self.len {
             c1 := tolower(ptr_offset(self.data, i)[0] as i32)
             c2 := tolower(ptr_offset(other.data, i)[0] as i32)
             if c1 ~= c2 {
@@ -365,7 +365,7 @@ impl String {
     to_uppercase :: (self: *String) -> String => {
         result := String::with_capacity(self.len + 1)
         
-        for i in 0:self.len {
+    for i in 0..self.len {
             ch := ptr_offset(self.data, i)[0] as i32
             upper := toupper(ch) as u8
             String::push_char(&result, upper)
@@ -378,7 +378,7 @@ impl String {
     to_lowercase :: (self: *String) -> String => {
         result := String::with_capacity(self.len + 1)
         
-        for i in 0:self.len {
+    for i in 0..self.len {
             ch := ptr_offset(self.data, i)[0] as i32
             lower := tolower(ch) as u8
             String::push_char(&result, lower)
@@ -394,7 +394,7 @@ impl String {
         }
         
         start := self.len
-        for i in 0:self.len {
+    for i in 0..self.len {
             ch := ptr_offset(self.data, i)[0] as i32
             if isspace(ch) == 0 {
                 start = i
@@ -439,7 +439,7 @@ impl String {
         }
         
         start := self.len
-        for i in 0:self.len {
+    for i in 0..self.len {
             ch := ptr_offset(self.data, i)[0] as i32
             if isspace(ch) == 0 {
                 start = i
@@ -495,7 +495,7 @@ impl String {
         }
         
         result := String::with_capacity(self.len * n + 1)
-        for i in 0:n {
+    for i in 0..n {
             String::push_str(&result, self)
         }
         result
@@ -611,7 +611,7 @@ impl String {
 
     # Iterate over characters with callback
     each_char :: (self: *String, callback: (u8) -> none) -> none => {
-        for i in 0:self.len {
+    for i in 0..self.len {
             ch := ptr_offset(self.data, i)[0]
             callback(ch)
         }
@@ -653,7 +653,7 @@ impl String {
     # Count occurrences of character
     count_char :: (self: *String, ch: u8) -> u64 => {
         count := 0
-        for i in 0:self.len {
+    for i in 0..self.len {
             if ptr_offset(self.data, i)[0] == ch {
                 count = count + 1
             }
@@ -708,7 +708,7 @@ impl String {
         }
         
         result: i64 = 0
-        for i in start_idx:trimmed.len {
+    for i in start_idx..trimmed.len {
             ch := ptr_offset(trimmed.data, i)[0]
             if ch < 48 or ch > 57 {
                 ret none
@@ -761,7 +761,7 @@ impl String {
         }
         
         result: u64 = 0
-        for i in start_idx:trimmed.len {
+    for i in start_idx..trimmed.len {
             ch := ptr_offset(trimmed.data, i)[0]
             if ch < 48 or ch > 57 {
                 ret none
@@ -800,7 +800,7 @@ impl String {
             start_idx = 1
         }
         
-        for i in start_idx:trimmed.len {
+    for i in start_idx..trimmed.len {
             ch := ptr_offset(trimmed.data, i)[0]
             if ch >= 48 and ch <= 57 {
                 has_digit = true

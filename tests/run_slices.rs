@@ -35,7 +35,7 @@ fn user_defined_vec_bool_iteration() {
         vec_push_i64(&v, 1)
         acc := 0
         len := vec_len_i64(&v)
-        for i in 0:len {
+    for i in 0..len {
             if vec_get_i64(&v, i) == 1 { acc = acc + 1 }
         }
         println(acc)
@@ -94,7 +94,7 @@ fn iterate_vec_i64() {
         vec_push_i64(&v, 5)
         acc := 0
         len := vec_len_i64(&v)
-        for i in 0:len {
+    for i in 0..len {
             acc = acc + vec_get_i64(&v, i)
         }
         println(acc)
@@ -175,7 +175,7 @@ fn vec_iteration_in_prelude() {
             println(vec_get_i64(&v, 3))
             acc := 0
             len := vec_len_i64(&v)
-            for i in 0:len {
+            for i in 0..len {
                 acc = acc + vec_get_i64(&v, i)
             }
             println(acc)

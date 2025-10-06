@@ -65,7 +65,7 @@ impl<T> Vec<T> {
 
         # Workaround for parser < bug
     if self.len >= capacity and capacity >= 0 {
-            for i in capacity:self.len {
+        for i in capacity..self.len {
                 unsafe {
                     drop(*(self.data + i))
                 }
@@ -89,7 +89,7 @@ impl<T> Vec<T> {
         # Workaround for parser < bug
         if self.len >= 1 {
             # fallback: element-wise move (may call T's move semantics)
-            for i in 0:self.len {
+            for i in 0..self.len {
                 unsafe {
                     *(new_data + i) = *(self.data + i)
                 }
@@ -152,7 +152,7 @@ impl Drop for Vec<T> {
         if self.capacity == 0 { ret }
 
         # drop all elements
-        for i in 0:self.len {
+    for i in 0..self.len {
             unsafe { drop(*(self.data + i)) }
         }
 
@@ -539,7 +539,7 @@ Vec_u64_push :: (v: *Vec_u64, value: u64) => {
     new_data := unsafe { alloc(new_cap * 8) as *raw u64 }
         
         # Copy old data
-        for i in 0:v.len {
+    for i in 0..v.len {
             unsafe {
                 *(new_data + i) = *(v.data + i)
             }
@@ -616,7 +616,7 @@ HashMap_u64_u64_new :: () -> *HashMap_u64_u64 => {
     m.buckets = unsafe { alloc(capacity * 24) as *raw HashEntry_u64_u64 }
     
     # Initialize all buckets as unoccupied
-    for i in 0:capacity {
+    for i in 0..capacity {
         entry := unsafe { m.buckets + i }
         entry.key = 0
         entry.value = 0
@@ -637,7 +637,7 @@ HashMap_u64_u64_insert :: (m: *HashMap_u64_u64, key: u64, value: u64) => {
     idx := hash % m.capacity
     
     # Linear probing
-    for i in 0:m.capacity {
+    for i in 0..m.capacity {
         probe_idx := (idx + i) % m.capacity
         entry := unsafe { m.buckets + probe_idx }
         
@@ -659,7 +659,7 @@ HashMap_u64_u64_get :: (m: *HashMap_u64_u64, key: u64) -> u64 => {
     hash := hash_u64_simple(key)
     idx := hash % m.capacity
     
-    for i in 0:m.capacity {
+    for i in 0..m.capacity {
         probe_idx := (idx + i) % m.capacity
         entry := unsafe { m.buckets + probe_idx }
         
@@ -678,7 +678,7 @@ HashMap_u64_u64_remove :: (m: *HashMap_u64_u64, key: u64) -> bool => {
     hash := hash_u64_simple(key)
     idx := hash % m.capacity
     
-    for i in 0:m.capacity {
+    for i in 0..m.capacity {
         probe_idx := (idx + i) % m.capacity
         entry := unsafe { m.buckets + probe_idx }
         
@@ -699,7 +699,7 @@ HashMap_u64_u64_has :: (m: *HashMap_u64_u64, key: u64) -> bool => {
     hash := hash_u64_simple(key)
     idx := hash % m.capacity
     
-    for i in 0:m.capacity {
+    for i in 0..m.capacity {
         probe_idx := (idx + i) % m.capacity
         entry := unsafe { m.buckets + probe_idx }
         

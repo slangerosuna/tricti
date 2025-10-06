@@ -58,7 +58,7 @@ impl Path {
         if path.path.len == 0 { ret none }
         
         last_slash := -1i64
-        for i in 0:path.path.len {
+    for i in 0..path.path.len {
             if path.path.data[i] == 47 {
                 last_slash = i as i64
             }
@@ -76,7 +76,7 @@ impl Path {
         len := path.path.len - start
         
         result := String::with_capacity(len)
-        for i in 0:len {
+    for i in 0..len {
             String::push_char(&result, path.path.data[start + i])
         }
         
@@ -88,7 +88,7 @@ impl Path {
         if path.path.len == 0 { ret none }
         
         last_slash := -1i64
-        for i in 0:path.path.len {
+    for i in 0..path.path.len {
             if path.path.data[i] == 47 {
                 last_slash = i as i64
             }
@@ -97,7 +97,7 @@ impl Path {
         if last_slash <= 0 { ret none }
         
         parent_str := String::with_capacity(last_slash as u64)
-        for i in 0:(last_slash as u64) {
+    for i in 0..(last_slash as u64) {
             String::push_char(&parent_str, path.path.data[i])
         }
         

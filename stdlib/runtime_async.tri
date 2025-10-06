@@ -604,11 +604,11 @@ acquire_resources_for_task :: (
 
     acquired_names := []
 
-    for i in 0:requests.len() {
+    for i in 0..requests.len() {
         request := requests[i]
     success := try_acquire_resource(runtime, task_id, request.resource_name, request.access_type, request.lease_duration_ms, true)
     if ~success {
-            for j in 0:acquired_names.len() {
+            for j in 0..acquired_names.len() {
                 release_resource_for_task(runtime, task_id, acquired_names[j])
             }
             ret false
@@ -654,7 +654,7 @@ release_task_resources :: (
     runtime: &mut AsyncRuntimeState,
     task: AsyncTask,
 ) -> none => {
-    for i in 0:task.resource_handles.len() {
+    for i in 0..task.resource_handles.len() {
         handle := task.resource_handles[i]
     runtime.resource_leases = array_remove_where(runtime.resource_leases, (lease) => lease.task_id == task.id and lease.resource_name == handle.resource_name)
         wake_waiters_for_resource(runtime, handle.resource_name)
@@ -684,7 +684,7 @@ try_acquire_resource :: (
     }
 
     conflict := false
-    for i in 0:runtime.resource_leases.len() {
+    for i in 0..runtime.resource_leases.len() {
         lease := runtime.resource_leases[i]
         if lease.resource_name ~= resource_name {
             continue
@@ -839,7 +839,7 @@ wake_sleeping_tasks :: (
     runtime: &mut AsyncRuntimeState,
     now_ms: i64,
 ) -> none => {
-    for i in 0:runtime.active_tasks.len() {
+    for i in 0..runtime.active_tasks.len() {
         task := runtime.active_tasks[i]
         match task.state {
             TaskState::Suspended { yield_point: YieldPoint::Sleeping { duration_ms, started_at_ms }, .. } => {
@@ -910,7 +910,7 @@ runtime_next_deadline_ms :: (
 ) -> ?i64 => {
     deadline := none
 
-    for i in 0:runtime.active_tasks.len() {
+    for i in 0..runtime.active_tasks.len() {
         task := runtime.active_tasks[i]
 
         match task.timeout_ms {
@@ -930,7 +930,7 @@ runtime_next_deadline_ms :: (
         }
     }
 
-    for i in 0:runtime.resource_leases.len() {
+    for i in 0..runtime.resource_leases.len() {
         lease := runtime.resource_leases[i]
         match lease.lease_duration_ms {
             some duration_ms => {
@@ -999,7 +999,7 @@ resource_access_conflict :: (existing: &ResourceAccess, requested: &ResourceAcce
 
 count_running_tasks :: (tasks: &[AsyncTask]) -> i64 => {
     total := 0
-    for i in 0:tasks.len() {
+    for i in 0..tasks.len() {
         match tasks[i].state {
             TaskState::Running { .. } => {
                 total = total + 1

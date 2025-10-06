@@ -47,7 +47,7 @@ impl HashMap<K, V>
         size := cap * sizeof(MapEntry<K, V>)
         buckets := unsafe { malloc(size) as *raw MapEntry<K, V> }
         
-        for i in 0:cap {
+    for i in 0..cap {
             buckets[i].occupied = false
             buckets[i].tombstone = false
             buckets[i].hash = 0
@@ -137,7 +137,7 @@ impl HashMap<K, V>
         size := new_cap * sizeof(MapEntry<K, V>)
         new_buckets := unsafe { malloc(size) as *raw MapEntry<K, V> }
         
-        for i in 0:new_cap {
+    for i in 0..new_cap {
             new_buckets[i].occupied = false
             new_buckets[i].tombstone = false
             new_buckets[i].hash = 0
@@ -148,7 +148,7 @@ impl HashMap<K, V>
         old_len := self.len
         self.len = 0
         
-        for i in 0:old_capacity {
+    for i in 0..old_capacity {
             entry := &old_buckets[i]
             if entry.occupied {
                 self.insert(entry.key, entry.value)
@@ -346,7 +346,7 @@ impl HashMap<K, V>
 
     # Clear all entries
     clear :: (&mut self) -> none => {
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             self.buckets[i].occupied = false
             self.buckets[i].tombstone = false
             self.buckets[i].hash = 0
@@ -365,7 +365,7 @@ impl HashMap<K, V>
         }
         
         count := 0
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 if count == idx {
                     ret some &self.buckets[i].key
@@ -387,7 +387,7 @@ impl HashMap<K, V>
         }
         
         count := 0
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 if count == idx {
                     ret some &self.buckets[i].value
@@ -411,7 +411,7 @@ impl HashMap<K, V>
 
     # Iterate with callback
     each :: (&self, callback: (&K, &V) -> none) => {
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 callback(&self.buckets[i].key, &self.buckets[i].value)
             }
@@ -420,7 +420,7 @@ impl HashMap<K, V>
 
     # Iterate keys with callback
     each_key :: (&self, callback: (&K) -> none) => {
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 callback(&self.buckets[i].key)
             }
@@ -429,7 +429,7 @@ impl HashMap<K, V>
 
     # Iterate values with callback
     each_value :: (&self, callback: (&V) -> none) => {
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 callback(&self.buckets[i].value)
             }
@@ -440,7 +440,7 @@ impl HashMap<K, V>
         where K: Clone + Hash + Eq, V: Clone => {
         new_map := Self::with_capacity(self.capacity)
 
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 new_map.insert(self.buckets[i].key.clone(), self.buckets[i].value.clone())
             }
@@ -459,7 +459,7 @@ impl HashMap<K, V>
     }
 
     retain :: (&mut self, predicate: (&K, &V) -> bool) => {
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 keep := predicate(&self.buckets[i].key, &self.buckets[i].value)
                 if !keep {
@@ -472,7 +472,7 @@ impl HashMap<K, V>
     }
 
     any :: (&self, predicate: (&K, &V) -> bool) -> bool => {
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 if predicate(&self.buckets[i].key, &self.buckets[i].value) {
                     ret true
@@ -483,7 +483,7 @@ impl HashMap<K, V>
     }
 
     all :: (&self, predicate: (&K, &V) -> bool) -> bool => {
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 if !predicate(&self.buckets[i].key, &self.buckets[i].value) {
                     ret false
@@ -495,7 +495,7 @@ impl HashMap<K, V>
 
     count_if :: (&self, predicate: (&K, &V) -> bool) -> u64 => {
         count := 0
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 if predicate(&self.buckets[i].key, &self.buckets[i].value) {
                     count = count + 1
@@ -506,7 +506,7 @@ impl HashMap<K, V>
     }
 
     find_key<'a> :: (&'a self, predicate: (&K, &V) -> bool) -> ?&'a K => {
-        for i in 0:self.capacity {
+    for i in 0..self.capacity {
             if self.buckets[i].occupied {
                 if predicate(&self.buckets[i].key, &self.buckets[i].value) {
                     ret some &self.buckets[i].key
@@ -518,7 +518,7 @@ impl HashMap<K, V>
 
     extend :: (&mut self, other: &HashMap<K, V>)
         where K: Clone, V: Clone => {
-        for i in 0:other.capacity {
+    for i in 0..other.capacity {
             if other.buckets[i].occupied {
                 self.insert(other.buckets[i].key.clone(), other.buckets[i].value.clone())
             }

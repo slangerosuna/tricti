@@ -79,7 +79,7 @@ test_option_different_types :: () -> bool => {
     opt2 := Option::Some(true)
     a := match opt1 { Option::Some(x) => (x == 42) Option::None => false }
     b := match opt2 { Option::Some(x) => x Option::None => false }
-    a && b
+    a and b
 }
 
 # Test: Option extraction in variable
@@ -382,7 +382,7 @@ test_enum_different_payloads :: () -> bool => {
     c2 := Color::Blue(64)
     a := match c1 { Color::Green(v) => (v == 128) _ => false }
     b := match c2 { Color::Blue(v) => (v == 64) _ => false }
-    a && b
+    a and b
 }
 
 # Test: enum with computation on payload

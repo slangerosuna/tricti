@@ -3,7 +3,6 @@
 
 use prelude
 use core::errors
-use core::result
 
 # =============================================================================
 # CORE TRAITS
@@ -90,12 +89,12 @@ Into<T> :: trait {
 
 # Fallible conversion from T to Self
 TryFrom<T> :: trait {
-    try_from : (T) -> ?Self,
+    try_from : (T) -> !Self,
 }
 
 # Fallible conversion from Self to T
 TryInto<T> :: trait {
-    try_into : (Self) -> ?T,
+    try_into : (Self) -> !T,
 }
 
 # Blanket implementation: Into<U> for any T where U: From<T>
@@ -109,7 +108,7 @@ impl<T, U: From<T>> Into<U> for T {
 # Blanket implementation: TryInto<U> for any T where U: TryFrom<T>
 # This means if you implement TryFrom<T> for U, you automatically get TryInto<U> for T
 impl<T, U: TryFrom<T>> TryInto<U> for T {
-    try_into :: (self: T) -> ?U => {
+    try_into :: (self: T) -> !U => {
         ret U::try_from(self)
     }
 }
@@ -260,15 +259,15 @@ DoubleEndedIterator<T> :: trait {
 }
 
 # =============================================================================
-# SERIALIZATION TRAITS (COMMENTED OUT - Vec and StdResult not yet implemented)
+# SERIALIZATION TRAITS (COMMENTED OUT - Vec and result support not yet implemented)
 # =============================================================================
 
 # trait Serialize {
-#     serialize :: (&self) -> StdResult<Vec<u8>>
+#     serialize :: (&self) -> !Vec<u8>
 # }
 
 # trait Deserialize {
-#     deserialize :: (data: Vec<u8>) -> StdResult<Self>
+#     deserialize :: (data: Vec<u8>) -> !Self
 # }
 
 # =============================================================================
@@ -287,11 +286,11 @@ DoubleEndedIterator<T> :: trait {
 # }
 
 # trait AsyncRead {
-#     read_async :: (&mut self, buf: &mut Vec<u8>) -> impl Future<Output = StdResult<u64>>
+#     read_async :: (&mut self, buf: &mut Vec<u8>) -> impl Future<Output = !u64>
 # }
 
 # trait AsyncWrite {
-#     write_async :: (&mut self, buf: &Vec<u8>) -> impl Future<Output = StdResult<u64>>
+#     write_async :: (&mut self, buf: &Vec<u8>) -> impl Future<Output = !u64>
 # }
 
 # =============================================================================
@@ -934,7 +933,7 @@ impl Hash for String {
         FNV_PRIME :: 1099511628211
         
         hash := FNV_OFFSET_BASIS
-        for i in 0:self.len {
+    for i in 0..self.len {
             byte := self.data[i] as u64
             hash = hash xor byte
             hash = hash * FNV_PRIME
@@ -960,7 +959,7 @@ impl Mul for String {
         }
         
         result := String::with_capacity(self.len * (count as u64))
-        for i in 0:(count as u64) {
+    for i in 0..(count as u64) {
             String::push_str(&result, &self)
         }
         result
@@ -1102,146 +1101,6 @@ impl<T> Default for ?T {
     default :: () -> ?T => { none }
 }
 
-# =============================================================================
-# StdResult<T> implementations
-# =============================================================================
-use core::result
-
-# PartialEq for StdResult<T> where T: PartialEq
-impl<T: PartialEq> PartialEq for StdResult<T> {
-    eq :: (&self, other: &StdResult<T>) -> bool => {
-        match (*self, *other) {
-            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.eq(&b),
-            (StdResult::Err { error: e1 }, StdResult::Err { error: e2 }) => {
-                std_error_message(e1) == std_error_message(e2)
-            },
-            _ => false,
-        }
-    }
-}
-
-# Eq for StdResult<T> where T: Eq
-impl<T: Eq> Eq for StdResult<T> {}
-
-# PartialOrd for StdResult<T> where T: PartialOrd
-# Ok < Err ordering
-impl<T: PartialOrd> PartialOrd for StdResult<T> {
-    partial_cmp :: (&self, other: &StdResult<T>) -> ?i64 => {
-        match (*self, *other) {
-            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.partial_cmp(&b),
-            (StdResult::Err { .. }, StdResult::Err { .. }) => some 0,
-            (StdResult::Ok { .. }, StdResult::Err { .. }) => some (-1),
-            (StdResult::Err { .. }, StdResult::Ok { .. }) => some 1,
-        }
-    }
-    lt :: (&self, other: &StdResult<T>) -> bool => {
-        match (*self, *other) {
-            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.lt(&b),
-            (StdResult::Ok { .. }, StdResult::Err { .. }) => true,
-            _ => false,
-        }
-    }
-    le :: (&self, other: &StdResult<T>) -> bool => {
-        match (*self, *other) {
-            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.le(&b),
-            (StdResult::Ok { .. }, StdResult::Err { .. }) => true,
-            (StdResult::Err { .. }, StdResult::Err { .. }) => true,
-            _ => false,
-        }
-    }
-    gt :: (&self, other: &StdResult<T>) -> bool => {
-        match (*self, *other) {
-            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.gt(&b),
-            (StdResult::Err { .. }, StdResult::Ok { .. }) => true,
-            _ => false,
-        }
-    }
-    ge :: (&self, other: &StdResult<T>) -> bool => {
-        match (*self, *other) {
-            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.ge(&b),
-            (StdResult::Err { .. }, StdResult::Ok { .. }) => true,
-            (StdResult::Err { .. }, StdResult::Err { .. }) => true,
-            _ => false,
-        }
-    }
-}
-
-# Ord for StdResult<T> where T: Ord
-impl<T: Ord> Ord for StdResult<T> {
-    cmp :: (&self, other: &StdResult<T>) -> i64 => {
-        match (*self, *other) {
-            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => a.cmp(&b),
-            (StdResult::Err { .. }, StdResult::Err { .. }) => 0,
-            (StdResult::Ok { .. }, StdResult::Err { .. }) => -1,
-            (StdResult::Err { .. }, StdResult::Ok { .. }) => 1,
-        }
-    }
-    max :: (self, other: StdResult<T>) -> StdResult<T> => {
-        match (self, other) {
-            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => std_ok(a.max(b)),
-            (StdResult::Err { error: e }, _) => std_err(e),
-            (_, StdResult::Err { error: e }) => std_err(e),
-        }
-    }
-    min :: (self, other: StdResult<T>) -> StdResult<T> => {
-        match (self, other) {
-            (StdResult::Ok { value: a }, StdResult::Ok { value: b }) => std_ok(a.min(b)),
-            (StdResult::Ok { value: v }, StdResult::Err { .. }) => std_ok(v),
-            (StdResult::Err { .. }, StdResult::Ok { value: v }) => std_ok(v),
-            (StdResult::Err { error: e }, _) => std_err(e),
-        }
-    }
-}
-
-# Clone for StdResult<T> where T: Clone
-impl<T: Clone> Clone for StdResult<T> {
-    clone :: (&self) -> StdResult<T> => {
-        match *self {
-            StdResult::Ok { value: ref val } => std_ok(val.clone()),
-            StdResult::Err { error: ref e } => std_err(*e),
-        }
-    }
-}
-
-# Display for StdResult<T> where T: Display
-impl<T: Display> Display for StdResult<T> {
-    to_string :: (&self) -> String => {
-        match *self {
-            StdResult::Ok { value: ref val } => {
-                result := String::from_cstr("Ok(" as *u8)
-                String::push_str(&result, &val.to_string())
-                String::push_char(&result, 41)
-                result
-            },
-            StdResult::Err { error: ref e } => {
-                result := String::from_cstr("Err(" as *u8)
-                String::push_cstr(&result, std_error_message(*e) as *u8)
-                String::push_char(&result, 41)
-                result
-            },
-        }
-    }
-}
-
-# Debug for StdResult<T> where T: Debug
-impl<T: Debug> Debug for StdResult<T> {
-    debug_string :: (&self) -> String => {
-        match *self {
-            StdResult::Ok { value: ref val } => {
-                result := String::from_cstr("Ok(" as *u8)
-                String::push_str(&result, &val.debug_string())
-                String::push_char(&result, 41)
-                result
-            },
-            StdResult::Err { error: ref e } => {
-                result := String::from_cstr("Err(" as *u8)
-                String::push_cstr(&result, std_error_message(*e) as *u8)
-                String::push_char(&result, 41)
-                result
-            },
-        }
-    }
-}
 
 # =============================================================================
 # CONVERSION IMPLEMENTATIONS FOR PRIMITIVES
@@ -1318,165 +1177,165 @@ impl From<f64> for String {
 
 # Narrowing conversions (fallible): u64 -> u8
 impl TryFrom<u64> for u8 {
-    try_from :: (value: u64) -> StdResult<u8> => {
+    try_from :: (value: u64) -> !u8 => {
         if value > 255 {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("u64 value exceeds u8 maximum (255)" as *u8)
-            })
+            }
         } else {
-            std_ok(value as u8)
+            ok (value as u8)
         }
     }
 }
 
 # Narrowing conversions (fallible): i64 -> u8
 impl TryFrom<i64> for u8 {
-    try_from :: (value: i64) -> StdResult<u8> => {
+    try_from :: (value: i64) -> !u8 => {
         if value < 0 {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("i64 value is negative, cannot convert to u8" as *u8)
-            })
+            }
         } else if value > 255 {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("i64 value exceeds u8 maximum (255)" as *u8)
-            })
+            }
         } else {
-            std_ok(value as u8)
+            ok (value as u8)
         }
     }
 }
 
 # Narrowing conversions (fallible): u64 -> i64
 impl TryFrom<u64> for i64 {
-    try_from :: (value: u64) -> StdResult<i64> => {
+    try_from :: (value: u64) -> !i64 => {
         if value > 9223372036854775807 {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("u64 value exceeds i64 maximum" as *u8)
-            })
+            }
         } else {
-            std_ok(value as i64)
+            ok (value as i64)
         }
     }
 }
 
 # Narrowing conversions (fallible): i64 -> u64
 impl TryFrom<i64> for u64 {
-    try_from :: (value: i64) -> StdResult<u64> => {
+    try_from :: (value: i64) -> !u64 => {
         if value < 0 {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("i64 value is negative, cannot convert to u64" as *u8)
-            })
+            }
         } else {
-            std_ok(value as u64)
+            ok (value as u64)
         }
     }
 }
 
 # Fallible conversions: f64 -> i64
 impl TryFrom<f64> for i64 {
-    try_from :: (value: f64) -> StdResult<i64> => {
+    try_from :: (value: f64) -> !i64 => {
         if value ~= value {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("f64 value is NaN" as *u8)
-            })
+            }
         } else if value > 9223372036854775807.0 {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("f64 value exceeds i64 maximum" as *u8)
-            })
+            }
         } else if value < -9223372036854775808.0 {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("f64 value below i64 minimum" as *u8)
-            })
+            }
         } else {
-            std_ok(value as i64)
+            ok (value as i64)
         }
     }
 }
 
 # Fallible conversions: f64 -> u64
 impl TryFrom<f64> for u64 {
-    try_from :: (value: f64) -> StdResult<u64> => {
+    try_from :: (value: f64) -> !u64 => {
         if value ~= value {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("f64 value is NaN" as *u8)
-            })
+            }
         } else if value < 0.0 {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("f64 value is negative, cannot convert to u64" as *u8)
-            })
+            }
         } else if value > 18446744073709551615.0 {
-            std_err(StdError::InvalidArgument {
+            err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("f64 value exceeds u64 maximum" as *u8)
-            })
+            }
         } else {
-            std_ok(value as u64)
+            ok (value as u64)
         }
     }
 }
 
 # String parsing: String -> i64
 impl TryFrom<String> for i64 {
-    try_from :: (value: String) -> StdResult<i64> => {
+    try_from :: (value: String) -> !i64 => {
         result := String::parse_i64(&value)
         match result {
-            some val => std_ok(val),
-            none => std_err(StdError::InvalidArgument {
+            some val => ok val,
+            none => err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("Invalid i64 string format" as *u8)
-            })
+            }
         }
     }
 }
 
 # String parsing: String -> u64
 impl TryFrom<String> for u64 {
-    try_from :: (value: String) -> StdResult<u64> => {
+    try_from :: (value: String) -> !u64 => {
         result := String::parse_u64(&value)
         match result {
-            some val => std_ok(val),
-            none => std_err(StdError::InvalidArgument {
+            some val => ok val,
+            none => err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("Invalid u64 string format" as *u8)
-            })
+            }
         }
     }
 }
 
 # String parsing: String -> f64
 impl TryFrom<String> for f64 {
-    try_from :: (value: String) -> StdResult<f64> => {
+    try_from :: (value: String) -> !f64 => {
         result := String::parse_f64(&value)
         match result {
-            some val => std_ok(val),
-            none => std_err(StdError::InvalidArgument {
+            some val => ok val,
+            none => err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("Invalid f64 string format" as *u8)
-            })
+            }
         }
     }
 }
 
 # String parsing: String -> bool
 impl TryFrom<String> for bool {
-    try_from :: (value: String) -> StdResult<bool> => {
+    try_from :: (value: String) -> !bool => {
         result := String::parse_bool(&value)
         match result {
-            some val => std_ok(val),
-            none => std_err(StdError::InvalidArgument {
+            some val => ok val,
+            none => err StdError::InvalidArgument {
                 parameter: String::from_cstr("value" as *u8),
                 message: String::from_cstr("Invalid bool string format (expected 'true' or 'false')" as *u8)
-            })
+            }
         }
     }
 }
@@ -1490,20 +1349,13 @@ impl<T> From<T> for ?T {
 
 # Option<T> -> T fallible conversion
 impl<T> TryFrom<?T> for T {
-    try_from :: (value: ?T) -> StdResult<T> => {
+    try_from :: (value: ?T) -> !T => {
         match value {
-            some val => std_ok(val),
-            none => std_err(StdError::Message {
+            some val => ok val,
+            none => err StdError::Message {
                 message: String::from_cstr("Cannot unwrap None value" as *u8)
-            })
+            }
         }
-    }
-}
-
-# T -> Result<T,E> conversion (Ok wrapper)
-impl<T, E> From<T> for StdResult<T> {
-    from :: (value: T) -> StdResult<T> => {
-        std_ok(value)
     }
 }
 

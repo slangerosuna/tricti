@@ -1104,7 +1104,7 @@ fn analyze_statement(
             }
         }
         Statement::VariableDecl {
-            name,
+            pattern,
             type_annotation,
             value,
         } => {
@@ -1144,7 +1144,7 @@ fn analyze_statement(
                 value_type
             };
 
-            context.define_variable(name.clone(), final_type);
+            bind_binding_pattern(pattern, &final_type, context)?;
         }
 
         Statement::Assignment { target, value, .. } => {
@@ -2504,6 +2504,40 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
     }
 }
 
+fn bind_binding_pattern(
+    pattern: &BindingPattern,
+    value_type: &Type,
+    context: &mut SemanticContext,
+) -> Result<(), SemanticError> {
+    match pattern {
+        BindingPattern::Identifier(name) => {
+            context.define_variable(name.clone(), value_type.clone());
+            Ok(())
+        }
+        BindingPattern::Discard => Ok(()),
+        BindingPattern::Tuple(elements) => {
+            match value_type {
+                Type::Tuple(element_types) => {
+                    if elements.len() != element_types.len() {
+                        return Err(SemanticError::ArgumentCountMismatch {
+                            expected: element_types.len(),
+                            found: elements.len(),
+                        });
+                    }
+                    for (element_pattern, element_type) in elements.iter().zip(element_types.iter()) {
+                        bind_binding_pattern(element_pattern, element_type, context)?;
+                    }
+                    Ok(())
+                }
+                _ => Err(SemanticError::TypeMismatch {
+                    expected: Type::Tuple(Vec::new()),
+                    found: value_type.clone(),
+                }),
+            }
+        }
+    }
+}
+
 fn analyze_pattern(
     pattern: &Expression,
     context: &mut SemanticContext,
@@ -2577,6 +2611,52 @@ fn analyze_pattern(
                                     }
                                     return Ok(());
                                 }
+                                Expression::Call {
+                                    function: ref_func,
+                                    type_args: ref_type_args,
+                                    arguments: ref_arguments,
+                                } => {
+                                    if !ref_type_args.is_empty()
+                                        || ref_arguments.len() != 1
+                                        || ref_arguments[0].name.is_some()
+                                    {
+                                        return Err(SemanticError::UndefinedVariable(
+                                            "invalid pattern".to_string(),
+                                        ));
+                                    }
+
+                                    if let Expression::Identifier(ref_name) = ref_func.as_ref() {
+                                        if ref_name == "ref" {
+                                            match &ref_arguments[0].value {
+                                                Expression::Identifier(var_name) => {
+                                                    if var_name != "_" {
+                                                        context.define_variable(
+                                                            var_name.clone(),
+                                                            Type::Reference {
+                                                                inner: Box::new(
+                                                                    inner.as_ref().clone(),
+                                                                ),
+                                                                is_mutable: false,
+                                                            },
+                                                        );
+                                                    }
+                                                    return Ok(());
+                                                }
+                                                _ => {
+                                                    return Err(
+                                                        SemanticError::UndefinedVariable(
+                                                            "invalid pattern".to_string(),
+                                                        ),
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    return Err(SemanticError::UndefinedVariable(
+                                        "invalid pattern".to_string(),
+                                    ));
+                                }
                                 _ => {
                                     return Err(SemanticError::UndefinedVariable(
                                         "invalid pattern".to_string(),
@@ -2607,12 +2687,72 @@ fn analyze_pattern(
                                                     );
                                                 }
                                             }
+                                            Expression::Call {
+                                                function: ref_func,
+                                                type_args: ref_type_args,
+                                                arguments: ref_arguments,
+                                            } => {
+                                                if !ref_type_args.is_empty()
+                                                    || ref_arguments.len() != 1
+                                                    || ref_arguments[0].name.is_some()
+                                                {
+                                                    return Err(
+                                                        SemanticError::UndefinedVariable(
+                                                            "invalid pattern".to_string(),
+                                                        ),
+                                                    );
+                                                }
+
+                                                if let Expression::Identifier(ref_name) =
+                                                    ref_func.as_ref()
+                                                {
+                                                    if ref_name == "ref" {
+                                                        match &ref_arguments[0].value {
+                                                            Expression::Identifier(var_name) => {
+                                                                if var_name != "_" {
+                                                                    context.variables.insert(
+                                                                        var_name.clone(),
+                                                                        Type::Reference {
+                                                                            inner: Box::new(
+                                                                                payload_type
+                                                                                    .clone(),
+                                                                            ),
+                                                                            is_mutable: false,
+                                                                        },
+                                                                    );
+                                                                }
+                                                            }
+                                                            _ => {
+                                                                return Err(
+                                                                    SemanticError::UndefinedVariable(
+                                                                        "invalid pattern"
+                                                                            .to_string(),
+                                                                    ),
+                                                                );
+                                                            }
+                                                        }
+                                                    } else {
+                                                        return Err(
+                                                            SemanticError::UndefinedVariable(
+                                                                "invalid pattern"
+                                                                    .to_string(),
+                                                            ),
+                                                        );
+                                                    }
+                                                } else {
+                                                    return Err(
+                                                        SemanticError::UndefinedVariable(
+                                                            "invalid pattern".to_string(),
+                                                        ),
+                                                    );
+                                                }
+                                            }
                                             _ => {
                                                 return Err(SemanticError::UndefinedVariable(
                                                     "invalid pattern".to_string(),
                                                 ));
                                             }
-                                        }
+                                        };
                                     }
                                     Ok(())
                                 } else {
@@ -2668,12 +2808,68 @@ fn analyze_pattern(
                                                     .variables
                                                     .insert(var_name.clone(), payload_type.clone());
                                             }
-                                            Ok(())
                                         }
-                                        _ => Err(SemanticError::UndefinedVariable(
-                                            "invalid pattern".to_string(),
-                                        )),
-                                    }
+                                        Expression::Call {
+                                            function: ref_func,
+                                            type_args: ref_type_args,
+                                            arguments: ref_arguments,
+                                        } => {
+                                            if !ref_type_args.is_empty()
+                                                || ref_arguments.len() != 1
+                                                || ref_arguments[0].name.is_some()
+                                            {
+                                                return Err(
+                                                    SemanticError::UndefinedVariable(
+                                                        "invalid pattern".to_string(),
+                                                    ),
+                                                );
+                                            }
+                                            if let Expression::Identifier(ref_name) =
+                                                ref_func.as_ref()
+                                            {
+                                                if ref_name == "ref" {
+                                                    match &ref_arguments[0].value {
+                                                        Expression::Identifier(var_name) => {
+                                                            if var_name != "_" {
+                                                                context.variables.insert(
+                                                                    var_name.clone(),
+                                                                    Type::Reference {
+                                                                        inner: Box::new(
+                                                                            payload_type
+                                                                                .clone(),
+                                                                        ),
+                                                                        is_mutable: false,
+                                                                    },
+                                                                );
+                                                            }
+                                                        }
+                                                        _ => {
+                                                            return Err(
+                                                                SemanticError::UndefinedVariable(
+                                                                    "invalid pattern"
+                                                                        .to_string(),
+                                                                ),
+                                                            );
+                                                        }
+                                                    }
+                                                } else {
+                                                    return Err(SemanticError::UndefinedVariable(
+                                                        "invalid pattern".to_string(),
+                                                    ));
+                                                }
+                                            } else {
+                                                return Err(SemanticError::UndefinedVariable(
+                                                    "invalid pattern".to_string(),
+                                                ));
+                                            }
+                                        }
+                                        _ => {
+                                            return Err(SemanticError::UndefinedVariable(
+                                                "invalid pattern".to_string(),
+                                            ));
+                                        }
+                                    };
+                                    Ok(())
                                 }
                                 None => {
                                     if !arguments.is_empty() {
@@ -3072,7 +3268,7 @@ fn extract_statement_column_references(
     column_names: &std::collections::HashSet<String>,
 ) {
     match stmt {
-        Statement::VariableDecl { value, .. } => {
+    Statement::VariableDecl { value, .. } => {
             extract_column_references_recursive(value, references, column_names);
         }
         Statement::ConstDecl {

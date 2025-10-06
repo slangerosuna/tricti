@@ -120,7 +120,7 @@ test_vec_u64_multiple_push :: () -> bool => {
 test_vec_u64_capacity_growth :: () -> bool => {
     v := Vec_u64_new()
     
-    for i in 0:50 {
+    for i in 0..50 {
         Vec_u64_push(v, i)
     }
     
@@ -129,7 +129,7 @@ test_vec_u64_capacity_growth :: () -> bool => {
         ret false
     }
     
-    for i in 0:50 {
+    for i in 0..50 {
         val := Vec_u64_get(v, i)
         if val != i {
             println("FAIL: Value mismatch at index")
@@ -221,7 +221,7 @@ test_hashmap_u64_u64_multiple_insert :: () -> bool => {
 test_hashmap_u64_u64_collision_handling :: () -> bool => {
     m := HashMap_u64_u64_new()
     
-    for i in 0:30 {
+    for i in 0..30 {
         HashMap_u64_u64_insert(m, i, i * 2)
     }
     
@@ -230,7 +230,7 @@ test_hashmap_u64_u64_collision_handling :: () -> bool => {
         ret false
     }
     
-    for i in 0:30 {
+    for i in 0..30 {
         val := HashMap_u64_u64_get(m, i)
         expected := i * 2
         if val != expected {

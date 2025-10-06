@@ -10,7 +10,12 @@ identifier   = @{ !reserved_keyword ~ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANU
 int_body     = { ASCII_DIGIT+ ~ ("_" ~ ASCII_DIGIT+)* }
 integer      = @{ int_body ~ int_suffix? }
 int_suffix   = _{ "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128" }
-float        = @{ int_body ~ "." ~ (int_body)? ~ float_suffix? }
+float        = @{
+    int_body ~ "." ~ int_body ~ float_exponent? ~ float_suffix?
+    | int_body ~ "." ~ float_exponent ~ float_suffix?
+    | int_body ~ float_exponent ~ float_suffix?
+}
+float_exponent = _{ ("e" | "E") ~ ("+" | "-")? ~ int_body }
 float_suffix = _{ "f32" | "f64" }
 number       = { float | integer }
 string       = @{ "r"? ~ ("\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"") | ("#\"" ~ (!"\"#" ~ (ANY | "\\#"))* ~ "#\"") | ("\"" ~ (!"\"" ~ !"\n" ~ (ANY | "\\\""))* ~ "\"") }
@@ -58,7 +63,7 @@ unsafe_block = { "unsafe" ~ block }
 
 for_loop     = { "for" ~ WHITESPACE* ~ identifier ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ type)? ~ WHITESPACE* ~ "in" ~ WHITESPACE* ~ expression ~ WHITESPACE* ~ block }
 loop         = { "loop" ~ WHITESPACE* ~ block }
-conditional  = { keyword_if ~ WHITESPACE* ~ expression_no_block ~ &(WHITESPACE* ~ "{") ~ WHITESPACE* ~ block ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ block)? }
+conditional  = { keyword_if ~ WHITESPACE* ~ expression_no_block ~ &(WHITESPACE* ~ "{") ~ WHITESPACE* ~ block ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ (block | conditional))? }
 inline_conditional = { keyword_if ~ WHITESPACE* ~ expression_no_block ~ WHITESPACE* ~ "then" ~ WHITESPACE* ~ expression ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ expression)? }
 
 attribute       = { "@" ~ identifier ~ ("(" ~ (expression ~ ("," ~ expression)*)? ~ ")")? }
@@ -142,9 +147,9 @@ addition_no_block = { multiplication_no_block ~ (WHITESPACE* ~ op_add ~ WHITESPA
 op_mul        = { "*" | ".*" | "/" | "./" | "\\" | "%" | ".%" }
 multiplication= { with_range ~ (WHITESPACE* ~ op_mul ~ WHITESPACE* ~ with_range)* }
 multiplication_no_block = { with_range_no_block ~ (WHITESPACE* ~ op_mul ~ WHITESPACE* ~ with_range_no_block)* }
-with_range    = { unary ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary)?)? }
-with_range_no_block = { unary_no_block ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary_no_block ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ unary_no_block)?)? }
-op_unary      = { "-" | "~" | "*" | "&mut" | "&" | "!" | "some" | "ok" | "err" | "not" 2}
+with_range    = { unary ~ (WHITESPACE* ~ ".." ~ WHITESPACE* ~ unary ~ (WHITESPACE* ~ ".." ~ WHITESPACE* ~ unary)?)? }
+with_range_no_block = { unary_no_block ~ (WHITESPACE* ~ ".." ~ WHITESPACE* ~ unary_no_block ~ (WHITESPACE* ~ ".." ~ WHITESPACE* ~ unary_no_block)?)? }
+op_unary      = { "-" | "~" | "*" | "&mut" | "&" | "!" | "some" | "ok" | "err" | "not" }
 unary         = { op_unary? ~ cast_expr }
 unary_no_block = { op_unary? ~ cast_expr_no_block }
 cast_expr     = { post_fix ~ (WHITESPACE* ~ cast_tail)* }
@@ -175,16 +180,22 @@ struct_literal = { "{" ~ (full_field | shorthand_field | ".." ~ ","?)* ~ "}" }
 shorthand_field = { identifier ~ ","? }
 full_field = { identifier ~ ":" ~ (unsafe_block | expression) ~ ","? }
 
-some_option_pattern = { "some" ~ pattern }
+some_ref_option_pattern = { "some" ~ WHITESPACE* ~ "ref" ~ WHITESPACE+ ~ ref_payload_pattern }
+some_option_pattern = { "some" ~ WHITESPACE* ~ pattern }
 none_option_pattern = { "none" }
-option_pattern = { some_option_pattern | none_option_pattern }
+option_pattern = { some_ref_option_pattern | some_option_pattern | none_option_pattern }
 bare_identifier_pattern = { identifier ~ !(WHITESPACE* ~ "::") }
 pattern_argument_list = { pattern ~ ("," ~ pattern)* ~ ","? }
 enum_payload_pattern = { static_path ~ "(" ~ pattern_argument_list? ~ ")" }
-pattern       = { option_pattern | enum_payload_pattern | path_struct | static_path | literal | bare_identifier_pattern | "_" }
+tuple_pattern = { "(" ~ pattern ~ ("," ~ pattern)* ~ ","? ~ ")" }
+basic_pattern = { enum_payload_pattern | tuple_pattern | literal | bare_identifier_pattern | path_struct | static_path | "_" }
+ref_payload_pattern = { ref_pattern | basic_pattern }
+ref_pattern   = { "ref" ~ WHITESPACE+ ~ ref_payload_pattern }
+pattern       = { option_pattern | ref_pattern | basic_pattern }
 
-match         = { "match" ~ expression ~ "{" ~ match_arm+ ~ ("," ~ WHITESPACE* ~ &"}")? ~ "}" }
-match_arm     = { pattern ~ "=>" ~ match_body ~ ("," ~ WHITESPACE* ~ !"}")? }
+match         = { "match" ~ expression ~ "{" ~ WHITESPACE* ~ match_arm ~ (WHITESPACE* ~ !"}" ~ match_arm)* ~ WHITESPACE* ~ "}" }
+match_arm_pattern_text = { (!"=>" ~ ANY)+ }
+match_arm     = { WHITESPACE* ~ match_arm_pattern_text ~ WHITESPACE* ~ "=>" ~ match_body ~ ("," ~ WHITESPACE*)? }
 match_body    = { block | return_statement | break_statement | expression }
 
 vec_new       = { "new" ~ "[" ~ type ~ (";" ~ expression ~ ("," ~ expression)* ~ ","?)? ~ "]" }
@@ -204,7 +215,9 @@ function_body = { block | expression }
 
 assignment_op = { "=" | "*=" | "/=" | "+=" | "-=" | ".*=" | "./=" | "\\=" }
 assignment    = { expression ~ WHITESPACE* ~ assignment_op ~ WHITESPACE* ~ expression }
-variable_decl = { identifier ~ (":" ~ type)? ~ ":=" ~ expression }
+binding_pattern = { binding_tuple | "_" | identifier }
+binding_tuple = { "(" ~ WHITESPACE* ~ binding_pattern ~ (WHITESPACE* ~ "," ~ WHITESPACE* ~ binding_pattern)* ~ WHITESPACE* ~ ","? ~ ")" }
+variable_decl = { binding_pattern ~ (":" ~ type)? ~ ":=" ~ expression }
 
 shader        = { ("vert" | "frag" | "comp") ~ "{" ~ (const_decl | shader_field)* ~ "}" }
 shader_field  = { identifier ~ ":" ~ type ~ ","? }

@@ -159,10 +159,10 @@ vec_get_bool :: (vec: VecBool, idx: i64) -> bool => {
 }
 
 vec_any_true :: (vec: VecBool) -> bool => {
-    if vec.len >= 1 && vec.a { ret true }
-    if vec.len >= 2 && vec.b { ret true }
-    if vec.len >= 3 && vec.c { ret true }
-    if vec.len >= 4 && vec.d { ret true }
+    if vec.len >= 1 and vec.a { ret true }
+    if vec.len >= 2 and vec.b { ret true }
+    if vec.len >= 3 and vec.c { ret true }
+    if vec.len >= 4 and vec.d { ret true }
     false
 }
 

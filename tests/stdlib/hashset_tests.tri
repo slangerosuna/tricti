@@ -118,7 +118,7 @@ test_hashset_insert_zero :: () -> bool => {
 
 test_hashset_size_after_inserts :: () -> bool => {
     set := HashSet::new::<i64>()
-    for i in 0:10 {
+    for i in 0..10 {
         HashSet::insert::<i64>(&set, i as i64)
     }
     result := HashSet::len::<i64>(&set) == 10 and
@@ -129,12 +129,12 @@ test_hashset_size_after_inserts :: () -> bool => {
 
 test_hashset_insert_sequential :: () -> bool => {
     set := HashSet::new::<i64>()
-    for i in 0:20 {
+    for i in 0..20 {
         HashSet::insert::<i64>(&set, i as i64)
     }
     
     all_present := true
-    for i in 0:20 {
+    for i in 0..20 {
         if !HashSet::contains::<i64>(&set, i as i64) {
             all_present = false
         }
@@ -727,12 +727,12 @@ test_hashset_reserve_shrink :: () -> bool => {
 test_hashset_large_dataset :: () -> bool => {
     set := HashSet::new::<i64>()
     
-    for i in 0:100 {
+    for i in 0..100 {
         HashSet::insert::<i64>(&set, i as i64)
     }
     
     all_present := true
-    for i in 0:100 {
+    for i in 0..100 {
         if !HashSet::contains::<i64>(&set, i as i64) {
             all_present = false
         }

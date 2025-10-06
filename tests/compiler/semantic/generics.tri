@@ -183,7 +183,7 @@ test_different_instantiations :: () -> bool => {
     b := identity(true)
     c := a
     d := b
-    (c == 42) && d
+    (c == 42) and d
 }
 
 # ============ GENERIC MONOMORPHIZATION (10 tests) ============
@@ -208,7 +208,7 @@ test_mono_multiple :: () -> bool => {
     b := identity(3.14)
     c := a
     d := b
-    (c == 42) && (d == 3.14)
+    (c == 42) and (d == 3.14)
 }
 
 # Test: monomorphization with nested calls
@@ -226,7 +226,7 @@ test_mono_sequence :: () -> bool => {
     x := a
     y := b
     z := c
-    ((x == 1) && (y == 2)) && (z == 3)
+    ((x == 1) and (y == 2)) and (z == 3)
 }
 
 # Test: monomorphization with different sizes
@@ -235,7 +235,7 @@ test_mono_sizes :: () -> bool => {
     b := identity("test")
     c := a
     d := b
-    (c == 42) && streq(d, "test")
+    (c == 42) and streq(d, "test")
 }
 
 # Test: monomorphization in if expression

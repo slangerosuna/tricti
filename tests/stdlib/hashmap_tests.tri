@@ -215,12 +215,12 @@ test_hashmap_large_values :: () -> bool => {
 
 test_hashmap_sequential_insert :: () -> bool => {
     map := HashMap::new::<i64, i64>()
-    for i in 0:10 {
+    for i in 0..10 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 2) as i64)
     }
     
     all_correct := true
-    for i in 0:10 {
+    for i in 0..10 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
     if val == (0 as *i64) or val[0] ~= (i * 2) as i64 {
             all_correct = false
@@ -348,7 +348,7 @@ test_hashmap_remove_middle :: () -> bool => {
 
 test_hashmap_remove_sequential :: () -> bool => {
     map := HashMap::new::<i64, i64>()
-    for i in 0:5 {
+    for i in 0..5 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     
@@ -386,7 +386,7 @@ test_hashmap_capacity_grows :: () -> bool => {
     map := HashMap::new::<i64, i64>()
     initial_cap := HashMap::capacity::<i64, i64>(&map)
     
-    for i in 0:100 {
+    for i in 0..100 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 2) as i64)
     }
     
@@ -481,13 +481,13 @@ test_hashmap_collision_insert :: () -> bool => {
 test_hashmap_many_collisions :: () -> bool => {
     map := HashMap::with_capacity::<i64, i64>(16)
     
-    for i in 0:10 {
+    for i in 0..10 {
         key := (i * 16) as i64
         HashMap::insert::<i64, i64>(&map, key, (i * 100) as i64)
     }
     
     all_found := true
-    for i in 0:10 {
+    for i in 0..10 {
         key := (i * 16) as i64
         val := HashMap::get::<i64, i64>(&map, key)
     if val == (0 as *i64) or val[0] ~= (i * 100) as i64 {
@@ -540,7 +540,7 @@ test_hashmap_collision_overwrite :: () -> bool => {
 test_hashmap_wrap_around :: () -> bool => {
     map := HashMap::with_capacity::<i64, i64>(8)
     
-    for i in 0:8 {
+    for i in 0..8 {
         HashMap::insert::<i64, i64>(&map, (i * 8) as i64, (i * 10) as i64)
     }
     
@@ -564,7 +564,7 @@ test_hashmap_tombstone_reuse :: () -> bool => {
 test_hashmap_dense_hash :: () -> bool => {
     map := HashMap::new::<i64, i64>()
     
-    for i in 0:20 {
+    for i in 0..20 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 5) as i64)
     }
     
@@ -632,7 +632,7 @@ test_hashmap_values_count :: () -> bool => {
 
 test_hashmap_entries_count :: () -> bool => {
     map := HashMap::new::<i64, i64>()
-    for i in 0:5 {
+    for i in 0..5 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 10) as i64)
     }
     count := HashMap::entries_count::<i64, i64>(&map)
@@ -683,7 +683,7 @@ test_hashmap_resize_trigger :: () -> bool => {
     map := HashMap::with_capacity::<i64, i64>(16)
     initial_cap := HashMap::capacity::<i64, i64>(&map)
     
-    for i in 0:20 {
+    for i in 0..20 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 2) as i64)
     }
     
@@ -780,12 +780,12 @@ test_hashmap_count_if :: () -> bool => {
 test_hashmap_large_dataset :: () -> bool => {
     map := HashMap::new::<i64, i64>()
     
-    for i in 0:100 {
+    for i in 0..100 {
         HashMap::insert::<i64, i64>(&map, i as i64, (i * 3) as i64)
     }
     
     all_correct := true
-    for i in 0:100 {
+    for i in 0..100 {
         val := HashMap::get::<i64, i64>(&map, i as i64)
     if val == (0 as *i64) or val[0] ~= (i * 3) as i64 {
             all_correct = false

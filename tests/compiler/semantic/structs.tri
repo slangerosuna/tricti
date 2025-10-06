@@ -12,7 +12,7 @@ Point :: struct {
 # Test: struct literal creation
 test_struct_literal :: () -> bool => {
     p := Point { x: 10, y: 20 }
-    ((p.x == 10) && (p.y == 20))
+    ((p.x == 10) and (p.y == 20))
 }
 
 # Test: struct field access
@@ -33,7 +33,7 @@ test_struct_field_read :: () -> bool => {
 test_struct_different_values :: () -> bool => {
     p1 := Point { x: 1, y: 2 }
     p2 := Point { x: 3, y: 4 }
-    ((p1.x == 1) && (p2.x == 3))
+    ((p1.x == 1) and (p2.x == 3))
 }
 
 # Struct with mixed types
@@ -46,7 +46,7 @@ Person :: struct {
 # Test: struct with mixed field types
 test_struct_mixed_types :: () -> bool => {
     person := Person { age: 30, active: true, name: "Alice" }
-    ((person.age == 30) && person.active)
+    ((person.age == 30) and person.active)
 }
 
 # Test: string field access
@@ -82,7 +82,7 @@ test_nested_struct_create :: () -> bool => {
         top_left: Point { x: 0, y: 0 }
         bottom_right: Point { x: 100, y: 100 }
     }
-    ((rect.top_left.x == 0) && (rect.bottom_right.x == 100))
+    ((rect.top_left.x == 0) and (rect.bottom_right.x == 100))
 }
 
 # Test: nested field access
@@ -153,13 +153,13 @@ Pair<T> :: struct {
 # Test: generic struct with i64
 test_generic_struct_i64 :: () -> bool => {
     p := Pair { first: 10, second: 20 }
-    ((p.first == 10) && (p.second == 20))
+    ((p.first == 10) and (p.second == 20))
 }
 
 # Test: generic struct with bool
 test_generic_struct_bool :: () -> bool => {
     p := Pair { first: true, second: false }
-    (p.first && !p.second)
+    (p.first and !p.second)
 }
 
 # Test: generic struct with string
@@ -177,7 +177,7 @@ BiPair<A, B> :: struct {
 # Test: generic struct with two types
 test_generic_two_types :: () -> bool => {
     bp := BiPair { left: 42, right: true }
-    ((bp.left == 42) && bp.right)
+    ((bp.left == 42) and bp.right)
 }
 
 # Test: generic struct field access
@@ -193,7 +193,7 @@ test_nested_generic :: () -> bool => {
         first: Pair { first: 1, second: 2 }
         second: Pair { first: 3, second: 4 }
     }
-    ((outer.first.first == 1) && (outer.second.second == 4))
+    ((outer.first.first == 1) and (outer.second.second == 4))
 }
 
 # ============ STRUCT TYPE RESOLUTION (5 tests) ============
@@ -202,7 +202,7 @@ test_nested_generic :: () -> bool => {
 test_struct_type_infer :: () -> bool => {
     p := Point { x: 7, y: 8 }
     q := p
-    ((q.x == 7) && (q.y == 8))
+    ((q.x == 7) and (q.y == 8))
 }
 
 # Test: struct as function return
@@ -211,7 +211,7 @@ test_struct_return :: () -> bool => {
         Point { x: a, y: b }
     }
     p := make_point(3, 4)
-    ((p.x == 3) && (p.y == 4))
+    ((p.x == 3) and (p.y == 4))
 }
 
 # Test: struct as function parameter

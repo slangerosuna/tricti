@@ -39,7 +39,7 @@ PI_APPROX :: f32 := 3.14159
 @par_const
 make_array :: (n: i32) -> [i32] => {
     arr := [0; n]
-    for i in 0:n { arr[i] = i * i }
+    for i in 0..n { arr[i] = i * i }
     arr
 }
 

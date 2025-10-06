@@ -197,20 +197,20 @@ test_option_partialeq_some_none :: () -> none => {
 
 # Result equality tests
 test_result_partialeq_ok_ok_equal :: () -> none => {
-    a := std_ok(42)
-    b := std_ok(42)
+    a := ok 42
+    b := ok 42
     test_assert(a.eq(&b), "Ok(42) equals Ok(42)")
 }
 
 test_result_partialeq_ok_ok_different :: () -> none => {
-    a := std_ok(10)
-    b := std_ok(20)
+    a := ok 10
+    b := ok 20
     test_assert(~a.eq(&b), "Ok(10) not equals Ok(20)")
 }
 
 test_result_partialeq_ok_err :: () -> none => {
-    a := std_ok(42)
-    b := std_err::<i64>(std_error_message_only("error"))
+    a := ok 42
+    b := err std_error_message_only("error")
     test_assert(~a.eq(&b), "Ok not equals Err")
 }
 
@@ -261,7 +261,7 @@ test_ord_totality_bool :: () -> none => {
     test_assert(r3 == -1 or r3 == 0 or r3 == 1, "bool cmp totality 3")
 }
 
-# Antisymmetry tests (x <= y && y <= x implies x == y)
+# Antisymmetry tests (x <= y and y <= x implies x == y)
 test_partialord_antisymmetry_i64 :: () -> none => {
     a := 7
     b := 7
@@ -280,7 +280,7 @@ test_partialord_antisymmetry_u64 :: () -> none => {
     test_assert(~xy or ~yx or eq, "u64 antisymmetry")
 }
 
-# Transitivity tests (x <= y && y <= z implies x <= z)
+# Transitivity tests (x <= y and y <= z implies x <= z)
 test_partialord_transitivity_i64 :: () -> none => {
     a := 1
     b := 5
@@ -508,29 +508,29 @@ test_option_min :: () -> none => {
 
 # Result ordering (Ok < Err)
 test_result_ord_ok_err :: () -> none => {
-    a := std_ok(5)
-    b := std_err::<i64>(std_error_message_only("error"))
+    a := ok 5
+    b := err std_error_message_only("error")
     test_assert(a.lt(&b), "ok < err")
     test_assert(b.gt(&a), "err > ok")
 }
 
 test_result_ord_ok_ok :: () -> none => {
-    a := std_ok(5)
-    b := std_ok(10)
+    a := ok 5
+    b := ok 10
     test_assert(a.lt(&b), "ok(5) < ok(10)")
 }
 
 test_result_max_min :: () -> none => {
-    a := std_ok(5)
-    b := std_ok(10)
+    a := ok 5
+    b := ok 10
     max_r := a.max(b.clone())
     min_r := a.clone().min(b)
     match max_r {
-        StdResult::Ok { value: 10 } => test_assert(true, "result max ok ok"),
+        ok 10 => test_assert(true, "result max ok ok"),
         _ => test_assert(false, "result max ok ok failed"),
     }
     match min_r {
-        StdResult::Ok { value: 5 } => test_assert(true, "result min ok ok"),
+        ok 5 => test_assert(true, "result min ok ok"),
         _ => test_assert(false, "result min ok ok failed"),
     }
 }
@@ -639,19 +639,19 @@ test_option_clone_some :: () -> none => {
 }
 
 test_result_clone_ok :: () -> none => {
-    a := std_ok(42)
+    a := ok 42
     b := a.clone()
     match b {
-        StdResult::Ok { value: 42 } => test_assert(true, "result clone ok"),
+        ok 42 => test_assert(true, "result clone ok"),
         _ => test_assert(false, "result clone ok failed"),
     }
 }
 
 test_result_clone_err :: () -> none => {
-    a := std_err::<i64>(std_error_message_only("test error"))
+    a := err std_error_message_only("test error")
     b := a.clone()
     match b {
-        StdResult::Err { .. } => test_assert(true, "result clone err"),
+        err _ => test_assert(true, "result clone err"),
         _ => test_assert(false, "result clone err failed"),
     }
 }
@@ -837,26 +837,26 @@ test_debug_option_some :: () -> none => {
 
 # Result Display/Debug tests
 test_display_result_ok :: () -> none => {
-    r := std_ok(5)
+    r := ok 5
     s := r.to_string()
     test_assert(s.contains(&String::from_cstr("Ok(" as *u8)), "result ok display contains 'Ok('")
     test_assert(s.contains(&String::from_cstr("5" as *u8)), "result ok display contains value")
 }
 
 test_display_result_err :: () -> none => {
-    r := std_err::<i64>(std_error_message_only("test error"))
+    r := err std_error_message_only("test error")
     s := r.to_string()
     test_assert(s.contains(&String::from_cstr("Err(" as *u8)), "result err display contains 'Err('")
 }
 
 test_debug_result_ok :: () -> none => {
-    r := std_ok(42)
+    r := ok 42
     s := r.debug_string()
     test_assert(s.contains(&String::from_cstr("Ok(" as *u8)), "result ok debug format")
 }
 
 test_debug_result_err :: () -> none => {
-    r := std_err::<i64>(std_error_message_only("error message"))
+    r := err std_error_message_only("error message")
     s := r.debug_string()
     test_assert(s.contains(&String::from_cstr("Err(" as *u8)), "result err debug format")
 }
@@ -911,7 +911,7 @@ test_default_string :: () -> none => {
 
 # Option default
 test_default_option :: () -> none => {
-    o := (?i64)::default()
+    o := Option<i64>::default()
     match o {
         none => test_assert(true, "option default is none"),
         _ => test_assert(false, "option default should be none"),
@@ -919,7 +919,7 @@ test_default_option :: () -> none => {
 }
 
 test_default_option_bool :: () -> none => {
-    o := (?bool)::default()
+    o := Option<bool>::default()
     match o {
         none => test_assert(true, "option<bool> default is none"),
         _ => test_assert(false, "option<bool> default should be none"),
@@ -927,7 +927,7 @@ test_default_option_bool :: () -> none => {
 }
 
 test_default_option_string :: () -> none => {
-    o := (?String)::default()
+    o := Option<String>::default()
     match o {
         none => test_assert(true, "option<string> default is none"),
         _ => test_assert(false, "option<string> default should be none"),
@@ -1151,7 +1151,7 @@ test_law_clone_eq_option :: () -> none => {
 }
 
 test_law_clone_eq_result :: () -> none => {
-    r := std_ok(42)
+    r := ok 42
     c := r.clone()
     test_assert(r.eq(&c), "result clone-eq law")
 }

@@ -55,7 +55,7 @@ test_var_comparison :: () -> bool => {
 
 # Test: variable with logical expression
 test_var_logical :: () -> bool => {
-    result := (true && false)
+    result := (true and false)
     result
 }
 

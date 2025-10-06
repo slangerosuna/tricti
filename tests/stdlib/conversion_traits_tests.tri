@@ -3,7 +3,6 @@
 
 use stdlib::core::string
 use stdlib::core::traits
-use stdlib::core::result
 use stdlib::core::errors
 
 # Test counter
@@ -28,25 +27,25 @@ run_test :: (name: string, test: () -> bool) -> none => {
 # ===== FROM TESTS: Lossless Conversions (25 tests) =====
 
 test_from_u8_to_u64 :: () -> bool => {
-    val: u8 = 42
+    val: u8 := 42
     result := u64::from(val)
     result == 42
 }
 
 test_from_u8_to_u64_max :: () -> bool => {
-    val: u8 = 255
+    val: u8 := 255
     result := u64::from(val)
     result == 255
 }
 
 test_from_u8_to_i64 :: () -> bool => {
-    val: u8 = 42
+    val: u8 := 42
     result := i64::from(val)
     result == 42
 }
 
 test_from_u8_to_i64_max :: () -> bool => {
-    val: u8 = 255
+    val: u8 := 255
     result := i64::from(val)
     result == 255
 }
@@ -76,31 +75,31 @@ test_from_bool_to_u64_false :: () -> bool => {
 }
 
 test_from_i64_to_string_positive :: () -> bool => {
-    val: i64 = 42
+    val: i64 := 42
     result := String::from(val)
     String::equals(&result, &String::from_cstr("42" as *u8))
 }
 
 test_from_i64_to_string_negative :: () -> bool => {
-    val: i64 = -42
+    val: i64 := -42
     result := String::from(val)
     String::equals(&result, &String::from_cstr("-42" as *u8))
 }
 
 test_from_i64_to_string_zero :: () -> bool => {
-    val: i64 = 0
+    val: i64 := 0
     result := String::from(val)
     String::equals(&result, &String::from_cstr("0" as *u8))
 }
 
 test_from_u64_to_string :: () -> bool => {
-    val: u64 = 12345
+    val: u64 := 12345
     result := String::from(val)
     String::equals(&result, &String::from_cstr("12345" as *u8))
 }
 
 test_from_u64_to_string_zero :: () -> bool => {
-    val: u64 = 0
+    val: u64 := 0
     result := String::from(val)
     String::equals(&result, &String::from_cstr("0" as *u8))
 }
@@ -118,25 +117,27 @@ test_from_bool_to_string_false :: () -> bool => {
 }
 
 test_from_u8_char_to_string :: () -> bool => {
-    val: u8 = 65
+    val: u8 := 65
     result := String::from(val)
-    result.len == 1 && String::char_at(&result, 0) == 65
+    len_is_one := result.len == 1
+    first_char_matches := String::char_at(&result, 0) == 65
+    len_is_one and first_char_matches
 }
 
 test_from_f64_to_string :: () -> bool => {
-    val: f64 = 3.14
+    val: f64 := 3.14
     result := String::from(val)
     String::contains(&result, &String::from_cstr("3.1" as *u8))
 }
 
 test_from_f64_to_string_zero :: () -> bool => {
-    val: f64 = 0.0
+    val: f64 := 0.0
     result := String::from(val)
     String::contains(&result, &String::from_cstr("0" as *u8))
 }
 
 test_from_transitivity_u8_to_u64_to_string :: () -> bool => {
-    val: u8 = 100
+    val: u8 := 100
     converted_u64 := u64::from(val)
     converted_string := String::from(converted_u64)
     String::equals(&converted_string, &String::from_cstr("100" as *u8))
@@ -150,28 +151,28 @@ test_from_transitivity_bool_to_i64_to_string :: () -> bool => {
 }
 
 test_from_value_to_result :: () -> bool => {
-    val: i64 = 42
-    result := std_ok(val)
+    val: i64 := 42
+    result := ok val
     match result {
-        StdResult::Ok { value } => value == 42,
-        StdResult::Err { .. } => false
+        ok value => value == 42,
+        err _ => false
     }
 }
 
 test_from_i64_large_positive :: () -> bool => {
-    val: i64 = 9223372036854775807
+    val: i64 := 9223372036854775807
     result := String::from(val)
     String::len(&result) > 0
 }
 
 test_from_i64_large_negative :: () -> bool => {
-    val: i64 = -9223372036854775808
+    val: i64 := -9223372036854775808
     result := String::from(val)
     String::len(&result) > 0
 }
 
 test_from_u64_large :: () -> bool => {
-    val: u64 = 18446744073709551615
+    val: u64 := 18446744073709551615
     result := String::from(val)
     String::len(&result) > 0
 }
@@ -179,50 +180,50 @@ test_from_u64_large :: () -> bool => {
 # ===== INTO TESTS: Blanket Implementation (10 tests) =====
 
 test_into_u8_to_u64 :: () -> bool => {
-    val: u8 = 42
-    result: u64 = val.into()
+    val: u8 := 42
+    result: u64 := val.into()
     result == 42
 }
 
 test_into_u8_to_i64 :: () -> bool => {
-    val: u8 = 100
-    result: i64 = val.into()
+    val: u8 := 100
+    result: i64 := val.into()
     result == 100
 }
 
 test_into_bool_to_i64_true :: () -> bool => {
     val := true
-    result: i64 = val.into()
+    result: i64 := val.into()
     result == 1
 }
 
 test_into_bool_to_u64_false :: () -> bool => {
     val := false
-    result: u64 = val.into()
+    result: u64 := val.into()
     result == 0
 }
 
 test_into_i64_to_string :: () -> bool => {
-    val: i64 = 42
-    result: String = val.into()
+    val: i64 := 42
+    result: String := val.into()
     String::equals(&result, &String::from_cstr("42" as *u8))
 }
 
 test_into_u64_to_string :: () -> bool => {
-    val: u64 = 999
-    result: String = val.into()
+    val: u64 := 999
+    result: String := val.into()
     String::equals(&result, &String::from_cstr("999" as *u8))
 }
 
 test_into_bool_to_string_true :: () -> bool => {
     val := true
-    result: String = val.into()
+    result: String := val.into()
     String::equals(&result, &String::from_cstr("true" as *u8))
 }
 
 test_into_u8_char_to_string :: () -> bool => {
-    val: u8 = 88
-    result: String = val.into()
+    val: u8 := 88
+    result: String := val.into()
     result.len == 1
 }
 
@@ -230,175 +231,175 @@ test_into_u8_char_to_string :: () -> bool => {
 # test_into_value_to_result - Disabled due to .into() not available without blanket impl
 
 test_into_value_to_result :: () -> bool => {
-    val: bool = true
-    result := std_ok(val)
+    val: bool := true
+    result := ok val
     match result {
-        StdResult::Ok { value } => value == true,
-        StdResult::Err { .. } => false
+        ok value => value == true,
+        err _ => false
     }
 }
 
 # ===== TRYFROM TESTS: Fallible Conversions (30 tests) =====
 
 test_tryfrom_u64_to_u8_success :: () -> bool => {
-    val: u64 = 100
+    val: u64 := 100
     result := u8::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 100,
-        StdResult::Err { .. } => false
+        ok value => value == 100,
+        err _ => false
     }
 }
 
 test_tryfrom_u64_to_u8_max_success :: () -> bool => {
-    val: u64 = 255
+    val: u64 := 255
     result := u8::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 255,
-        StdResult::Err { .. } => false
+        ok value => value == 255,
+        err _ => false
     }
 }
 
 test_tryfrom_u64_to_u8_overflow :: () -> bool => {
-    val: u64 = 256
+    val: u64 := 256
     result := u8::try_from(val)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
 test_tryfrom_u64_to_u8_large_overflow :: () -> bool => {
-    val: u64 = 10000
+    val: u64 := 10000
     result := u8::try_from(val)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
 test_tryfrom_i64_to_u8_success :: () -> bool => {
-    val: i64 = 50
+    val: i64 := 50
     result := u8::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 50,
-        StdResult::Err { .. } => false
+        ok value => value == 50,
+        err _ => false
     }
 }
 
 test_tryfrom_i64_to_u8_zero :: () -> bool => {
-    val: i64 = 0
+    val: i64 := 0
     result := u8::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 0,
-        StdResult::Err { .. } => false
+        ok value => value == 0,
+        err _ => false
     }
 }
 
 test_tryfrom_i64_to_u8_negative :: () -> bool => {
-    val: i64 = -1
+    val: i64 := -1
     result := u8::try_from(val)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
 test_tryfrom_i64_to_u8_overflow :: () -> bool => {
-    val: i64 = 256
+    val: i64 := 256
     result := u8::try_from(val)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
 test_tryfrom_u64_to_i64_success :: () -> bool => {
-    val: u64 = 1000
+    val: u64 := 1000
     result := i64::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 1000,
-        StdResult::Err { .. } => false
+        ok value => value == 1000,
+        err _ => false
     }
 }
 
 test_tryfrom_u64_to_i64_max_success :: () -> bool => {
-    val: u64 = 9223372036854775807
+    val: u64 := 9223372036854775807
     result := i64::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 9223372036854775807,
-        StdResult::Err { .. } => false
+        ok value => value == 9223372036854775807,
+        err _ => false
     }
 }
 
 test_tryfrom_u64_to_i64_overflow :: () -> bool => {
-    val: u64 = 18446744073709551615
+    val: u64 := 18446744073709551615
     result := i64::try_from(val)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
 test_tryfrom_i64_to_u64_success :: () -> bool => {
-    val: i64 = 500
+    val: i64 := 500
     result := u64::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 500,
-        StdResult::Err { .. } => false
+        ok value => value == 500,
+        err _ => false
     }
 }
 
 test_tryfrom_i64_to_u64_zero :: () -> bool => {
-    val: i64 = 0
+    val: i64 := 0
     result := u64::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 0,
-        StdResult::Err { .. } => false
+        ok value => value == 0,
+        err _ => false
     }
 }
 
 test_tryfrom_i64_to_u64_negative :: () -> bool => {
-    val: i64 = -1
+    val: i64 := -1
     result := u64::try_from(val)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
 test_tryfrom_f64_to_i64_success :: () -> bool => {
-    val: f64 = 42.0
+    val: f64 := 42.0
     result := i64::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 42,
-        StdResult::Err { .. } => false
+        ok value => value == 42,
+        err _ => false
     }
 }
 
 test_tryfrom_f64_to_i64_negative :: () -> bool => {
-    val: f64 = -100.0
+    val: f64 := -100.0
     result := i64::try_from(val)
     match result {
-        StdResult::Ok { value } => value == -100,
-        StdResult::Err { .. } => false
+        ok value => value == -100,
+        err _ => false
     }
 }
 
 test_tryfrom_f64_to_u64_success :: () -> bool => {
-    val: f64 = 123.0
+    val: f64 := 123.0
     result := u64::try_from(val)
     match result {
-        StdResult::Ok { value } => value == 123,
-        StdResult::Err { .. } => false
+        ok value => value == 123,
+        err _ => false
     }
 }
 
 test_tryfrom_f64_to_u64_negative :: () -> bool => {
-    val: f64 = -50.0
+    val: f64 := -50.0
     result := u64::try_from(val)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
@@ -406,8 +407,8 @@ test_tryfrom_string_to_i64_success :: () -> bool => {
     s := String::from_cstr("42" as *u8)
     result := i64::try_from(s)
     match result {
-        StdResult::Ok { value } => value == 42,
-        StdResult::Err { .. } => false
+        ok value => value == 42,
+        err _ => false
     }
 }
 
@@ -415,8 +416,8 @@ test_tryfrom_string_to_i64_negative :: () -> bool => {
     s := String::from_cstr("-100" as *u8)
     result := i64::try_from(s)
     match result {
-        StdResult::Ok { value } => value == -100,
-        StdResult::Err { .. } => false
+        ok value => value == -100,
+        err _ => false
     }
 }
 
@@ -424,8 +425,8 @@ test_tryfrom_string_to_i64_zero :: () -> bool => {
     s := String::from_cstr("0" as *u8)
     result := i64::try_from(s)
     match result {
-        StdResult::Ok { value } => value == 0,
-        StdResult::Err { .. } => false
+        ok value => value == 0,
+        err _ => false
     }
 }
 
@@ -433,8 +434,8 @@ test_tryfrom_string_to_i64_invalid :: () -> bool => {
     s := String::from_cstr("abc" as *u8)
     result := i64::try_from(s)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
@@ -442,8 +443,8 @@ test_tryfrom_string_to_i64_empty :: () -> bool => {
     s := String::from_cstr("" as *u8)
     result := i64::try_from(s)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
@@ -451,8 +452,8 @@ test_tryfrom_string_to_u64_success :: () -> bool => {
     s := String::from_cstr("999" as *u8)
     result := u64::try_from(s)
     match result {
-        StdResult::Ok { value } => value == 999,
-        StdResult::Err { .. } => false
+        ok value => value == 999,
+        err _ => false
     }
 }
 
@@ -460,8 +461,8 @@ test_tryfrom_string_to_u64_zero :: () -> bool => {
     s := String::from_cstr("0" as *u8)
     result := u64::try_from(s)
     match result {
-        StdResult::Ok { value } => value == 0,
-        StdResult::Err { .. } => false
+        ok value => value == 0,
+        err _ => false
     }
 }
 
@@ -469,8 +470,8 @@ test_tryfrom_string_to_u64_negative :: () -> bool => {
     s := String::from_cstr("-10" as *u8)
     result := u64::try_from(s)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
@@ -478,8 +479,8 @@ test_tryfrom_string_to_f64_success :: () -> bool => {
     s := String::from_cstr("3.14" as *u8)
     result := f64::try_from(s)
     match result {
-        StdResult::Ok { value } => value > 3.0 && value < 4.0,
-        StdResult::Err { .. } => false
+    ok value => value > 3.0 and value < 4.0,
+        err _ => false
     }
 }
 
@@ -487,8 +488,8 @@ test_tryfrom_string_to_f64_invalid :: () -> bool => {
     s := String::from_cstr("xyz" as *u8)
     result := f64::try_from(s)
     match result {
-        StdResult::Ok { .. } => false,
-        StdResult::Err { .. } => true
+        ok _ => false,
+        err _ => true
     }
 }
 
@@ -496,8 +497,8 @@ test_tryfrom_string_to_bool_true :: () -> bool => {
     s := String::from_cstr("true" as *u8)
     result := bool::try_from(s)
     match result {
-        StdResult::Ok { value } => value == true,
-        StdResult::Err { .. } => false
+        ok value => value == true,
+        err _ => false
     }
 }
 
@@ -505,8 +506,8 @@ test_tryfrom_string_to_bool_false :: () -> bool => {
     s := String::from_cstr("false" as *u8)
     result := bool::try_from(s)
     match result {
-        StdResult::Ok { value } => value == false,
-        StdResult::Err { .. } => false
+        ok value => value == false,
+        err _ => false
     }
 }
 
@@ -538,11 +539,11 @@ test_tryfrom_string_to_bool_false :: () -> bool => {
 # Also, .into() and .try_into() not available due to blanket impl removal
 
 test_result_from_value_ok :: () -> bool => {
-    val: i64 = 42
-    res := std_ok(val)
+    val: i64 := 42
+    res := ok val
     match res {
-        StdResult::Ok { value } => value == 42,
-        StdResult::Err { .. } => false
+        ok value => value == 42,
+        err _ => false
     }
 }
 

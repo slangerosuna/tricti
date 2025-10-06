@@ -6,9 +6,16 @@ pub struct Program {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum BindingPattern {
+    Identifier(String),
+    Tuple(Vec<BindingPattern>),
+    Discard,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     VariableDecl {
-        name: String,
+        pattern: BindingPattern,
         type_annotation: Option<Type>,
         value: Expression,
     },
