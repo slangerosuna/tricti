@@ -19,7 +19,7 @@ float_exponent = _{ ("e" | "E") ~ ("+" | "-")? ~ int_body }
 float_suffix = _{ "f32" | "f64" }
 number       = { float | integer }
 string       = @{ "r"? ~ ("\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"") | ("#\"" ~ (!"\"#" ~ (ANY | "\\#"))* ~ "#\"") | ("\"" ~ (!"\"" ~ !"\n" ~ (ANY | "\\\""))* ~ "\"") }
-boolean      = @{ "true" | "false" }
+boolean      = @{ ("true" | "false") ~ !("_" | ASCII_ALPHANUMERIC) }
 
 program      = { SOI ~ WHITESPACE* ~ statement* ~ EOI }
 statement    = {
@@ -64,7 +64,12 @@ unsafe_block = { "unsafe" ~ block }
 for_loop     = { "for" ~ WHITESPACE* ~ identifier ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ type)? ~ WHITESPACE* ~ "in" ~ WHITESPACE* ~ expression ~ WHITESPACE* ~ block }
 loop         = { "loop" ~ WHITESPACE* ~ block }
 conditional  = { keyword_if ~ WHITESPACE* ~ expression_no_block ~ &(WHITESPACE* ~ "{") ~ WHITESPACE* ~ block ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ (block | conditional))? }
-inline_conditional = { keyword_if ~ WHITESPACE* ~ expression_no_block ~ WHITESPACE* ~ "then" ~ WHITESPACE* ~ expression ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ expression)? }
+inline_conditional = {
+    keyword_if ~ WHITESPACE* ~ expression_no_block ~ WHITESPACE* ~ (
+        "then" ~ WHITESPACE* ~ expression ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ expression)?
+        | ":" ~ WHITESPACE* ~ expression ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ expression)?
+    )
+}
 
 attribute       = { "@" ~ identifier ~ ("(" ~ (expression ~ ("," ~ expression)*)? ~ ")")? }
 attributes      = { attribute* }
@@ -127,9 +132,10 @@ db_entries = { db_entry ~ ("," ~ db_entry)* ~ ","? }
 db_entry = { identifier ~ (":" ~ identifier)? }
 
 expression    = { binary_expression }
-expression_no_block    = { binary_expression }
+expression_no_block    = { binary_expression_no_block }
 
 binary_expression = { unary ~ (WHITESPACE* ~ binary_operator ~ WHITESPACE* ~ unary)* }
+binary_expression_no_block = { unary_no_block ~ (WHITESPACE* ~ binary_operator ~ WHITESPACE* ~ unary_no_block)* }
 binary_operator = _{ op_or | op_and | op_cmp | op_shift | op_add | op_mul | op_range }
 op_or         = { "or" | "xor" }
 op_and        = { "and" }
@@ -154,7 +160,7 @@ post_fix_no_block = { primary_no_block ~ (WHITESPACE* ~ (call_suffix | static_pa
 tuple_expr    = { "(" ~ expression ~ ("," ~ expression)+ ~ ","? ~ ")" }
 primary_struct = { identifier ~ type_args ~ struct_literal | identifier ~ struct_literal }
 primary       = { conditional | inline_conditional | unsafe_block | block | number | loop | match | function | literal | vec_new | vec_literal | matrix | shader | tuple_expr | path_struct | static_path | primary_struct | identifier | "(" ~ expression ~ ")" }
-primary_no_block = { conditional | inline_conditional | unsafe_block | number | loop | match | function | literal_no_struct | vec_new | vec_literal | matrix | shader | tuple_expr | static_path | primary_struct | identifier | "(" ~ expression ~ ")" }
+primary_no_block = { conditional | inline_conditional | unsafe_block | number | loop | match | function | literal_no_struct | vec_new | vec_literal | matrix | shader | tuple_expr | static_path | identifier | "(" ~ expression ~ ")" }
 path_struct    = { identifier ~ ("::" ~ identifier)+ ~ struct_literal }
 static_path    = { identifier ~ type_args? ~ ("::" ~ identifier)+ }
 

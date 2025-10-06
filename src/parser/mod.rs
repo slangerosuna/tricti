@@ -1,6 +1,6 @@
 use crate::ast::*;
-use pest::*;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
+use pest::*;
 use pest_derive::*;
 use std::collections::HashMap;
 
@@ -634,8 +634,8 @@ fn parse_assignment(pair: pest::iterators::Pair<Rule>) -> Statement {
 fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let rule = pair.as_rule();
     match rule {
-    Rule::binary_expression => parse_binary_expression(pair),
-    Rule::unary | Rule::unary_no_block => parse_unary(pair),
+        Rule::binary_expression | Rule::binary_expression_no_block => parse_binary_expression(pair),
+        Rule::unary | Rule::unary_no_block => parse_unary(pair),
         Rule::cast_expr | Rule::cast_expr_no_block => parse_cast_expression(pair),
         Rule::post_fix | Rule::post_fix_no_block => parse_postfix_expression(pair),
         Rule::primary | Rule::primary_no_block => parse_primary_expression(pair),
@@ -731,45 +731,85 @@ fn parse_unary(pair: pest::iterators::Pair<Rule>) -> Expression {
     }
 }
 
-fn parse_binary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
-    let pairs: Vec<_> = pair.into_inner().collect();
-    let mut iter = pairs.into_iter();
-    let mut left = match iter.next() {
-        Some(first) => parse_expression(first),
-        None => panic!("Expected expression in binary expression"),
-    };
+fn pratt_parser_for_binary_expressions() -> PrattParser<Rule> {
+    PrattParser::new()
+        .op(Op::infix(Rule::op_or, Assoc::Left))
+        .op(Op::infix(Rule::op_and, Assoc::Left))
+        .op(Op::infix(Rule::op_cmp, Assoc::Left))
+        .op(Op::infix(Rule::op_shift, Assoc::Left))
+        .op(Op::infix(Rule::op_add, Assoc::Left))
+        .op(Op::infix(Rule::op_mul, Assoc::Left))
+        .op(Op::infix(Rule::op_range, Assoc::Right))
+}
 
-    while let Some(op_pair) = iter.next() {
-        let Some(rhs_pair) = iter.next() else { break };
-        let right = parse_expression(rhs_pair);
-        let operator = match op_pair.as_str() {
-            "+" => BinaryOperator::Add,
-            "-" => BinaryOperator::Sub,
-            "*" => BinaryOperator::Mul,
-            "/" => BinaryOperator::Div,
-            "%" => BinaryOperator::Mod,
-            "<<" => BinaryOperator::ShiftLeft,
-            ">>" => BinaryOperator::ShiftRight,
-            "and" => BinaryOperator::And,
-            "or" => BinaryOperator::Or,
-            "xor" => BinaryOperator::Xor,
-            "==" => BinaryOperator::Equal,
-            "~=" => BinaryOperator::NotEqual,
-            "<" => BinaryOperator::Less,
-            ">" => BinaryOperator::Greater,
-            "<=" => BinaryOperator::LessEqual,
-            ">=" => BinaryOperator::GreaterEqual,
-            _ => panic!("Unknown binary operator: {}", op_pair.as_str()),
-        };
-
-        left = Expression::BinaryOp {
-            left: Box::new(left),
-            operator,
-            right: Box::new(right),
-        };
+fn binary_operator_from_pair(op_pair: &pest::iterators::Pair<Rule>) -> BinaryOperator {
+    match op_pair.as_str() {
+        "or" => BinaryOperator::Or,
+        "xor" => BinaryOperator::Xor,
+        "and" => BinaryOperator::And,
+        "==" => BinaryOperator::Equal,
+        "~=" => BinaryOperator::NotEqual,
+        "<" => BinaryOperator::Less,
+        ">" => BinaryOperator::Greater,
+        "<=" => BinaryOperator::LessEqual,
+        ">=" => BinaryOperator::GreaterEqual,
+        "<<" => BinaryOperator::ShiftLeft,
+        ">>" => BinaryOperator::ShiftRight,
+        "+" => BinaryOperator::Add,
+        "-" => BinaryOperator::Sub,
+        "*" => BinaryOperator::Mul,
+        ".*" => BinaryOperator::ElementMul,
+        "/" => BinaryOperator::Div,
+        "./" => BinaryOperator::ElementDiv,
+        "%" => BinaryOperator::Mod,
+        ".%" => BinaryOperator::ElementMod,
+        "\\" => BinaryOperator::Mod,
+        other => panic!("Unknown binary operator: {}", other),
     }
+}
 
-    left
+fn build_range_expression(start: Expression, rest: Expression) -> Expression {
+    match rest {
+        Expression::Range {
+            start: inner_start,
+            end: inner_end,
+            step: None,
+        } => Expression::Range {
+            start: Box::new(start),
+            end: inner_start,
+            step: Some(inner_end),
+        },
+        other => Expression::Range {
+            start: Box::new(start),
+            end: Box::new(other),
+            step: None,
+        },
+    }
+}
+
+fn parse_binary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
+    let pratt = pratt_parser_for_binary_expressions();
+
+    pratt
+        .map_primary(|primary| parse_expression(primary))
+        .map_infix(|lhs, op, rhs| match op.as_rule() {
+            Rule::op_range => build_range_expression(lhs, rhs),
+            Rule::op_or
+            | Rule::op_and
+            | Rule::op_cmp
+            | Rule::op_shift
+            | Rule::op_add
+            | Rule::op_mul => {
+                let operator = binary_operator_from_pair(&op);
+                Expression::BinaryOp {
+                    left: Box::new(lhs),
+                    operator,
+                    right: Box::new(rhs),
+                }
+            }
+            other => panic!("Unsupported infix operator rule: {:?}", other),
+        })
+        .parse(pair.into_inner())
 }
 
 fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {

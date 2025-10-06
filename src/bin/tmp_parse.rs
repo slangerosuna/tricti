@@ -125,7 +125,7 @@ fn main() {
         Err(err) => eprintln!("conditional without else failed: {}", err),
     }
     let cmp_snippet = "b >= a";
-    match DebugParser::parse(Rule::comparison, cmp_snippet) {
+    match DebugParser::parse(Rule::binary_expression, cmp_snippet) {
         Ok(mut pairs) => {
             eprintln!("comparison snippet parsed successfully");
             if let Some(pair) = pairs.next() {
@@ -142,7 +142,7 @@ fn main() {
         Err(err) => eprintln!("comparison snippet failed: {}", err),
     }
     let cmp_simple = "a > b";
-    match DebugParser::parse(Rule::comparison, cmp_simple) {
+    match DebugParser::parse(Rule::binary_expression, cmp_simple) {
         Ok(mut pairs) => {
             eprintln!("simple comparison snippet parsed successfully");
             if let Some(pair) = pairs.next() {
