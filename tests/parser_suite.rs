@@ -37,15 +37,12 @@ fn parses_char_literal() {
 #[test]
 fn parses_tuple_literal_and_pattern() {
     let src = r#"
-main :: () => {
+main :: () =>
     pair := (40, 2)
-    value := match pair {
-        (a, b) => {
+    value := match pair:
+        (a, b) =>
             ret a + b
-        }
-    }
     ret value
-}
 "#
     .trim()
     .to_string();
@@ -275,14 +272,11 @@ fn parse_integer_with_underscores() {
 #[test]
 fn parse_match_with_return_and_value_arms() {
     let src = r#"
-result := match input {
-    some value => {
+result := match input:
+    some value =>
         ret value
-    }
-    none => {
+    none =>
         ret default
-    }
-}
 ret result
 "#
     .trim()
@@ -462,17 +456,14 @@ fn parse_system_query_without_name_defaults() {
 #[test]
 fn parse_trait_type_and_impl_for() {
     let src = r#"
-my_iterator :: trait {
-    next: (&mut Self) -> ?i32,
-}
+my_iterator :: trait
+    next :: (&mut Self) -> ?i32,
 
 my_struct :: struct
 
-impl my_iterator for my_struct {
-    next :: (self: &mut my_struct) -> ?i32 => {
+impl my_iterator for my_struct:
+    next :: (self: &mut my_struct) -> ?i32 =>
         ret none
-    }
-}
 "#
     .trim()
     .to_string();
@@ -496,21 +487,35 @@ impl my_iterator for my_struct {
     }
 
     // Check impl block
-    match &program.statements[2] {
+    let (trait_name, type_name, methods, type_params) = match &program.statements[2] {
         Statement::ImplBlock {
             trait_name,
             type_name,
             methods,
             type_params,
-            self_type: _,
-        } => {
-            assert_eq!(trait_name.as_deref(), Some("my_iterator"));
-            assert_eq!(type_name, "my_struct");
-            assert_eq!(methods.len(), 1);
-            assert!(type_params.is_empty());
+            ..
+        } => (trait_name.as_deref(), type_name.as_str(), methods.as_slice(), type_params.as_slice()),
+        Statement::Expression(Expression::Block { statements }) => {
+            assert_eq!(statements.len(), 1, "impl block block wrapper should contain one statement");
+            match &statements[0] {
+                Statement::ImplBlock { trait_name, type_name, methods, type_params, .. } => {
+                    (
+                        trait_name.as_deref(),
+                        type_name.as_str(),
+                        methods.as_slice(),
+                        type_params.as_slice(),
+                    )
+                }
+                other => panic!("expected ImplBlock inside block, got {:?}", other),
+            }
         }
-        other => panic!("expected ImplBlock, got {:?}", other),
-    }
+        other => panic!("expected ImplBlock or block-wrapped ImplBlock, got {:?}", other),
+    };
+
+    assert_eq!(trait_name, Some("my_iterator"));
+    assert_eq!(type_name, "my_struct");
+    assert_eq!(methods.len(), 1);
+    assert!(type_params.is_empty());
 }
 
 #[test]

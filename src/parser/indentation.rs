@@ -49,15 +49,26 @@ fn split_block_colon(candidate: &str) -> Option<(&str, &str)> {
 
 fn leading_keyword_allows_block(head: &str) -> bool {
     let trimmed = head.trim_start();
-    trimmed.starts_with("if ")
-        || trimmed == "if"
-        || trimmed.starts_with("else")
-        || trimmed.starts_with("for ")
-        || trimmed == "for"
-        || trimmed.starts_with("loop")
-        || trimmed.starts_with("while")
-        || trimmed.starts_with("unsafe")
-        || trimmed.starts_with("match")
+    let mut tokens = trimmed.split_whitespace();
+    if let Some(first) = tokens.next() {
+        if matches!(
+            first,
+            "if" | "else" | "for" | "loop" | "while" | "unsafe" | "match" | "impl"
+        ) {
+            return true;
+        }
+        if first == "}" {
+            if let Some(next) = tokens.next() {
+                if matches!(next, "else") {
+                    return true;
+                }
+            }
+        }
+    }
+
+    trimmed
+        .split_whitespace()
+        .any(|token| matches!(token, "match"))
 }
 
 fn convert_do_segment(segment: &str) -> Option<String> {
@@ -106,12 +117,12 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
     if let Some(converted) = convert_do_segment(segment) {
         let opens_block =
             converted.trim_end().ends_with("{") && segment.trim_end().ends_with("=> do");
-        return (converted, opens_block);
+        return ensure_arrow_block(converted, opens_block);
     }
 
-    for keyword in ["struct", "table", "compose", "db", "enum"] {
+    for keyword in ["struct", "table", "compose", "db", "enum", "trait"] {
         if let Some(converted) = convert_struct_like(segment, keyword) {
-            return (converted, true);
+            return ensure_arrow_block(converted, true);
         }
     }
 
@@ -124,14 +135,14 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
                 let mut base = trimmed_head.to_string();
                 base.push_str(" {");
                 base.push_str(trailing_ws);
-                return (base, true);
+                return ensure_arrow_block(base, true);
             }
             if inline_body.starts_with('{') {
                 let mut base = trimmed_head.to_string();
                 base.push(' ');
                 base.push_str(inline_body);
                 base.push_str(trailing_ws);
-                return (base, false);
+                return ensure_arrow_block(base, false);
             }
             let mut base = trimmed_head.to_string();
             base.push_str(" {");
@@ -139,11 +150,23 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
             base.push_str(inline_body);
             base.push_str(" }");
             base.push_str(trailing_ws);
-            return (base, false);
+            return ensure_arrow_block(base, false);
         }
     }
 
-    (segment.to_string(), false)
+    ensure_arrow_block(segment.to_string(), false)
+}
+
+fn ensure_arrow_block(base: String, opens_block: bool) -> (String, bool) {
+    let (core, trailing_ws) = strip_trailing(&base);
+    let trimmed = core.trim_end();
+    if trimmed.ends_with("=>") && !trimmed.ends_with("=> {") {
+        let mut expanded = trimmed.to_string();
+        expanded.push_str(" {");
+        expanded.push_str(trailing_ws);
+        return (expanded, true);
+    }
+    (base, opens_block)
 }
 
 pub fn desugar_indentation(source: &str) -> String {

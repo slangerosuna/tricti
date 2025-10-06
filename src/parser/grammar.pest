@@ -231,7 +231,7 @@ reference_type = { ("&mut" | "&") ~ type }
 trait_type    = { "trait" ~ "{" ~ trait_items ~ "}" }
 trait_items   = _{ (trait_assoc | trait_method)* }
 trait_assoc   = { identifier ~ ":" ~ "type" ~ ","? }
-trait_method  = { identifier ~ ":" ~ function_type ~ ","? }
+trait_method  = { identifier ~ ("::" | ":") ~ function_type ~ ","? }
 
 pointer       = { "&mut" ~ type | "&" ~ type | "*raw" ~ type | "*" ~ type }
 optional      = { "?" ~ type }
