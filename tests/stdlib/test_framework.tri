@@ -9,72 +9,60 @@ use prelude
 
 # Assert that a condition is true
 # Returns true if assertion passes, false if it fails
-assert_true :: (condition: bool, message: string) -> bool => {
-    if condition {
+assert_true :: (condition: bool, message: string) -> bool => do
+    if condition:
         ret true
-    } else {
+    else:
         println("ASSERT FAILED: " + message)
         ret false
-    }
-}
 
 # Assert that a condition is false
 # Returns true if assertion passes, false if it fails
-assert_false :: (condition: bool, message: string) -> bool => {
-    if ~condition {
+assert_false :: (condition: bool, message: string) -> bool => do
+    if ~condition:
         ret true
-    } else {
+    else:
         println("ASSERT FAILED: " + message)
         ret false
-    }
-}
 
 # Assert that two u64 values are equal
-assert_eq_u64 :: (actual: u64, expected: u64, message: string) -> bool => {
+assert_eq_u64 :: (actual: u64, expected: u64, message: string) -> bool => do
     cond := (actual == expected)
-    if cond {
+    if cond:
         ret true
-    } else {
+    else:
         println("ASSERT FAILED: " + message)
         println("  Expected: " + expected.to_string())
         println("  Got: " + actual.to_string())
         ret false
-    }
-}
 
 # Assert that two u64 values are not equal
-assert_ne_u64 :: (actual: u64, expected: u64, message: string) -> bool => {
+assert_ne_u64 :: (actual: u64, expected: u64, message: string) -> bool => do
     cond := (actual ~= expected)
-    if cond {
+    if cond:
         ret true
-    } else {
+    else:
         println("ASSERT FAILED: " + message)
         println("  Both values were: " + actual.to_string())
         ret false
-    }
-}
 
 # Assert that two i64 values are equal
-assert_eq_i64 :: (actual: i64, expected: i64, message: string) -> bool => {
+assert_eq_i64 :: (actual: i64, expected: i64, message: string) -> bool => do
     cond := (actual == expected)
-    if cond {
+    if cond:
         ret true
-    } else {
+    else:
         println("ASSERT FAILED: " + message)
         println("  Expected: " + expected.to_string())
         println("  Got: " + actual.to_string())
         ret false
-    }
-}
 
 # Assert that two i64 values are not equal
-assert_ne_i64 :: (actual: i64, expected: i64, message: string) -> bool => {
+assert_ne_i64 :: (actual: i64, expected: i64, message: string) -> bool => do
     cond := (actual ~= expected)
-    if cond {
+    if cond:
         ret true
-    } else {
+    else:
         println("ASSERT FAILED: " + message)
         println("  Both values were: " + actual.to_string())
         ret false
-    }
-}

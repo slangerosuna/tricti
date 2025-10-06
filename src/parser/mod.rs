@@ -273,60 +273,95 @@ mod tests {
     }
 
     #[test]
+    fn parses_inline_if_with_single_statement() {
+        let src = r"foo :: () => do
+        cond := true
+        if cond: ret 1
+        ret 0
+";
+        let desugared = indentation::desugar_indentation(src);
+        PnParser::parse(Rule::program, &desugared)
+            .expect("failed to parse inline if with single statement");
+    }
+
+    #[test]
+    fn parses_inline_unsafe_block_statement() {
+        let src = r"bar :: () => do
+        unsafe: ptr = 0 as *raw i32
+        ret ptr
+";
+        let desugared = indentation::desugar_indentation(src);
+        PnParser::parse(Rule::program, &desugared)
+            .expect("failed to parse inline unsafe block statement");
+    }
+
+    #[test]
+    fn parses_do_expression_with_braces() {
+        let src = r"baz :: () -> i32 => do
+        value := do { x := 41; x + 1 }
+        ret value
+";
+        let desugared = indentation::desugar_indentation(src);
+        PnParser::parse(Rule::program, &desugared)
+            .expect("failed to parse do expression with braces");
+    }
+
+    #[test]
     fn parses_assert_block() {
-        let function_src = "(cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
+        let function_src = r"(cond: bool, msg: string) -> none => do
+    if ~cond: panic(msg)
+";
         PnParser::parse(Rule::function, function_src).expect("failed to parse function snippet");
 
         let statement_src =
-            "assert :: (cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
+            r"assert :: (cond: bool, msg: string) -> none => do
+    if ~cond: panic(msg)
+";
         PnParser::parse(Rule::statement, statement_src)
             .expect("failed to parse assert statement snippet");
 
-        let single_program_src = "# Assert a condition holds; otherwise panic with message\nassert :: (cond: bool, msg: string) -> none => { if ~cond { panic(msg) } }";
+        let single_program_src = "# Assert a condition holds; otherwise panic with message\nassert :: (cond: bool, msg: string) -> none => do\n    if ~cond: panic(msg)\n";
         PnParser::parse(Rule::program, single_program_src)
             .expect("failed to parse single assert program");
 
-        let two_simple_consts = "foo :: () -> none => {}\nbar :: () -> none => {}";
+        let two_simple_consts = "foo :: () -> none => do\nbar :: () -> none => do\n";
         PnParser::parse(Rule::program, two_simple_consts)
             .expect("failed to parse two simple const declarations");
 
-        let blank_line_between_consts = "foo :: () -> none => {}\n\nbar :: () -> none => {}";
+        let blank_line_between_consts = "foo :: () -> none => do\n\nbar :: () -> none => do\n";
         PnParser::parse(Rule::program, blank_line_between_consts)
             .expect("failed to parse const declarations separated by blank line");
 
-        let comment_between_consts = r"foo :: () -> none => {}
+        let comment_between_consts = r"foo :: () -> none => do
 # a helpful message
-bar :: () -> none => {}
+bar :: () -> none => do
 ";
         PnParser::parse(Rule::program, comment_between_consts)
             .expect("failed to parse const declarations separated by comment");
 
-        let panic_only_const = r#"panic :: (msg: string) => {
+        let panic_only_const = r#"panic :: (msg: string) => do
     println("Assertion failed:", msg)
     exit(1)
-}
 "#;
         PnParser::parse(Rule::program, panic_only_const)
             .expect("failed to parse panic-only const declaration");
 
-        let two_nontrivial_consts = r#"foo :: () -> none => {
+        let two_nontrivial_consts = r#"foo :: () -> none => do
     bar()
-}
-bar :: () -> none => {
+
+bar :: () -> none => do
     ret none
-}
 "#;
         PnParser::parse(Rule::program, two_nontrivial_consts)
             .expect("failed to parse consecutive nontrivial const declarations");
 
         let src = r#"
-panic :: (msg: string) -> none => {
+panic :: (msg: string) -> none => do
     println("Assertion failed:", msg)
     exit(1)
-}
-assert :: (cond: bool, msg: string) -> none => {
-    if ~cond { panic(msg) }
-}
+
+assert :: (cond: bool, msg: string) -> none => do
+    if ~cond: panic(msg)
 "#;
 
         let mut statement_pairs = PnParser::parse(Rule::statement, src)
@@ -409,10 +444,9 @@ assert :: (cond: bool, msg: string) -> none => {
     #[test]
     fn parses_some_ref_pattern_in_match_arm() {
         let src = r#"
-match *self {
+match *self:
     some ref val => some val.clone(),
     none => none,
-}
 "#;
         PnParser::parse(Rule::expression, src)
             .expect("failed to parse match expression with some ref pattern");

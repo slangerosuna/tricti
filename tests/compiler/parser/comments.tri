@@ -4,137 +4,116 @@
 # ============ LINE COMMENTS (10 tests) ============
 
 # Test: line comment at end of line
-test_comment_eol :: () -> i64 => { 42 # this is a comment
-}
+test_comment_eol :: () -> i64 => do 42 # this is a comment
 
 # Test: line comment after expression
-test_comment_after_expr :: () -> i64 => { 
+test_comment_after_expr :: () -> i64 => do 
     x := 10 # assign value
     x # return x
-}
 
 # Test: line comment between statements
-test_comment_between_stmts :: () -> i64 => {
+test_comment_between_stmts :: () -> i64 => do
     a := 1
     # middle comment
     b := 2
     a + b
-}
 
 # Test: line comment in function parameters
 test_comment_in_params :: (
     x: i64 # first parameter
     y: i64 # second parameter
-) -> i64 => {
+) -> i64 => do
     x + y
-}
 
 # Test: line comment after return type
 test_comment_after_return_type :: () -> i64 # returns an integer
-=> {
+=> do
     42
-}
 
 # Test: multiple consecutive line comments
-test_comment_multiple :: () -> i64 => {
+test_comment_multiple :: () -> i64 => do
     # first comment
     # second comment
     # third comment
     100
-}
 
 # Test: line comment with special characters
-test_comment_special_chars :: () => {
+test_comment_special_chars :: () => do
     # Comment with !@#$%^&*()_+-=[]{}|;':",.<>?/~`
     x := 1
-}
 
 # Test: line comment after operator
-test_comment_after_operator :: () -> i64 => {
+test_comment_after_operator :: () -> i64 => do
     10 + # add
     20
-}
 
 # Test: line comment in if condition
-test_comment_in_if :: () -> i64 => {
+test_comment_in_if :: () -> i64 => do
     if true { # condition check
         ret 1
-    }
     0
-}
 
 # Test: line comment with nested expression
-test_comment_nested_expr :: () -> i64 => {
+test_comment_nested_expr :: () -> i64 => do
     ((10 + 20) # inner sum
      * 3) # multiply
-}
 
 
 # ============ BLOCK COMMENTS (10 tests) ============
 
 # Test: basic block comment
-test_block_comment_basic :: () -> i64 => {
+test_block_comment_basic :: () -> i64 => do
     /* this is a block comment */
     42
-}
 
 # Test: block comment with multiple lines
-test_block_comment_multiline :: () -> i64 => {
+test_block_comment_multiline :: () -> i64 => do
     /*
      * This is a multi-line
      * block comment
      */
     100
-}
 
 # Test: block comment between tokens
-test_block_comment_between_tokens :: () -> i64 => {
+test_block_comment_between_tokens :: () -> i64 => do
     10 /* comment */ + /* comment */ 20
-}
 
 # Test: block comment in expression
-test_block_comment_in_expr :: () -> i64 => {
+test_block_comment_in_expr :: () -> i64 => do
     x := /* inline */ 42
     x
-}
 
 # Test: block comment with special characters
-test_block_comment_special :: () => {
+test_block_comment_special :: () => do
     /* Comment with !@#$%^&*() symbols */
     y := true
-}
 
 # Test: block comment after statement
-test_block_comment_after_stmt :: () -> i64 => {
+test_block_comment_after_stmt :: () -> i64 => do
     a := 1 /* assign */
     b := 2 /* assign */
     a + b
-}
 
 # Test: empty block comment
-test_block_comment_empty :: () -> i64 => {
+test_block_comment_empty :: () -> i64 => do
     /**/
     42
-}
 
 # Test: block comment in function signature
 test_block_comment_signature :: (
     x: /* param type */ i64
-) -> /* return type */ i64 => {
+) -> /* return type */ i64 => do
     x
-}
 
 # Test: block comment before return
-test_block_comment_before_return :: () -> i64 => {
+test_block_comment_before_return :: () -> i64 => do
     /* calculate result */
     ret 42
-}
 
 # Test: mixed line and block comments
-test_comment_mixed :: () -> i64 => {
+test_comment_mixed :: () -> i64 => do
     # line comment
     x := 10 /* block comment */
     # another line comment
     /* another block comment */
     x
-}

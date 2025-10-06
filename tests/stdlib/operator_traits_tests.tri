@@ -10,452 +10,380 @@ use stdlib::test::test_framework
 # =============================================================================
 
 # Addition Tests (i64)
-test_i64_add_identity :: () -> bool => {
+test_i64_add_identity :: () -> bool => do
     a := 42
     result := a.add(0)
     result == 42
-}
 
-test_i64_add_commutativity :: () -> bool => {
+test_i64_add_commutativity :: () -> bool => do
     a := 10
     b := 20
     a.add(b) == b.add(a)
-}
 
-test_i64_add_associativity :: () -> bool => {
+test_i64_add_associativity :: () -> bool => do
     a := 5
     b := 10
     c := 15
     (a.add(b)).add(c) == a.add(b.add(c))
-}
 
-test_i64_add_basic :: () -> bool => {
+test_i64_add_basic :: () -> bool => do
     a := 100
     b := 50
     a.add(b) == 150
-}
 
 # Subtraction Tests (i64)
-test_i64_sub_identity :: () -> bool => {
+test_i64_sub_identity :: () -> bool => do
     a := 42
     a.sub(0) == 42
-}
 
-test_i64_sub_inverse :: () -> bool => {
+test_i64_sub_inverse :: () -> bool => do
     a := 100
     a.sub(a) == 0
-}
 
-test_i64_sub_basic :: () -> bool => {
+test_i64_sub_basic :: () -> bool => do
     a := 100
     b := 30
     a.sub(b) == 70
-}
 
-test_i64_sub_negative :: () -> bool => {
+test_i64_sub_negative :: () -> bool => do
     a := 10
     b := 20
     a.sub(b) == -10
-}
 
 # Multiplication Tests (i64)
-test_i64_mul_identity :: () -> bool => {
+test_i64_mul_identity :: () -> bool => do
     a := 42
     a.mul(1) == 42
-}
 
-test_i64_mul_zero :: () -> bool => {
+test_i64_mul_zero :: () -> bool => do
     a := 42
     a.mul(0) == 0
-}
 
-test_i64_mul_commutativity :: () -> bool => {
+test_i64_mul_commutativity :: () -> bool => do
     a := 6
     b := 7
     a.mul(b) == b.mul(a)
-}
 
-test_i64_mul_associativity :: () -> bool => {
+test_i64_mul_associativity :: () -> bool => do
     a := 2
     b := 3
     c := 4
     (a.mul(b)).mul(c) == a.mul(b.mul(c))
-}
 
-test_i64_mul_basic :: () -> bool => {
+test_i64_mul_basic :: () -> bool => do
     a := 12
     b := 5
     a.mul(b) == 60
-}
 
 # Division Tests (i64)
-test_i64_div_identity :: () -> bool => {
+test_i64_div_identity :: () -> bool => do
     a := 42
     a.div(1) == 42
-}
 
-test_i64_div_self :: () -> bool => {
+test_i64_div_self :: () -> bool => do
     a := 42
     a.div(a) == 1
-}
 
-test_i64_div_basic :: () -> bool => {
+test_i64_div_basic :: () -> bool => do
     a := 100
     b := 5
     a.div(b) == 20
-}
 
-test_i64_div_truncate :: () -> bool => {
+test_i64_div_truncate :: () -> bool => do
     a := 10
     b := 3
     a.div(b) == 3
-}
 
 # Remainder Tests (i64)
-test_i64_rem_basic :: () -> bool => {
+test_i64_rem_basic :: () -> bool => do
     a := 10
     b := 3
     a.rem(b) == 1
-}
 
-test_i64_rem_zero :: () -> bool => {
+test_i64_rem_zero :: () -> bool => do
     a := 10
     b := 5
     a.rem(b) == 0
-}
 
-test_i64_rem_larger_divisor :: () -> bool => {
+test_i64_rem_larger_divisor :: () -> bool => do
     a := 5
     b := 10
     a.rem(b) == 5
-}
 
 # Negation Tests (i64)
-test_i64_neg_basic :: () -> bool => {
+test_i64_neg_basic :: () -> bool => do
     a := 42
     a.neg() == -42
-}
 
-test_i64_neg_double :: () -> bool => {
+test_i64_neg_double :: () -> bool => do
     a := 42
     (a.neg()).neg() == 42
-}
 
-test_i64_neg_zero :: () -> bool => {
+test_i64_neg_zero :: () -> bool => do
     a := 0
     a.neg() == 0
-}
 
 # Arithmetic Tests (u64)
-test_u64_add_basic :: () -> bool => {
+test_u64_add_basic :: () -> bool => do
     a := 100 as u64
     b := 50 as u64
     a.add(b) == 150
-}
 
-test_u64_mul_basic :: () -> bool => {
+test_u64_mul_basic :: () -> bool => do
     a := 10 as u64
     b := 5 as u64
     a.mul(b) == 50
-}
 
 # Arithmetic Tests (u8)
-test_u8_add_basic :: () -> bool => {
+test_u8_add_basic :: () -> bool => do
     a := 10 as u8
     b := 5 as u8
     a.add(b) == 15
-}
 
-test_u8_sub_basic :: () -> bool => {
+test_u8_sub_basic :: () -> bool => do
     a := 20 as u8
     b := 5 as u8
     a.sub(b) == 15
-}
 
 # Arithmetic Tests (f64)
-test_f64_add_basic :: () -> bool => {
+test_f64_add_basic :: () -> bool => do
     a := 10.5
     b := 5.5
     a.add(b) == 16.0
-}
 
-test_f64_mul_basic :: () -> bool => {
+test_f64_mul_basic :: () -> bool => do
     a := 2.5
     b := 4.0
     a.mul(b) == 10.0
-}
 
-test_f64_neg_basic :: () -> bool => {
+test_f64_neg_basic :: () -> bool => do
     a := 3.14
     a.neg() == -3.14
-}
 
 # =============================================================================
 # BITWISE OPERATOR TESTS (30 tests)
 # =============================================================================
 
 # BitAnd Tests (i64)
-test_i64_bitand_identity :: () -> bool => {
+test_i64_bitand_identity :: () -> bool => do
     a := 42
     all_ones := -1
     a.bitand(all_ones) == 42
-}
 
-test_i64_bitand_zero :: () -> bool => {
+test_i64_bitand_zero :: () -> bool => do
     a := 42
     a.bitand(0) == 0
-}
 
-test_i64_bitand_idempotence :: () -> bool => {
+test_i64_bitand_idempotence :: () -> bool => do
     a := 42
     a.bitand(a) == 42
-}
 
-test_i64_bitand_basic :: () -> bool => {
+test_i64_bitand_basic :: () -> bool => do
     a := 12
     b := 10
     a.bitand(b) == 8
-}
 
-test_i64_bitand_commutativity :: () -> bool => {
+test_i64_bitand_commutativity :: () -> bool => do
     a := 15
     b := 7
     a.bitand(b) == b.bitand(a)
-}
 
 # BitOr Tests (i64)
-test_i64_bitor_identity :: () -> bool => {
+test_i64_bitor_identity :: () -> bool => do
     a := 42
     a.bitor(0) == 42
-}
 
-test_i64_bitor_idempotence :: () -> bool => {
+test_i64_bitor_idempotence :: () -> bool => do
     a := 42
     a.bitor(a) == 42
-}
 
-test_i64_bitor_basic :: () -> bool => {
+test_i64_bitor_basic :: () -> bool => do
     a := 12
     b := 10
     a.bitor(b) == 14
-}
 
-test_i64_bitor_commutativity :: () -> bool => {
+test_i64_bitor_commutativity :: () -> bool => do
     a := 15
     b := 7
     a.bitor(b) == b.bitor(a)
-}
 
 # BitXor Tests (i64)
-test_i64_bitxor_identity :: () -> bool => {
+test_i64_bitxor_identity :: () -> bool => do
     a := 42
     a.bitxor(0) == 42
-}
 
-test_i64_bitxor_self_cancel :: () -> bool => {
+test_i64_bitxor_self_cancel :: () -> bool => do
     a := 42
     a.bitxor(a) == 0
-}
 
-test_i64_bitxor_commutativity :: () -> bool => {
+test_i64_bitxor_commutativity :: () -> bool => do
     a := 15
     b := 7
     a.bitxor(b) == b.bitxor(a)
-}
 
-test_i64_bitxor_basic :: () -> bool => {
+test_i64_bitxor_basic :: () -> bool => do
     a := 12
     b := 10
     a.bitxor(b) == 6
-}
 
 # Shift Tests (i64)
-test_i64_shl_by_zero :: () -> bool => {
+test_i64_shl_by_zero :: () -> bool => do
     a := 42
     a.shl(0) == 42
-}
 
-test_i64_shl_by_one :: () -> bool => {
+test_i64_shl_by_one :: () -> bool => do
     a := 5
     a.shl(1) == 10
-}
 
-test_i64_shl_basic :: () -> bool => {
+test_i64_shl_basic :: () -> bool => do
     a := 3
     a.shl(2) == 12
-}
 
-test_i64_shr_by_zero :: () -> bool => {
+test_i64_shr_by_zero :: () -> bool => do
     a := 42
     a.shr(0) == 42
-}
 
-test_i64_shr_by_one :: () -> bool => {
+test_i64_shr_by_one :: () -> bool => do
     a := 10
     a.shr(1) == 5
-}
 
-test_i64_shr_basic :: () -> bool => {
+test_i64_shr_basic :: () -> bool => do
     a := 32
     a.shr(2) == 8
-}
 
 # Not Tests (i64)
-test_i64_not_double :: () -> bool => {
+test_i64_not_double :: () -> bool => do
     a := 42
     (a.not()).not() == 42
-}
 
-test_i64_not_basic :: () -> bool => {
+test_i64_not_basic :: () -> bool => do
     a := 0
     a.not() == -1
-}
 
 # Bitwise Tests (u64)
-test_u64_bitand_basic :: () -> bool => {
+test_u64_bitand_basic :: () -> bool => do
     a := 15 as u64
     b := 7 as u64
     a.bitand(b) == 7
-}
 
-test_u64_bitor_basic :: () -> bool => {
+test_u64_bitor_basic :: () -> bool => do
     a := 8 as u64
     b := 4 as u64
     a.bitor(b) == 12
-}
 
-test_u64_bitxor_basic :: () -> bool => {
+test_u64_bitxor_basic :: () -> bool => do
     a := 15 as u64
     b := 3 as u64
     a.bitxor(b) == 12
-}
 
-test_u64_shl_basic :: () -> bool => {
+test_u64_shl_basic :: () -> bool => do
     a := 1 as u64
     a.shl(3) == 8
-}
 
-test_u64_shr_basic :: () -> bool => {
+test_u64_shr_basic :: () -> bool => do
     a := 16 as u64
     a.shr(2) == 4
-}
 
 # Bitwise Tests (u8)
-test_u8_bitand_basic :: () -> bool => {
+test_u8_bitand_basic :: () -> bool => do
     a := 15 as u8
     b := 3 as u8
     a.bitand(b) == 3
-}
 
-test_u8_bitor_basic :: () -> bool => {
+test_u8_bitor_basic :: () -> bool => do
     a := 8 as u8
     b := 4 as u8
     a.bitor(b) == 12
-}
 
 # Boolean Bitwise Tests
-test_bool_bitand_basic :: () -> bool => {
+test_bool_bitand_basic :: () -> bool => do
     a := true
     b := false
     a.bitand(b) == false
-}
 
-test_bool_bitor_basic :: () -> bool => {
+test_bool_bitor_basic :: () -> bool => do
     a := true
     b := false
     a.bitor(b) == true
-}
 
-test_bool_bitxor_basic :: () -> bool => {
+test_bool_bitxor_basic :: () -> bool => do
     a := true
     b := true
     a.bitxor(b) == false
-}
 
-test_bool_not_true :: () -> bool => {
+test_bool_not_true :: () -> bool => do
     a := true
     a.not() == false
-}
 
-test_bool_not_false :: () -> bool => {
+test_bool_not_false :: () -> bool => do
     a := false
     a.not() == true
-}
 
 # =============================================================================
 # STRING OPERATOR TESTS (15 tests)
 # =============================================================================
 
-test_string_add_basic :: () -> bool => {
+test_string_add_basic :: () -> bool => do
     a := String::from_cstr("Hello" as *u8)
     b := String::from_cstr(" World" as *u8)
     result := a.add(b)
     expected := String::from_cstr("Hello World" as *u8)
     String::equals(&result, &expected)
-}
 
-test_string_add_empty_left :: () -> bool => {
+test_string_add_empty_left :: () -> bool => do
     a := String::new()
     b := String::from_cstr("Test" as *u8)
     result := a.add(b)
     expected := String::from_cstr("Test" as *u8)
     String::equals(&result, &expected)
-}
 
-test_string_add_empty_right :: () -> bool => {
+test_string_add_empty_right :: () -> bool => do
     a := String::from_cstr("Test" as *u8)
     b := String::new()
     result := a.add(b)
     expected := String::from_cstr("Test" as *u8)
     String::equals(&result, &expected)
-}
 
-test_string_add_both_empty :: () -> bool => {
+test_string_add_both_empty :: () -> bool => do
     a := String::new()
     b := String::new()
     result := a.add(b)
     String::is_empty(&result)
-}
 
-test_string_mul_basic :: () -> bool => {
+test_string_mul_basic :: () -> bool => do
     a := String::from_cstr("ab" as *u8)
     count := String::from_cstr("3" as *u8)
     result := a.mul(count)
     expected := String::from_cstr("ababab" as *u8)
     String::equals(&result, &expected)
-}
 
-test_string_mul_zero :: () -> bool => {
+test_string_mul_zero :: () -> bool => do
     a := String::from_cstr("test" as *u8)
     count := String::from_cstr("0" as *u8)
     result := a.mul(count)
     String::is_empty(&result)
-}
 
-test_string_mul_one :: () -> bool => {
+test_string_mul_one :: () -> bool => do
     a := String::from_cstr("test" as *u8)
     count := String::from_cstr("1" as *u8)
     result := a.mul(count)
     expected := String::from_cstr("test" as *u8)
     String::equals(&result, &expected)
-}
 
-test_string_mul_negative :: () -> bool => {
+test_string_mul_negative :: () -> bool => do
     a := String::from_cstr("test" as *u8)
     count := String::from_cstr("-1" as *u8)
     result := a.mul(count)
     String::is_empty(&result)
-}
 
-test_string_mul_multiple :: () -> bool => {
+test_string_mul_multiple :: () -> bool => do
     a := String::from_cstr("x" as *u8)
     count := String::from_cstr("5" as *u8)
     result := a.mul(count)
     expected := String::from_cstr("xxxxx" as *u8)
     String::equals(&result, &expected)
-}
 
-test_string_add_associativity :: () -> bool => {
+test_string_add_associativity :: () -> bool => do
     a := String::from_cstr("A" as *u8)
     b := String::from_cstr("B" as *u8)
     c := String::from_cstr("C" as *u8)
@@ -468,9 +396,8 @@ test_string_add_associativity :: () -> bool => {
     
     expected := String::from_cstr("ABC" as *u8)
     String::equals(&left, &expected) and String::equals(&right, &expected)
-}
 
-test_string_mul_distributivity :: () -> bool => {
+test_string_mul_distributivity :: () -> bool => do
     a := String::from_cstr("ab" as *u8)
     b := String::from_cstr("ab" as *u8)
     count := String::from_cstr("2" as *u8)
@@ -480,9 +407,8 @@ test_string_mul_distributivity :: () -> bool => {
     
     expected := String::from_cstr("abababab" as *u8)
     String::equals(&result1, &expected)
-}
 
-test_string_concat_chain :: () -> bool => {
+test_string_concat_chain :: () -> bool => do
     a := String::from_cstr("Hello" as *u8)
     b := String::from_cstr(" " as *u8)
     c := String::from_cstr("World" as *u8)
@@ -491,37 +417,33 @@ test_string_concat_chain :: () -> bool => {
     result := ((a.add(b)).add(c)).add(d)
     expected := String::from_cstr("Hello World!" as *u8)
     String::equals(&result, &expected)
-}
 
-test_string_empty_mul :: () -> bool => {
+test_string_empty_mul :: () -> bool => do
     a := String::new()
     count := String::from_cstr("5" as *u8)
     result := a.mul(count)
     String::is_empty(&result)
-}
 
-test_string_single_char_mul :: () -> bool => {
+test_string_single_char_mul :: () -> bool => do
     a := String::from_cstr("*" as *u8)
     count := String::from_cstr("10" as *u8)
     result := a.mul(count)
     expected := String::from_cstr("**********" as *u8)
     String::equals(&result, &expected)
-}
 
-test_string_concat_different_lengths :: () -> bool => {
+test_string_concat_different_lengths :: () -> bool => do
     a := String::from_cstr("Short" as *u8)
     b := String::from_cstr("VeryLongString" as *u8)
     result := a.add(b)
     expected := String::from_cstr("ShortVeryLongString" as *u8)
     String::equals(&result, &expected)
-}
 
 # =============================================================================
 # PROPERTY TESTS (15 tests)
 # =============================================================================
 
 # Distributivity Tests
-test_i64_distributivity :: () -> bool => {
+test_i64_distributivity :: () -> bool => do
     a := 5
     b := 3
     c := 2
@@ -529,9 +451,8 @@ test_i64_distributivity :: () -> bool => {
     left := a.mul(b.add(c))
     right := (a.mul(b)).add(a.mul(c))
     left == right
-}
 
-test_u64_distributivity :: () -> bool => {
+test_u64_distributivity :: () -> bool => do
     a := 4 as u64
     b := 3 as u64
     c := 2 as u64
@@ -539,165 +460,142 @@ test_u64_distributivity :: () -> bool => {
     left := a.mul(b.add(c))
     right := (a.mul(b)).add(a.mul(c))
     left == right
-}
 
 # Absorption Laws (Bitwise)
-test_i64_absorption_and_or :: () -> bool => {
+test_i64_absorption_and_or :: () -> bool => do
     a := 42
     b := 15
     a.bitor(a.bitand(b)) == a
-}
 
-test_i64_absorption_or_and :: () -> bool => {
+test_i64_absorption_or_and :: () -> bool => do
     a := 42
     b := 15
     a.bitand(a.bitor(b)) == a
-}
 
-test_u64_absorption :: () -> bool => {
+test_u64_absorption :: () -> bool => do
     a := 42 as u64
     b := 15 as u64
     a.bitor(a.bitand(b)) == a
-}
 
 # Complement Laws (Bitwise)
-test_i64_complement_and :: () -> bool => {
+test_i64_complement_and :: () -> bool => do
     a := 42
     a.bitand(a.not()) == 0
-}
 
-test_i64_complement_or :: () -> bool => {
+test_i64_complement_or :: () -> bool => do
     a := 42
     a.bitor(a.not()) == -1
-}
 
-test_u64_complement_and :: () -> bool => {
+test_u64_complement_and :: () -> bool => do
     a := 42 as u64
     a.bitand(a.not()) == 0
-}
 
 # DeMorgan's Laws
-test_i64_demorgan_and :: () -> bool => {
+test_i64_demorgan_and :: () -> bool => do
     a := 12
     b := 10
     
     left := (a.bitand(b)).not()
     right := (a.not()).bitor(b.not())
     left == right
-}
 
-test_i64_demorgan_or :: () -> bool => {
+test_i64_demorgan_or :: () -> bool => do
     a := 12
     b := 10
     
     left := (a.bitor(b)).not()
     right := (a.not()).bitand(b.not())
     left == right
-}
 
 # Shift Composition
-test_i64_shift_composition :: () -> bool => {
+test_i64_shift_composition :: () -> bool => do
     a := 5
     
     result1 := a.shl(2).shl(1)
     result2 := a.shl(3)
     result1 == result2
-}
 
-test_i64_shift_inverse :: () -> bool => {
+test_i64_shift_inverse :: () -> bool => do
     a := 80
     
     result := a.shr(2).shl(2)
     result == 80
-}
 
 # Mixed Type Operations (u8)
-test_u8_arithmetic_chain :: () -> bool => {
+test_u8_arithmetic_chain :: () -> bool => do
     a := 10 as u8
     b := 5 as u8
     c := 2 as u8
     
     result := ((a.add(b)).sub(c)).mul(c)
     result == 26
-}
 
-test_u8_bitwise_chain :: () -> bool => {
+test_u8_bitwise_chain :: () -> bool => do
     a := 15 as u8
     b := 7 as u8
     c := 3 as u8
     
     result := (a.bitand(b)).bitor(c)
     result == 7
-}
 
 # XOR Self-Inverse Property
-test_i64_xor_inverse :: () -> bool => {
+test_i64_xor_inverse :: () -> bool => do
     a := 42
     b := 17
     
     encrypted := a.bitxor(b)
     decrypted := encrypted.bitxor(b)
     decrypted == a
-}
 
 # =============================================================================
 # EDGE CASE TESTS (10 tests)
 # =============================================================================
 
-test_i64_add_overflow_behavior :: () -> bool => {
+test_i64_add_overflow_behavior :: () -> bool => do
     a := 9223372036854775807
     b := 1
     result := a.add(b)
     true
-}
 
-test_i64_sub_underflow_behavior :: () -> bool => {
+test_i64_sub_underflow_behavior :: () -> bool => do
     a := -9223372036854775807
     b := 2
     result := a.sub(b)
     true
-}
 
-test_u64_max_value :: () -> bool => {
+test_u64_max_value :: () -> bool => do
     a := 18446744073709551615 as u64
     a.add(0) == a
-}
 
-test_i64_mul_by_neg_one :: () -> bool => {
+test_i64_mul_by_neg_one :: () -> bool => do
     a := 42
     a.mul(-1) == -42
-}
 
-test_f64_div_precision :: () -> bool => {
+test_f64_div_precision :: () -> bool => do
     a := 1.0
     b := 3.0
     result := a.div(b)
     result > 0.33 and result < 0.34
-}
 
-test_i64_shl_large_shift :: () -> bool => {
+test_i64_shl_large_shift :: () -> bool => do
     a := 1
     result := a.shl(10)
     result == 1024
-}
 
-test_i64_shr_large_shift :: () -> bool => {
+test_i64_shr_large_shift :: () -> bool => do
     a := 1024
     result := a.shr(10)
     result == 1
-}
 
-test_u8_bitwise_all_ones :: () -> bool => {
+test_u8_bitwise_all_ones :: () -> bool => do
     a := 255 as u8
     a.bitand(a) == 255
-}
 
-test_u8_bitwise_all_zeros :: () -> bool => {
+test_u8_bitwise_all_zeros :: () -> bool => do
     a := 0 as u8
     a.bitor(a) == 0
-}
 
-test_bool_all_combinations :: () -> bool => {
+test_bool_all_combinations :: () -> bool => do
     t := true
     f := false
     
@@ -708,13 +606,12 @@ test_bool_all_combinations :: () -> bool => {
     check5 := t.bitor(f) == true
     
     check1 and check2 and check3 and check4 and check5
-}
 
 # =============================================================================
 # TEST RUNNER
 # =============================================================================
 
-main :: () -> i64 => {
+main :: () -> i64 => do
     println("Running Operator Traits Tests...")
     println("")
     
@@ -847,16 +744,14 @@ main :: () -> i64 => {
     println_i64(failed)
     println("======================================")
     
-    if failed == 0 {
+    if failed == 0:
         println("ALL TESTS PASSED!")
         ret 0
-    } else {
+    else:
         println("SOME TESTS FAILED!")
         ret 1
-    }
-}
 
-run_test :: (name: *u8, test_fn: () -> bool, passed: *i64, failed: *i64, total: *i64) -> none => {
+run_test :: (name: *u8, test_fn: () -> bool, passed: *i64, failed: *i64, total: *i64) -> none => do
     *total = *total + 1
     print("Running: ")
     print_cstr(name)
@@ -864,11 +759,9 @@ run_test :: (name: *u8, test_fn: () -> bool, passed: *i64, failed: *i64, total: 
     
     result := test_fn()
     
-    if result {
+    if result:
         println("PASS")
         *passed = *passed + 1
-    } else {
+    else:
         println("FAIL")
         *failed = *failed + 1
-    }
-}

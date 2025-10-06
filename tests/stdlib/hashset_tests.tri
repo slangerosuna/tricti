@@ -6,61 +6,54 @@ use collections::hashmap
 use collections::hashset
 
 # Specialize hash functions for i64
-hash_value_i64 :: (value: i64) -> u64 => {
+hash_value_i64 :: (value: i64) -> u64 => do
     hash_i64(value)
-}
 
 # ============ Construction Tests (5 tests) ============
 
-test_hashset_new :: () -> bool => {
+test_hashset_new :: () -> bool => do
     set := HashSet::new::<i64>()
     result := HashSet::len::<i64>(&set) == 0 and 
               HashSet::is_empty::<i64>(&set) and
               HashSet::capacity::<i64>(&set) >= 16
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_with_capacity :: () -> bool => {
+test_hashset_with_capacity :: () -> bool => do
     set := HashSet::with_capacity::<i64>(32)
     result := HashSet::capacity::<i64>(&set) >= 32 and
               HashSet::len::<i64>(&set) == 0
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_initial_is_empty :: () -> bool => {
+test_hashset_initial_is_empty :: () -> bool => do
     set := HashSet::new::<i64>()
     result := HashSet::is_empty::<i64>(&set)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_initial_len_zero :: () -> bool => {
+test_hashset_initial_len_zero :: () -> bool => do
     set := HashSet::new::<i64>()
     result := HashSet::len::<i64>(&set) == 0
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_load_factor :: () -> bool => {
+test_hashset_load_factor :: () -> bool => do
     set := HashSet::new::<i64>()
     result := HashSet::load::<i64>(&set) == 0.0
     HashSet::destroy::<i64>(&set)
     result
-}
 
 # ============ Insert/Contains Tests (10 tests) ============
 
-test_hashset_insert :: () -> bool => {
+test_hashset_insert :: () -> bool => do
     set := HashSet::new::<i64>()
     inserted := HashSet::insert::<i64>(&set, 42)
     result := inserted and HashSet::contains::<i64>(&set, 42)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_insert_multiple :: () -> bool => {
+test_hashset_insert_multiple :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     HashSet::insert::<i64>(&set, 2)
@@ -72,33 +65,29 @@ test_hashset_insert_multiple :: () -> bool => {
               HashSet::len::<i64>(&set) == 3
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_insert_duplicate :: () -> bool => {
+test_hashset_insert_duplicate :: () -> bool => do
     set := HashSet::new::<i64>()
     first := HashSet::insert::<i64>(&set, 42)
     second := HashSet::insert::<i64>(&set, 42)
     result := first and !second and HashSet::len::<i64>(&set) == 1
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_contains_missing :: () -> bool => {
+test_hashset_contains_missing :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     result := !HashSet::contains::<i64>(&set, 999)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_contains_empty :: () -> bool => {
+test_hashset_contains_empty :: () -> bool => do
     set := HashSet::new::<i64>()
     result := !HashSet::contains::<i64>(&set, 42)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_insert_negative :: () -> bool => {
+test_hashset_insert_negative :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, -5)
     HashSet::insert::<i64>(&set, -100)
@@ -106,46 +95,38 @@ test_hashset_insert_negative :: () -> bool => {
               HashSet::contains::<i64>(&set, -100)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_insert_zero :: () -> bool => {
+test_hashset_insert_zero :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 0)
     result := HashSet::contains::<i64>(&set, 0)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_size_after_inserts :: () -> bool => {
+test_hashset_size_after_inserts :: () -> bool => do
     set := HashSet::new::<i64>()
-    for i in 0..10 {
+    for i in 0..10:
         HashSet::insert::<i64>(&set, i as i64)
-    }
     result := HashSet::len::<i64>(&set) == 10 and
               HashSet::size::<i64>(&set) == 10
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_insert_sequential :: () -> bool => {
+test_hashset_insert_sequential :: () -> bool => do
     set := HashSet::new::<i64>()
-    for i in 0..20 {
+    for i in 0..20:
         HashSet::insert::<i64>(&set, i as i64)
-    }
     
     all_present := true
-    for i in 0..20 {
-        if !HashSet::contains::<i64>(&set, i as i64) {
+    for i in 0..20:
+        if !HashSet::contains::<i64>(&set, i as i64):
             all_present = false
-        }
-    }
     
     result := all_present and HashSet::len::<i64>(&set) == 20
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_insert_duplicates :: () -> bool => {
+test_hashset_insert_duplicates :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 5)
     HashSet::insert::<i64>(&set, 5)
@@ -153,29 +134,26 @@ test_hashset_insert_duplicates :: () -> bool => {
     result := HashSet::len::<i64>(&set) == 1
     HashSet::destroy::<i64>(&set)
     result
-}
 
 # ============ Remove Tests (5 tests) ============
 
-test_hashset_remove_existing :: () -> bool => {
+test_hashset_remove_existing :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 42)
     removed := HashSet::remove::<i64>(&set, 42)
     result := removed and !HashSet::contains::<i64>(&set, 42)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_remove_missing :: () -> bool => {
+test_hashset_remove_missing :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     removed := HashSet::remove::<i64>(&set, 999)
     result := !removed and HashSet::len::<i64>(&set) == 1
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_remove_updates_len :: () -> bool => {
+test_hashset_remove_updates_len :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     HashSet::insert::<i64>(&set, 2)
@@ -183,9 +161,8 @@ test_hashset_remove_updates_len :: () -> bool => {
     result := HashSet::len::<i64>(&set) == 1
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_remove_all :: () -> bool => {
+test_hashset_remove_all :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     HashSet::insert::<i64>(&set, 2)
@@ -196,9 +173,8 @@ test_hashset_remove_all :: () -> bool => {
     result := HashSet::is_empty::<i64>(&set)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_clear :: () -> bool => {
+test_hashset_clear :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     HashSet::insert::<i64>(&set, 2)
@@ -206,11 +182,10 @@ test_hashset_clear :: () -> bool => {
     result := HashSet::is_empty::<i64>(&set) and HashSet::len::<i64>(&set) == 0
     HashSet::destroy::<i64>(&set)
     result
-}
 
 # ============ Set Operations Tests (15 tests) ============
 
-test_hashset_union_basic :: () -> bool => {
+test_hashset_union_basic :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -230,9 +205,8 @@ test_hashset_union_basic :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&union)
     result
-}
 
-test_hashset_union_empty :: () -> bool => {
+test_hashset_union_empty :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     
@@ -247,9 +221,8 @@ test_hashset_union_empty :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&union)
     result
-}
 
-test_hashset_union_identical :: () -> bool => {
+test_hashset_union_identical :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -266,9 +239,8 @@ test_hashset_union_identical :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&union)
     result
-}
 
-test_hashset_intersection_basic :: () -> bool => {
+test_hashset_intersection_basic :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -289,9 +261,8 @@ test_hashset_intersection_basic :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&intersection)
     result
-}
 
-test_hashset_intersection_empty :: () -> bool => {
+test_hashset_intersection_empty :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -308,9 +279,8 @@ test_hashset_intersection_empty :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&intersection)
     result
-}
 
-test_hashset_intersection_identical :: () -> bool => {
+test_hashset_intersection_identical :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -327,9 +297,8 @@ test_hashset_intersection_identical :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&intersection)
     result
-}
 
-test_hashset_difference_basic :: () -> bool => {
+test_hashset_difference_basic :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -349,9 +318,8 @@ test_hashset_difference_basic :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&diff)
     result
-}
 
-test_hashset_difference_empty :: () -> bool => {
+test_hashset_difference_empty :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -368,9 +336,8 @@ test_hashset_difference_empty :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&diff)
     result
-}
 
-test_hashset_difference_no_overlap :: () -> bool => {
+test_hashset_difference_no_overlap :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -387,9 +354,8 @@ test_hashset_difference_no_overlap :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&diff)
     result
-}
 
-test_hashset_symmetric_difference_basic :: () -> bool => {
+test_hashset_symmetric_difference_basic :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -410,9 +376,8 @@ test_hashset_symmetric_difference_basic :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&sym_diff)
     result
-}
 
-test_hashset_symmetric_difference_identical :: () -> bool => {
+test_hashset_symmetric_difference_identical :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -429,9 +394,8 @@ test_hashset_symmetric_difference_identical :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&sym_diff)
     result
-}
 
-test_hashset_symmetric_difference_no_overlap :: () -> bool => {
+test_hashset_symmetric_difference_no_overlap :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -448,9 +412,8 @@ test_hashset_symmetric_difference_no_overlap :: () -> bool => {
     HashSet::destroy::<i64>(&set2)
     HashSet::destroy::<i64>(&sym_diff)
     result
-}
 
-test_hashset_extend :: () -> bool => {
+test_hashset_extend :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     
@@ -468,9 +431,8 @@ test_hashset_extend :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_extend_duplicates :: () -> bool => {
+test_hashset_extend_duplicates :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -486,9 +448,8 @@ test_hashset_extend_duplicates :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_multiple_operations :: () -> bool => {
+test_hashset_multiple_operations :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -508,11 +469,10 @@ test_hashset_multiple_operations :: () -> bool => {
     HashSet::destroy::<i64>(&union)
     HashSet::destroy::<i64>(&intersection)
     result
-}
 
 # ============ Set Relations Tests (10 tests) ============
 
-test_hashset_is_subset :: () -> bool => {
+test_hashset_is_subset :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -527,9 +487,8 @@ test_hashset_is_subset :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_is_subset_false :: () -> bool => {
+test_hashset_is_subset_false :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 4)
@@ -543,9 +502,8 @@ test_hashset_is_subset_false :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_is_superset :: () -> bool => {
+test_hashset_is_superset :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -560,9 +518,8 @@ test_hashset_is_superset :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_is_superset_false :: () -> bool => {
+test_hashset_is_superset_false :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     
@@ -575,9 +532,8 @@ test_hashset_is_superset_false :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_is_disjoint :: () -> bool => {
+test_hashset_is_disjoint :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -591,9 +547,8 @@ test_hashset_is_disjoint :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_is_disjoint_false :: () -> bool => {
+test_hashset_is_disjoint_false :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -607,9 +562,8 @@ test_hashset_is_disjoint_false :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_is_proper_subset :: () -> bool => {
+test_hashset_is_proper_subset :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     
@@ -622,9 +576,8 @@ test_hashset_is_proper_subset :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_is_proper_subset_equal :: () -> bool => {
+test_hashset_is_proper_subset_equal :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -638,9 +591,8 @@ test_hashset_is_proper_subset_equal :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_is_proper_superset :: () -> bool => {
+test_hashset_is_proper_superset :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -653,9 +605,8 @@ test_hashset_is_proper_superset :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_equals :: () -> bool => {
+test_hashset_equals :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -669,20 +620,18 @@ test_hashset_equals :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
 # ============ Edge Cases Tests (5 tests) ============
 
-test_hashset_empty_operations :: () -> bool => {
+test_hashset_empty_operations :: () -> bool => do
     set := HashSet::new::<i64>()
     result := HashSet::is_empty::<i64>(&set) and
               HashSet::len::<i64>(&set) == 0 and
               !HashSet::contains::<i64>(&set, 0)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_single_element :: () -> bool => {
+test_hashset_single_element :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 7)
     result := HashSet::len::<i64>(&set) == 1 and
@@ -690,9 +639,8 @@ test_hashset_single_element :: () -> bool => {
               HashSet::contains::<i64>(&set, 7)
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_clone :: () -> bool => {
+test_hashset_clone :: () -> bool => do
     set1 := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set1, 1)
     HashSet::insert::<i64>(&set1, 2)
@@ -708,9 +656,8 @@ test_hashset_clone :: () -> bool => {
     HashSet::destroy::<i64>(&set1)
     HashSet::destroy::<i64>(&set2)
     result
-}
 
-test_hashset_reserve_shrink :: () -> bool => {
+test_hashset_reserve_shrink :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::reserve::<i64>(&set, 100)
     cap1 := HashSet::capacity::<i64>(&set)
@@ -722,104 +669,89 @@ test_hashset_reserve_shrink :: () -> bool => {
     result := cap1 >= 100 and cap2 < cap1
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_large_dataset :: () -> bool => {
+test_hashset_large_dataset :: () -> bool => do
     set := HashSet::new::<i64>()
     
-    for i in 0..100 {
+    for i in 0..100:
         HashSet::insert::<i64>(&set, i as i64)
-    }
     
     all_present := true
-    for i in 0..100 {
-        if !HashSet::contains::<i64>(&set, i as i64) {
+    for i in 0..100:
+        if !HashSet::contains::<i64>(&set, i as i64):
             all_present = false
-        }
-    }
     
     result := HashSet::len::<i64>(&set) == 100 and all_present
     HashSet::destroy::<i64>(&set)
     result
-}
 
 # ============ Additional Utility Tests (5 tests) ============
 
-test_hashset_any :: () -> bool => {
+test_hashset_any :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     HashSet::insert::<i64>(&set, 2)
     HashSet::insert::<i64>(&set, 3)
     
-    has_large := HashSet::any::<i64>(&set, (val: i64) -> bool => {
+    has_large := HashSet::any::<i64>(&set, (val: i64) -> bool => do
         val > 2
-    })
     
     result := has_large
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_all :: () -> bool => {
+test_hashset_all :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     HashSet::insert::<i64>(&set, 2)
     HashSet::insert::<i64>(&set, 3)
     
-    all_positive := HashSet::all::<i64>(&set, (val: i64) -> bool => {
+    all_positive := HashSet::all::<i64>(&set, (val: i64) -> bool => do
         val > 0
-    })
     
     result := all_positive
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_count_if :: () -> bool => {
+test_hashset_count_if :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     HashSet::insert::<i64>(&set, 2)
     HashSet::insert::<i64>(&set, 3)
     HashSet::insert::<i64>(&set, 4)
     
-    count := HashSet::count_if::<i64>(&set, (val: i64) -> bool => {
+    count := HashSet::count_if::<i64>(&set, (val: i64) -> bool => do
         val % 2 == 0
-    })
     
     result := count == 2
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_find :: () -> bool => {
+test_hashset_find :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     HashSet::insert::<i64>(&set, 5)
     HashSet::insert::<i64>(&set, 10)
     
-    found := HashSet::find::<i64>(&set, (val: i64) -> bool => {
+    found := HashSet::find::<i64>(&set, (val: i64) -> bool => do
         val > 7
-    })
     
     result := found ~= (0 as *i64) and found[0] == 10
     HashSet::destroy::<i64>(&set)
     result
-}
 
-test_hashset_retain :: () -> bool => {
+test_hashset_retain :: () -> bool => do
     set := HashSet::new::<i64>()
     HashSet::insert::<i64>(&set, 1)
     HashSet::insert::<i64>(&set, 2)
     HashSet::insert::<i64>(&set, 3)
     HashSet::insert::<i64>(&set, 4)
     
-    HashSet::retain::<i64>(&set, (val: i64) -> bool => {
+    HashSet::retain::<i64>(&set, (val: i64) -> bool => do
         val % 2 == 0
-    })
     
     result := HashSet::len::<i64>(&set) == 2 and
               HashSet::contains::<i64>(&set, 2) and
               HashSet::contains::<i64>(&set, 4)
     HashSet::destroy::<i64>(&set)
     result
-}

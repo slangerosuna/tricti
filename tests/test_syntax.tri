@@ -3,7 +3,6 @@ Apps :: table {
     title: String,
     display: bool = false,
     downloads: u64 = 0,
-}
 
 Gui :: @resource { }
 
@@ -16,4 +15,3 @@ display_apps :: sys (
     *gui = *gui
         
     ret none
-}

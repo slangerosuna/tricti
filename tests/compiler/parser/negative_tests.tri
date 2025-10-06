@@ -220,4 +220,4 @@
 
 
 # Working placeholder function to make file parseable
-test_negative_tests_placeholder :: () -> i64 => { 0 }
+test_negative_tests_placeholder :: () -> i64 => do 0 }

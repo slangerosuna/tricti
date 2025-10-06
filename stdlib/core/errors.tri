@@ -3,28 +3,22 @@
 
 use prelude
 
-Error :: trait {
-    to_string :: (&self) -> String
-}
+Error :: trait
+    to_string :: (&self) -> String,
 
-StdError :: enum {
+StdError :: enum
     Message: String,
     Panic: String,
     InvalidArgument: String,
     Unsupported: String,
-}
 
-impl Error for StdError {
-    to_string :: (&self) -> String => {
+impl Error for StdError:
+    to_string :: (&self) -> String =>
         std_error_message(*self)
-    }
-}
 
-std_error_message :: (err: StdError) -> String => {
-    match err {
-        StdError::Message(msg) => { msg }
-        StdError::Panic(msg) => { msg }
-        StdError::InvalidArgument(msg) => { msg }
-        StdError::Unsupported(msg) => { msg }
-    }
-}
+std_error_message :: (err_: StdError) -> String => match err_:
+    StdError::Message(msg) => msg,
+    StdError::Panic(msg) => msg,
+    StdError::InvalidArgument(msg) => msg,
+    StdError::Unsupported(msg) => msg,
+

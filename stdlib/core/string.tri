@@ -4,11 +4,10 @@
 use prelude
 
 # Core String struct
-String :: {
+String :: struct
     data: *raw u8,
     len: u64,
     capacity: u64
-}
 
 # Extern C standard library functions
 extern malloc :: (size: u64) -> *raw u8
@@ -33,9 +32,7 @@ extern tolower :: (c: i32) -> i32
 extern isspace :: (c: i32) -> i32
 
 # Helper to convert pointer offset
-ptr_offset :: unsafe (base: *raw u8, offset: u64) -> *raw u8 => {
-    unsafe { base as u64 + offset }
-}
+ptr_offset :: unsafe (base: *raw u8, offset: u64) -> *raw u8 => unsafe { base as u64 + offset }
 
 # String implementation with associated functions
 impl String {

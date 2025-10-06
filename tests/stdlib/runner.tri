@@ -45,7 +45,7 @@
 
 use prelude
 
-main :: () => {
+main :: () => do
     println("=== TriCTI Stdlib Test Suite ===")
     println("")
     println("This runner provides documentation for the test suite.")
@@ -60,4 +60,3 @@ main :: () => {
     println("Each test file includes a run_*_tests() function that")
     println("executes all tests and reports results.")
     println("")
-}

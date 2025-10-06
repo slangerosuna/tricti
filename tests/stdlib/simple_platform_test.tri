@@ -4,7 +4,7 @@
 use prelude
 use core::platform
 
-main :: () => {
+main :: () => do
     println("=== Simple Platform Test ===")
     println("")
     
@@ -16,23 +16,21 @@ main :: () => {
     check1 := (t1 == 1)
     check2 := (t2 == 2)
     
-    if check1 and check2 {
+    if check1 and check2:
         println("PASS: Timestamps increment correctly")
-    } else {
+    else:
         println("FAIL: Timestamps not incrementing")
         println("  t1 = " + t1.to_string())
         println("  t2 = " + t2.to_string())
-    }
     
     # Test 2: Platform features
     has_ts := platform_has_feature("timestamp")
     has_alloc := platform_has_feature("alloc")
     
-    if has_ts and has_alloc {
+    if has_ts and has_alloc:
         println("PASS: Platform features detected correctly")
-    } else {
+    else:
         println("FAIL: Platform features not detected")
-    }
     
     # Test 3: Memory allocation
     ptr := alloc(1024)
@@ -41,4 +39,3 @@ main :: () => {
     
     println("")
     println("=== Simple Platform Test Complete ===")
-}

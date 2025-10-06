@@ -8,49 +8,43 @@ use core::platform
 # TIMESTAMP TESTS
 # =============================================================================
 
-test_timestamp_monotonic :: () -> bool => {
+test_timestamp_monotonic :: () -> bool => do
     t1 := current_timestamp()
     t2 := current_timestamp()
     
     # Workaround for parser < bug: use >= instead
-    if t1 >= t2 {
+    if t1 >= t2:
         println("FAIL: Timestamps not monotonic")
         println("  t1 = " + t1.to_string())
         println("  t2 = " + t2.to_string())
         ret false
-    }
     
     println("PASS: test_timestamp_monotonic")
     true
-}
 
-test_timestamp_increments :: () -> bool => {
+test_timestamp_increments :: () -> bool => do
     reset_timestamp()
     
     t1 := current_timestamp()
     t2 := current_timestamp()
     t3 := current_timestamp()
     
-    if t1 != 1 {
+    if t1 != 1:
         println("FAIL: First timestamp should be 1, got " + t1.to_string())
         ret false
-    }
     
-    if t2 != 2 {
+    if t2 != 2:
         println("FAIL: Second timestamp should be 2, got " + t2.to_string())
         ret false
-    }
     
-    if t3 != 3 {
+    if t3 != 3:
         println("FAIL: Third timestamp should be 3, got " + t3.to_string())
         ret false
-    }
     
     println("PASS: test_timestamp_increments")
     true
-}
 
-test_timestamp_uniqueness :: () -> bool => {
+test_timestamp_uniqueness :: () -> bool => do
     reset_timestamp()
     
     # Collect 100 timestamps
@@ -61,29 +55,24 @@ test_timestamp_uniqueness :: () -> bool => {
     t4 := current_timestamp()
     
     # Check they're all different
-    if t0 == t1 or t0 == t2 or t0 == t3 or t0 == t4 {
+    if t0 == t1 or t0 == t2 or t0 == t3 or t0 == t4:
         println("FAIL: Timestamps not unique")
         ret false
-    }
     
-    if t1 == t2 or t1 == t3 or t1 == t4 {
+    if t1 == t2 or t1 == t3 or t1 == t4:
         println("FAIL: Timestamps not unique")
         ret false
-    }
     
-    if t2 == t3 or t2 == t4 {
+    if t2 == t3 or t2 == t4:
         println("FAIL: Timestamps not unique")
         ret false
-    }
     
-    if t3 == t4 {
+    if t3 == t4:
         println("FAIL: Timestamps not unique")
         ret false
-    }
     
     println("PASS: test_timestamp_uniqueness")
     true
-}
 
 # =============================================================================
 # MEMORY ALLOCATION TESTS
@@ -92,7 +81,7 @@ test_timestamp_uniqueness :: () -> bool => {
 # Note: alloc/dealloc are extern functions, difficult to test comprehensively
 # We'll just verify they don't crash when called
 
-test_alloc_dealloc_basic :: () -> bool => {
+test_alloc_dealloc_basic :: () -> bool => do
     size := 1024
     ptr := alloc(size)
     
@@ -101,9 +90,8 @@ test_alloc_dealloc_basic :: () -> bool => {
     
     println("PASS: test_alloc_dealloc_basic")
     ret true
-}
 
-test_alloc_small :: () -> bool => {
+test_alloc_small :: () -> bool => do
     ptr := alloc(8)
     
     # Allocation succeeded if we got here without crashing
@@ -111,9 +99,8 @@ test_alloc_small :: () -> bool => {
     
     println("PASS: test_alloc_small")
     ret true
-}
 
-test_alloc_large :: () -> bool => {
+test_alloc_large :: () -> bool => do
     size := 1024 * 1024
     ptr := alloc(size)
     
@@ -122,53 +109,46 @@ test_alloc_large :: () -> bool => {
     
     println("PASS: test_alloc_large")
     ret true
-}
 
 # =============================================================================
 # PLATFORM CAPABILITIES TESTS
 # =============================================================================
 
-test_platform_has_timestamp :: () -> bool => {
+test_platform_has_timestamp :: () -> bool => do
     has_ts := platform_has_feature("timestamp")
     
-    if ~has_ts {
+    if ~has_ts:
         println("FAIL: Platform should have timestamp feature")
         ret false
-    }
     
     println("PASS: test_platform_has_timestamp")
     true
-}
 
-test_platform_has_alloc :: () -> bool => {
+test_platform_has_alloc :: () -> bool => do
     has_alloc := platform_has_feature("alloc")
     
-    if ~has_alloc {
+    if ~has_alloc:
         println("FAIL: Platform should have alloc feature")
         ret false
-    }
     
     println("PASS: test_platform_has_alloc")
     true
-}
 
-test_platform_unknown_feature :: () -> bool => {
+test_platform_unknown_feature :: () -> bool => do
     has_unknown := platform_has_feature("nonexistent_feature_xyz")
     
-    if has_unknown {
+    if has_unknown:
         println("FAIL: Platform should not have unknown feature")
         ret false
-    }
     
     println("PASS: test_platform_unknown_feature")
     true
-}
 
 # =============================================================================
 # TEST RUNNER FOR PLATFORM TESTS
 # =============================================================================
 
-run_platform_tests :: () -> bool => {
+run_platform_tests :: () -> bool => do
     println("")
     println("=== Platform Tests ===")
     println("")
@@ -212,15 +192,12 @@ run_platform_tests :: () -> bool => {
     
     is_all_passed := (passed == total)
     ret is_all_passed
-}
 
 # Main entry point for running platform tests directly
-main :: () => {
+main :: () => do
     result := run_platform_tests()
     
-    if result {
+    if result:
         println("✓ All platform tests passed")
-    } else {
+    else:
         println("✗ Some platform tests failed")
-    }
-}

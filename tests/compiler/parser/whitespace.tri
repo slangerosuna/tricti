@@ -4,19 +4,19 @@
 # ============ MINIMAL WHITESPACE (5 tests) ============
 
 # Test: minimal whitespace in expression
-test_ws_minimal_expr::()->i64=>{42}
+test_ws_minimal_expr::()->i64=> do42}
 
 # Test: minimal whitespace with operators
-test_ws_minimal_ops::()->i64=>{10+20*3}
+test_ws_minimal_ops::()->i64=> do10+20*3}
 
 # Test: minimal whitespace in function
-test_ws_minimal_func::(x:i64)->i64=>{x}
+test_ws_minimal_func::(x:i64)->i64=> dox}
 
 # Test: minimal whitespace with parentheses
-test_ws_minimal_parens::()->i64=>{(1+2)*3}
+test_ws_minimal_parens::()->i64=> do(1+2)*3}
 
 # Test: minimal whitespace in variable
-test_ws_minimal_var::()->i64=>{x:=42 x}
+test_ws_minimal_var::()->i64=> dox:=42 x}
 
 
 # ============ EXTRA WHITESPACE (5 tests) ============
@@ -25,7 +25,7 @@ test_ws_minimal_var::()->i64=>{x:=42 x}
 test_ws_extra   ::   (   )   ->   i64   =>   {   42   }
 
 # Test: extra newlines in function
-test_ws_extra_newlines :: () -> i64 => {
+test_ws_extra_newlines :: () -> i64 => do
 
     x := 10
 
@@ -33,24 +33,20 @@ test_ws_extra_newlines :: () -> i64 => {
 
     x + y
 
-}
 
 # Test: extra whitespace in expression
-test_ws_extra_expr :: () -> i64 => {
+test_ws_extra_expr :: () -> i64 => do
     10    +    20    *    3
-}
 
 # Test: extra whitespace in parameters
-test_ws_extra_params :: (  x  :  i64   ,   y  :  i64  ) -> i64 => {
+test_ws_extra_params :: (  x  :  i64   ,   y  :  i64  ) -> i64 => do
     x + y
-}
 
 # Test: mixed whitespace and tabs
-test_ws_mixed :: () -> i64 => {
+test_ws_mixed :: () -> i64 => do
 	x := 10
     	y := 20
 	x + y
-}
 
 
 # ============ TRAILING COMMAS (5 tests) ============
@@ -59,39 +55,32 @@ test_ws_mixed :: () -> i64 => {
 test_trailing_comma_params :: (
     x: i64,
     y: i64,
-) -> i64 => {
+) -> i64 => do
     x + y
-}
 
 # Test: trailing comma in struct literal (already covered)
-test_trailing_comma_struct :: () => {
-    s := { a: 1, b: 2, }
+test_trailing_comma_struct :: () => do
+    s := do a: 1, b: 2, }
     s
-}
 
 # Test: trailing comma in array literal
-test_trailing_comma_array :: () => {
+test_trailing_comma_array :: () => do
     arr := new [i64; 3]
     arr
-}
 
 # Test: trailing comma in function call
-test_trailing_comma_call :: () => {
+test_trailing_comma_call :: () => do
     f := test_trailing_comma_params(
         1,
         2,
     )
     f
-}
 
 # Test: dangling else associativity
-test_dangling_else :: () -> i64 => {
-    if true {
-        if false {
+test_dangling_else :: () -> i64 => do
+    if true:
+        if false:
             ret 1
-        } else {
+        else:
             ret 2
-        }
-    }
     3
-}

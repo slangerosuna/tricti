@@ -12,177 +12,150 @@ passed_count := 0
 failed_count := 0
 
 # Test helper
-run_test :: (name: string, test: () -> bool) -> none => {
+run_test :: (name: string, test: () -> bool) -> none => do
     test_count = test_count + 1
     result := test()
     
-    if result {
+    if result:
         passed_count = passed_count + 1
         println("✓ " + name)
-    } else {
+    else:
         failed_count = failed_count + 1
         println("✗ " + name)
-    }
-}
 
 # ===== FROM TESTS (10 tests) =====
 
-test_from_u8_to_u64 :: () -> bool => {
+test_from_u8_to_u64 :: () -> bool => do
     val: u8 = 42
     result := u64::from(val)
     result == 42
-}
 
-test_from_u8_to_i64 :: () -> bool => {
+test_from_u8_to_i64 :: () -> bool => do
     val: u8 = 100
     result := i64::from(val)
     result == 100
-}
 
-test_from_bool_to_i64_true :: () -> bool => {
+test_from_bool_to_i64_true :: () -> bool => do
     val := true
     result := i64::from(val)
     result == 1
-}
 
-test_from_bool_to_i64_false :: () -> bool => {
+test_from_bool_to_i64_false :: () -> bool => do
     val := false
     result := i64::from(val)
     result == 0
-}
 
-test_from_bool_to_u64_true :: () -> bool => {
+test_from_bool_to_u64_true :: () -> bool => do
     val := true
     result := u64::from(val)
     result == 1
-}
 
-test_from_i64_to_string_positive :: () -> bool => {
+test_from_i64_to_string_positive :: () -> bool => do
     val: i64 = 42
     result := String::from(val)
     String::equals(&result, &String::from_cstr("42" as *u8))
-}
 
-test_from_i64_to_string_negative :: () -> bool => {
+test_from_i64_to_string_negative :: () -> bool => do
     val: i64 = -42
     result := String::from(val)
     String::equals(&result, &String::from_cstr("-42" as *u8))
-}
 
-test_from_u64_to_string :: () -> bool => {
+test_from_u64_to_string :: () -> bool => do
     val: u64 = 999
     result := String::from(val)
     String::equals(&result, &String::from_cstr("999" as *u8))
-}
 
-test_from_bool_to_string_true :: () -> bool => {
+test_from_bool_to_string_true :: () -> bool => do
     val := true
     result := String::from(val)
     String::equals(&result, &String::from_cstr("true" as *u8))
-}
 
-test_from_bool_to_string_false :: () -> bool => {
+test_from_bool_to_string_false :: () -> bool => do
     val := false
     result := String::from(val)
     String::equals(&result, &String::from_cstr("false" as *u8))
-}
 
 # ===== INTO TESTS (5 tests) =====
 
-test_into_u8_to_u64 :: () -> bool => {
+test_into_u8_to_u64 :: () -> bool => do
     val: u8 = 42
     result: u64 = val.into()
     result == 42
-}
 
-test_into_bool_to_i64 :: () -> bool => {
+test_into_bool_to_i64 :: () -> bool => do
     val := true
     result: i64 = val.into()
     result == 1
-}
 
-test_into_i64_to_string :: () -> bool => {
+test_into_i64_to_string :: () -> bool => do
     val: i64 = 42
     result: String = val.into()
     String::equals(&result, &String::from_cstr("42" as *u8))
-}
 
-test_into_u64_to_string :: () -> bool => {
+test_into_u64_to_string :: () -> bool => do
     val: u64 = 777
     result: String = val.into()
     String::equals(&result, &String::from_cstr("777" as *u8))
-}
 
-test_into_bool_to_string :: () -> bool => {
+test_into_bool_to_string :: () -> bool => do
     val := false
     result: String = val.into()
     String::equals(&result, &String::from_cstr("false" as *u8))
-}
 
 # ===== TRYFROM TESTS (10 tests) =====
 
-test_tryfrom_u64_to_u8_success :: () -> bool => {
+test_tryfrom_u64_to_u8_success :: () -> bool => do
     val: u64 = 100
     result := u8::try_from(val)
     String::contains(&result.to_string(), &String::from_cstr("Ok" as *u8))
-}
 
-test_tryfrom_u64_to_u8_overflow :: () -> bool => {
+test_tryfrom_u64_to_u8_overflow :: () -> bool => do
     val: u64 = 300
     result := u8::try_from(val)
     String::contains(&result.to_string(), &String::from_cstr("Err" as *u8))
-}
 
-test_tryfrom_i64_to_u8_success :: () -> bool => {
+test_tryfrom_i64_to_u8_success :: () -> bool => do
     val: i64 = 50
     result := u8::try_from(val)
     String::contains(&result.to_string(), &String::from_cstr("Ok" as *u8))
-}
 
-test_tryfrom_i64_to_u8_negative :: () -> bool => {
+test_tryfrom_i64_to_u8_negative :: () -> bool => do
     val: i64 = -1
     result := u8::try_from(val)
     String::contains(&result.to_string(), &String::from_cstr("Err" as *u8))
-}
 
-test_tryfrom_i64_to_u64_success :: () -> bool => {
+test_tryfrom_i64_to_u64_success :: () -> bool => do
     val: i64 = 500
     result := u64::try_from(val)
     String::contains(&result.to_string(), &String::from_cstr("Ok" as *u8))
-}
 
-test_tryfrom_i64_to_u64_negative :: () -> bool => {
+test_tryfrom_i64_to_u64_negative :: () -> bool => do
     val: i64 = -10
     result := u64::try_from(val)
     String::contains(&result.to_string(), &String::from_cstr("Err" as *u8))
-}
 
-test_tryfrom_string_to_i64_success :: () -> bool => {
+test_tryfrom_string_to_i64_success :: () -> bool => do
     s := String::from_cstr("42" as *u8)
     result := i64::try_from(s)
     String::contains(&result.to_string(), &String::from_cstr("Ok" as *u8))
-}
 
-test_tryfrom_string_to_i64_invalid :: () -> bool => {
+test_tryfrom_string_to_i64_invalid :: () -> bool => do
     s := String::from_cstr("abc" as *u8)
     result := i64::try_from(s)
     String::contains(&result.to_string(), &String::from_cstr("Err" as *u8))
-}
 
-test_tryfrom_string_to_bool_true :: () -> bool => {
+test_tryfrom_string_to_bool_true :: () -> bool => do
     s := String::from_cstr("true" as *u8)
     result := bool::try_from(s)
     String::contains(&result.to_string(), &String::from_cstr("Ok" as *u8))
-}
 
-test_tryfrom_string_to_bool_false :: () -> bool => {
+test_tryfrom_string_to_bool_false :: () -> bool => do
     s := String::from_cstr("false" as *u8)
     result := bool::try_from(s)
     String::contains(&result.to_string(), &String::from_cstr("Ok" as *u8))
-}
 
 # Main test runner
-main :: () -> i64 => {
+main :: () -> i64 => do
     println("========================================")
     println("Conversion Traits Test Suite (Simplified)")
     println("========================================")
@@ -229,11 +202,9 @@ main :: () -> i64 => {
     println("Failed: " + failed_count)
     println("========================================")
     
-    if failed_count == 0 {
+    if failed_count == 0:
         println("✅ All tests passed!")
         ret 0
-    } else {
+    else:
         println("❌ Some tests failed")
         ret 1
-    }
-}

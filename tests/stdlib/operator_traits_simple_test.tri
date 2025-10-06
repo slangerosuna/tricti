@@ -5,7 +5,7 @@ use prelude
 use core::traits
 use core::string
 
-main :: () -> i64 => {
+main :: () -> i64 => do
     println("Testing Operator Traits...")
     println("")
     
@@ -75,25 +75,22 @@ main :: () -> i64 => {
     print("bool bitand: ")
     t := true
     ff := false
-    if BitAnd::bitand(t, ff) {
+    if BitAnd::bitand(t, ff):
         println("true")
-    } else {
+    else:
         println("false")
-    }
     
     print("bool bitor: ")
-    if BitOr::bitor(t, ff) {
+    if BitOr::bitor(t, ff):
         println("true")
-    } else {
+    else:
         println("false")
-    }
     
     print("bool not: ")
-    if Not::not(t) {
+    if Not::not(t):
         println("true")
-    } else {
+    else:
         println("false")
-    }
     
     println("")
     
@@ -109,4 +106,3 @@ main :: () -> i64 => {
     println("All basic operator tests completed!")
     
     ret 0
-}

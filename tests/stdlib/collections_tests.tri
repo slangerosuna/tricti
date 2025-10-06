@@ -8,53 +8,45 @@ use core::collections
 # VEC<U64> TESTS
 # =============================================================================
 
-test_vec_u64_new :: () -> bool => {
+test_vec_u64_new :: () -> bool => do
     v := Vec<u64>::new()
     
     len_val := v.len()
     is_zero := (len_val == 0)
     
-    if ~is_zero {
+    if ~is_zero:
         println("FAIL: New vec should have length 0, got " + len_val.to_string())
         ret false
-    }
     
     println("PASS: test_vec_u64_new")
     ret true
-}
 
-test_vec_u64_push :: () -> bool => {
+test_vec_u64_push :: () -> bool => do
     mut v := Vec<u64>::new()
     v.push(42)
     
     len_val := v.len()
     is_one := (len_val == 1)
     
-    if ~is_one {
+    if ~is_one:
         println("FAIL: Vec should have length 1 after push, got " + len_val.to_string())
         ret false
-    }
     
     maybe_val := v.get(0)
-    match maybe_val {
-        some val => {
+    match maybe_val:
+        some val => do
             is_42 := (val == 42)
-            if ~is_42 {
+            if ~is_42:
                 println("FAIL: Expected value 42, got " + val.to_string())
                 ret false
-            }
-        },
-        none => {
+        none => do
             println("FAIL: get(0) returned none")
             ret false
-        },
-    }
     
     println("PASS: test_vec_u64_push")
     ret true
-}
 
-test_vec_u64_multiple_push :: () -> bool => {
+test_vec_u64_multiple_push :: () -> bool => do
     mut v := Vec<u64>::new()
     v.push(10)
     v.push(20)
@@ -63,152 +55,123 @@ test_vec_u64_multiple_push :: () -> bool => {
     len_val := v.len()
     is_three := (len_val == 3)
     
-    if ~is_three {
+    if ~is_three:
         println("FAIL: Vec should have length 3, got " + len_val.to_string())
         ret false
-    }
     
     # Check first element
     maybe_v0 := v.get(0)
-    match maybe_v0 {
-        some val => {
+    match maybe_v0:
+        some val => do
             is_10 := (val == 10)
-            if ~is_10 {
+            if ~is_10:
                 println("FAIL: v[0] should be 10, got " + val.to_string())
                 ret false
-            }
-        },
-        none => {
+        none => do
             println("FAIL: v[0] returned none")
             ret false
-        },
-    }
     
     # Check second element
     maybe_v1 := v.get(1)
-    match maybe_v1 {
-        some val => {
+    match maybe_v1:
+        some val => do
             is_20 := (val == 20)
-            if ~is_20 {
+            if ~is_20:
                 println("FAIL: v[1] should be 20, got " + val.to_string())
                 ret false
-            }
-        },
-        none => {
+        none => do
             println("FAIL: v[1] returned none")
             ret false
-        },
-    }
     
     # Check third element
     maybe_v2 := v.get(2)
-    match maybe_v2 {
-        some val => {
+    match maybe_v2:
+        some val => do
             is_30 := (val == 30)
-            if ~is_30 {
+            if ~is_30:
                 println("FAIL: v[2] should be 30, got " + val.to_string())
                 ret false
-            }
-        },
-        none => {
+        none => do
             println("FAIL: v[2] returned none")
             ret false
-        },
-    }
     
     println("PASS: test_vec_u64_multiple_push")
     ret true
-}
 
-test_vec_u64_pop :: () -> bool => {
+test_vec_u64_pop :: () -> bool => do
     mut v := Vec<u64>::new()
     v.push(10)
     v.push(20)
     v.push(30)
     
     maybe_popped := v.pop()
-    match maybe_popped {
-        some val => {
+    match maybe_popped:
+        some val => do
             is_30 := (val == 30)
-            if ~is_30 {
+            if ~is_30:
                 println("FAIL: Popped value should be 30, got " + val.to_string())
                 ret false
-            }
-        },
-        none => {
+        none => do
             println("FAIL: pop() returned none")
             ret false
-        },
-    }
     
     len_val := v.len()
     is_two := (len_val == 2)
     
-    if ~is_two {
+    if ~is_two:
         println("FAIL: Vec should have length 2 after pop, got " + len_val.to_string())
         ret false
-    }
     
     println("PASS: test_vec_u64_pop")
     ret true
-}
 
-test_vec_u64_set :: () -> bool => {
+test_vec_u64_set :: () -> bool => do
     mut v := Vec<u64>::new()
     v.push(10)
     v.push(20)
     v.push(30)
     
     success := v.set(1, 99)
-    if ~success {
+    if ~success:
         println("FAIL: set(1, 99) should return true")
         ret false
-    }
     
     maybe_val := v.get(1)
-    match maybe_val {
-        some val => {
+    match maybe_val:
+        some val => do
             is_99 := (val == 99)
-            if ~is_99 {
+            if ~is_99:
                 println("FAIL: v[1] should be 99 after set, got " + val.to_string())
                 ret false
-            }
-        },
-        none => {
+        none => do
             println("FAIL: v[1] returned none after set")
             ret false
-        },
-    }
     
     println("PASS: test_vec_u64_set")
     ret true
-}
 
-test_vec_u64_is_empty :: () -> bool => {
+test_vec_u64_is_empty :: () -> bool => do
     v := Vec<u64>::new()
     
-    if ~v.is_empty() {
+    if ~v.is_empty():
         println("FAIL: New vec should be empty")
         ret false
-    }
     
     mut v2 := Vec<u64>::new()
     v2.push(1)
     
-    if v2.is_empty() {
+    if v2.is_empty():
         println("FAIL: Vec with one element should not be empty")
         ret false
-    }
     
     println("PASS: test_vec_u64_is_empty")
     ret true
-}
 
 # =============================================================================
 # TEST RUNNER FOR COLLECTIONS TESTS
 # =============================================================================
 
-run_collections_tests :: () -> bool => {
+run_collections_tests :: () -> bool => do
     println("")
     println("=== Collections Tests (Vec<u64>) ===")
     println("")
@@ -241,15 +204,12 @@ run_collections_tests :: () -> bool => {
     
     is_all_passed := (passed == total)
     ret is_all_passed
-}
 
 # Main entry point for running collections tests directly
-main :: () => {
+main :: () => do
     result := run_collections_tests()
     
-    if result {
+    if result:
         println("✓ All collections tests passed")
-    } else {
+    else:
         println("✗ Some collections tests failed")
-    }
-}

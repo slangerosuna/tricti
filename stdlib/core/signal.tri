@@ -8,7 +8,7 @@ use core::errors
 # SIGNAL TYPES AND TOPOLOGY
 # =============================================================================
 
-SignalTopology :: enum {
+SignalTopology :: enum
     # Multiple producers, single consumer
     MPSC,
     # Single producer, multiple consumers  
@@ -17,29 +17,28 @@ SignalTopology :: enum {
     MPMC,
     # Single producer, single consumer (optimized)
     SPSC,
-}
 
-BufferingStrategy :: enum {
+BufferingStrategy :: enum
     # First-in-first-out queue with capacity
-    FIFO { capacity: u64 },
+    FIFO :: struct
+        capacity: u64,
     # Overwrites whatever is there when full
     Overwrite,
     # Fail send when full
-    FailOnFull { capacity: u64 },
+    FailOnFull :: struct
+        capacity: u64,
     # Unbounded (use with caution)
     Unbounded,
     # Ordered by priority (only works when sending types that implement Ord)
-    Priority { 
+    Priority :: struct
         ascending: bool,
         capacity: u64,
-    },
-}
 
 # =============================================================================
 # SIGNAL DEFINITION
 # =============================================================================
 
-Signal<T> :: {
+Signal<T> :: struct
     name: String,
     topology: SignalTopology,
     buffering: BufferingStrategy,
@@ -53,7 +52,6 @@ Signal<T> :: {
     messages_sent: u64,
     messages_received: u64,
     messages_dropped: u64,
-}
 
 SenderId :: u64
 ReceiverId :: u64
@@ -62,29 +60,33 @@ ReceiverId :: u64
 # SIGNAL BUFFER
 # =============================================================================
 
-SignalBuffer<T> :: enum {
-    FIFO { queue: RingBuffer<T>, capacity: u64 },
-    Overwrite { queue: RingBuffer<T>, capacity: u64 },
-    Priority { heap: BinaryHeap<PriorityMessage<T>>, capacity: u64 },
-    Unbounded { queue: [T] },
-}
+SignalBuffer<T> :: enum
+    FIFO :: struct
+        queue: RingBuffer<T>,
+        capacity: u64,
+    Overwrite :: struct
+        queue: RingBuffer<T>,
+        capacity: u64,
+    Priority :: struct
+        heap: BinaryHeap<PriorityMessage<T>>,
+        capacity: u64,
+    Unbounded :: struct
+        queue: [T],
 
-PriorityMessage<T> :: {
+PriorityMessage<T> :: struct
     priority: u64,
     payload: T,
     timestamp: u64,
-}
 
-RingBuffer<T> :: {
+RingBuffer<T> :: struct
     data: [T],
     read_pos: u64,
     write_pos: u64,
     capacity: u64,
     size: u64,
-}
 
-impl<T> RingBuffer<T> {
-    new :: (capacity: u64) -> RingBuffer<T> => {
+impl<T> RingBuffer<T>:
+    new :: (capacity: u64) -> RingBuffer<T> =>
         RingBuffer<T> {
             data: [T::default(); capacity],
             read_pos: 0,
@@ -92,74 +94,56 @@ impl<T> RingBuffer<T> {
             capacity: capacity,
             size: 0,
         }
-    }
 
-    push :: (&mut self, item: T) -> !none => {
-        if self.size >= self.capacity {
+    push :: (&mut self, item: T) -> !none => do
+        if self.size >= self.capacity:
             ret err StdError::Message { message: "Ring buffer full" }
-        }
         
         self.data.set(self.write_pos, item)
         self.write_pos = (self.write_pos + 1) % self.capacity
         self.size += 1
         
-        ok none
-    }
+        ret ok none
 
-    pop :: (&mut self) -> !T => {
-        if self.size == 0 {
+    pop :: (&mut self) -> !T => do
+        if self.size == 0:
             ret err StdError::Message { message: "Ring buffer empty" }
-        }
         
         item := self.data.get(self.read_pos)?
         self.read_pos = (self.read_pos + 1) % self.capacity
         self.size -= 1
 
-        ok item?
-    }
+        ret ok item?
 
-    is_full :: (&self) -> bool => {
-        self.size >= self.capacity
-    }
-
-    is_empty :: (&self) -> bool => {
-        self.size == 0
-    }
-
-    len :: (&self) -> u64 => {
-        self.size
-    }
-}
+    is_full :: (&self) -> bool => self.size >= self.capacity
+    is_empty :: (&self) -> bool => self.size == 0
+    len :: (&self) -> u64 => self.size
+    capacity :: (&self) -> u64 => self.capacity
 
 # =============================================================================
 # SIGNAL OPERATIONS
 # =============================================================================
 
-impl<T> Signal<T> {
+impl<T> Signal<T>:
     # Create a new signal with specified configuration
     new :: (name: String, topology: SignalTopology, 
-            buffering: BufferingStrategy) -> Signal<T> => {
-        
-        buffer := match buffering {
-            BufferingStrategy::FIFO { capacity } => {
+            buffering: BufferingStrategy) -> Signal<T> => do
+        buffer := match buffering:
+            BufferingStrategy::FIFO { capacity } =>
                 SignalBuffer::FIFO {
                     queue: RingBuffer::new(capacity),
                     capacity: capacity,
-                }
-            },
-            BufferingStrategy::Overwrite { capacity } => {
+                },
+            BufferingStrategy::Overwrite { capacity } =>
                 SignalBuffer::Overwrite {
                     queue: RingBuffer::new(capacity),
                     capacity: capacity,
-                }
-            },
-            BufferingStrategy::Unbounded => {
-                SignalBuffer::Unbounded { queue: [] }
-            },
+                },
+            BufferingStrategy::Unbounded =>
+                SignalBuffer::Unbounded { queue: [] },
             _ => SignalBuffer::Unbounded { queue: [] },
-        }
         
-        Signal<T> {
+        ret Signal<T> {
             name: name,
             topology: topology,
             buffering: buffering,
@@ -170,132 +154,104 @@ impl<T> Signal<T> {
             messages_received: 0,
             messages_dropped: 0,
         }
-    }
 
     # Register a sender
-    register_sender :: (&mut self) -> !SenderId => {
+    register_sender :: (&mut self) -> !SenderId => do
         # Check topology constraints
-        match self.topology {
-            SignalTopology::SPSC or SignalTopology::SPMC => {
-                if self.senders.len() > 0 {
+        match self.topology:
+            SignalTopology::SPSC or SignalTopology::SPMC => do
+                if self.senders.len() > 0:
                     ret err StdError::InvalidArgument {
                         parameter: "sender",
                         message: "Signal topology allows only one sender",
-                    }
-                }
-            },
+                    },
             _ => {},
-        }
         
         sender_id := self.senders.len()
         self.senders.push(sender_id)
-        ok sender_id
-    }
+
+        ret ok sender_id
 
     # Register a receiver
-    register_receiver :: (&mut self) -> !ReceiverId => {
+    register_receiver :: (&mut self) -> !ReceiverId => do
         # Check topology constraints
-        match self.topology {
-            SignalTopology::SPSC or SignalTopology::MPSC => {
-                if self.receivers.len() > 0 {
+        match self.topology:
+            SignalTopology::SPSC or SignalTopology::MPSC => do
+                if self.receivers.len() > 0:
                     ret err StdError::InvalidArgument {
                         parameter: "receiver",
                         message: "Signal topology allows only one receiver",
-                    }
-                }
-            },
+                    },
             _ => {},
-        }
         
         receiver_id := self.receivers.len()
         self.receivers.push(receiver_id)
-        ok receiver_id
-    }
+        ret ok receiver_id
 
     # Send a message
-    send :: (&mut self, sender_id: SenderId, message: T) -> !none => {
+    send :: (&mut self, sender_id: SenderId, message: T) -> !none => do
         # Verify sender is registered
-        if ~self.senders.contains(sender_id) {
+        if not self.senders.contains(sender_id):
             ret err StdError::InvalidArgument {
                 parameter: "sender_id",
                 message: "Sender not registered",
             }
-        }
         
         # Handle based on buffering strategy
-        match match &mut self.buffer {
-            SignalBuffer::FIFO { queue, .. } => {
+        sucess := match &mut self.buffer:
+            SignalBuffer::FIFO { queue, .. } =>
                 queue.push(message)
-            },
-            SignalBuffer::Overwrite { queue, .. } => {
-                if queue.is_full() {
-                    match queue.pop() {
+            SignalBuffer::Overwrite { queue, .. } => do
+                if queue.is_full():
+                    match queue.pop():
                         ok _ => {},
                         err _ => {},
-                    }
+
                     self.messages_dropped += 1
-                }
+
                 queue.push(message)
-            },
-            SignalBuffer::Unbounded { queue } => {
+            SignalBuffer::Unbounded { queue } => do
                 queue.push(message)
                 ok none
-            },
             _ => ok none,
-        } {
-            ok value => {
+        match sucess
+            ok => do
                 self.messages_sent += 1
-                ok value
-            },
-            err error => err error,
-        }
-    }
+                ret ok value
+            err err_ => ret err err_,
 
     # Receive a message (blocking)
-    receive :: (&mut self, receiver_id: ReceiverId) -> !T => {
+    receive :: (&mut self, receiver_id: ReceiverId) -> !T => do
         # Verify receiver is registered
-        if ~self.receivers.contains(receiver_id) {
+        if not self.receivers.contains(receiver_id):
             ret err StdError::InvalidArgument {
                 parameter: "receiver_id",
                 message: "Receiver not registered",
             }
-        }
         
         # Get message from buffer
-        match match &mut self.buffer {
-            SignalBuffer::FIFO { queue, .. } => {
-                queue.pop()
-            },
-            SignalBuffer::Overwrite { queue, .. } => {
-                queue.pop()
-            },
-            SignalBuffer::Unbounded { queue } => {
-                if queue.is_empty() {
+        sucess := match &mut self.buffer:
+            SignalBuffer::FIFO { queue, .. } => queue.pop(),
+            SignalBuffer::Overwrite { queue, .. } => queue.pop(),
+            SignalBuffer::Unbounded { queue } =>
+                if queue.is_empty():
                     err StdError::Message { message: "No messages available" }
-                } else {
-                    ok queue.remove(0)?
-                }
-            },
+                else: ok queue.remove(0)?,
             _ => err StdError::Message { message: "Receive not supported" },
-        } {
-            ok value => {
+        match sucess:
+            ok value => do
                 self.messages_received += 1
-                ok value
-            },
-            err error => err error,
-        }
-    }
+                ret ok value
+            err error => ret err error,
 
     # Try receive (non-blocking)
-    try_receive :: (&mut self, receiver_id: ReceiverId) -> ?T => {
-        match self.receive(receiver_id) {
+    try_receive :: (&mut self, receiver_id: ReceiverId) -> ?T =>
+        match self.receive(receiver_id):
             ok value => some value,
             err _ => none,
-        }
-    }
 
     # Get signal statistics
-    stats :: (&self) -> SignalStats => {
+    stats :: (&self) -> SignalStats =>
         SignalStats {
             messages_sent: self.messages_sent,
             messages_received: self.messages_received,
@@ -304,23 +260,18 @@ impl<T> Signal<T> {
             sender_count: self.senders.len(),
             receiver_count: self.receivers.len(),
         }
-    }
 
-    buffer_size :: (&self) -> u64 => {
-        match &self.buffer {
+    buffer_size :: (&self) -> u64 =>
+        match &self.buffer
             SignalBuffer::FIFO { queue, .. } => queue.len(),
             SignalBuffer::Overwrite { queue, .. } => queue.len(),
             SignalBuffer::Unbounded { queue } => queue.len(),
             _ => 0,
-        }
-    }
-}
 
-SignalStats :: {
+SignalStats :: struct
     messages_sent: u64,
     messages_received: u64,
     messages_dropped: u64,
     buffer_size: u64,
     sender_count: u64,
     receiver_count: u64,
-}

@@ -109,7 +109,7 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
         return (converted, opens_block);
     }
 
-    for keyword in ["struct", "table", "compose", "db"] {
+    for keyword in ["struct", "table", "compose", "db", "enum"] {
         if let Some(converted) = convert_struct_like(segment, keyword) {
             return (converted, true);
         }

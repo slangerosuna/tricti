@@ -1,17 +1,14 @@
 # Simple test for Vec_new function
 # This test uses a simplified Vec implementation that the parser can handle
 
-Vec_new :: () -> i64 => {
+Vec_new :: () -> i64 => do
     42  # placeholder return value
-}
 
-main :: () -> i32 => {
+main :: () -> i32 => do
     result := Vec::new();
-    if result == 42 {
+    if result == 42:
         println("Vec_new test passed!");
         0
-    } else {
+    else:
         println("Vec_new test failed!");
         1
-    }
-}

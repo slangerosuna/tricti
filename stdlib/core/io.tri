@@ -8,152 +8,116 @@ use core::errors
 # FILE SYSTEM
 # =============================================================================
 
-File :: {
+File :: struct
     path: String,
     handle: FileHandle,
     mode: FileMode,
-}
 
 FileHandle :: u64
 
-FileMode :: enum {
+FileMode :: enum
     Read,
     Write,
     ReadWrite,
     Append,
-}
 
-impl File {
-    open :: (path: String, mode: FileMode) -> !File => {
+impl File:
+    open :: (path: String, mode: FileMode) -> !File => do
         handle := platform_open_file(path, mode)?
         
-        ok File {
+        ret ok File {
             path: path,
             handle: handle,
             mode: mode,
         }
-    }
 
-    read :: (&self) -> ![u8] => {
-        platform_read_file(self.handle)
-    }
+    read :: (&self) -> ![u8] => platform_read_file(self.handle)
 
-    read_to_string :: (&self) -> !String => {
+    read_to_string :: (&self) -> !String => do
         bytes := self.read()?
-        string_from_bytes(bytes)
-    }
+        ret string_from_bytes(bytes)
 
-    write :: (&mut self, data: [u8]) -> !u64 => {
+    write :: (&mut self, data: [u8]) -> !u64 =>
         platform_write_file(self.handle, data)
-    }
 
-    write_string :: (&mut self, data: String) -> !u64 => {
+    write_string :: (&mut self, data: String) -> !u64 => do
         bytes := string_to_bytes(data)?
         self.write(bytes)
-    }
 
-    close :: (&mut self) -> !none => {
+    close :: (&mut self) -> !none =>
         platform_close_file(self.handle)
-    }
 
     # File metadata
-    size :: (&self) -> !u64 => {
-        platform_file_size(self.handle)
-    }
+    size :: (&self) -> !u64 => platform_file_size(self.handle)
 
-    exists :: (path: String) -> bool => match platform_file_exists(path) {
-        ok value => value,
-        err _ => false,
-    }
-}
+    exists :: (path: String) -> bool =>
+        match platform_file_exists(path):
+            ok value => value,
+            err _ => false,
 
 # =============================================================================
 # DIRECTORY OPERATIONS
 # =============================================================================
 
-Directory :: {
+Directory :: struct
     path: String,
-}
 
-impl Directory {
-    create :: (path: String) -> !none => {
-        platform_create_directory(path)
-    }
+impl Directory:
+    create :: (path: String) -> !none => platform_create_directory(path)
+    remove :: (path: String) -> !none => platform_remove_directory(path)
+    list :: (path: String) -> ![String] => platform_list_directory(path)
 
-    remove :: (path: String) -> !none => {
-        platform_remove_directory(path)
-    }
-
-    list :: (path: String) -> ![String] => {
-        platform_list_directory(path)
-    }
-
-    exists :: (path: string) -> bool => match platform_directory_exists(path) {
-        ok value => value,
-        err _ => false,
-    }
-}
+    exists :: (path: string) -> bool =>
+        match platform_directory_exists(path):
+            ok value => value,
+            err _ => false,
 
 # =============================================================================
 # NETWORK OPERATIONS
 # =============================================================================
 
-TcpListener :: {
+TcpListener :: struct
     address: String,
     port: u16,
     handle: SocketHandle,
-}
 
-TcpStream :: {
+TcpStream :: struct
     peer_address: String,
     handle: SocketHandle,
-}
 
 SocketHandle :: u64
 
-impl TcpListener {
-    bind :: (address: String, port: u16) -> !TcpListener => {
+impl TcpListener:
+    bind :: (address: String, port: u16) -> !TcpListener => do
         handle := platform_bind_tcp(address, port)?
         
-        ok TcpListener {
+        ret ok TcpListener {
             address: address,
             port: port,
             handle: handle,
         }
-    }
 
-    accept :: (&self) -> !TcpStream => {
+    accept :: (&self) -> !TcpStream => do
         stream_handle := platform_accept_tcp(self.handle)?
         peer := platform_get_peer_address(stream_handle)?
 
-        ok TcpStream {
+        ret ok TcpStream {
             peer_address: peer,
             handle: stream_handle,
         }
-    }
-}
 
-impl TcpStream {
-    connect :: (address: String, port: u16) -> !TcpStream => {
+impl TcpStream:
+    connect :: (address: String, port: u16) -> !TcpStream => do
         handle := platform_connect_tcp(address, port)?
 
-        ok TcpStream {
+        ret ok TcpStream {
             peer_address: address + ":" + port.to_string(),
             handle: handle,
         }
-    }
 
-    read :: (&self, buffer_size: u64) -> ![u8] => {
-        platform_read_tcp(self.handle, buffer_size)
-    }
-
-    write :: (&self, data: [u8]) -> !u64 => {
-        platform_write_tcp(self.handle, data)
-    }
-
-    close :: (&mut self) -> !none => {
-        platform_close_tcp(self.handle)
-    }
+    read :: (&self, buffer_size: u64) -> ![u8] => platform_read_tcp(self.handle, buffer_size)
+    write :: (&self, data: [u8]) -> !u64 => platform_write_tcp(self.handle, data)
+    close :: (&mut self) -> !none => platform_close_tcp(self.handle)
 }
 
 # =============================================================================
@@ -188,64 +152,57 @@ extern platform_close_tcp :: (handle: SocketHandle) -> !none
 extern platform_get_peer_address :: (handle: SocketHandle) -> !String
 
 # Utility functions
-string_from_bytes :: (bytes: Vec<u8>) -> !String => {
+string_from_bytes :: (bytes: Vec<u8>) -> !String => 
     # TODO: UTF-8 validation and conversion
     ok unsafe { bytes as string }
-}
 
-string_to_bytes :: (s: string) -> !Vec<u8> => {
+string_to_bytes :: (s: string) -> !Vec<u8> =>
     # TODO: Convert string to UTF-8 bytes
     ok unsafe { s as Vec<u8> }
-}
 
 # =============================================================================
 # ASYNC IO
 # =============================================================================
 
-AsyncFile :: {
+AsyncFile :: struct
     file: File,
     io_uring: ?IoUringHandle,
-}
 
 IoUringHandle :: u64
 
-impl AsyncFile {
-    open_async :: async (path: String, mode: FileMode) -> !AsyncFile => {
+impl AsyncFile:
+    open_async :: async (path: String, mode: FileMode) -> !AsyncFile => do
         file := File::open(path, mode)?
         
         # Initialize io_uring if available
         uring := platform_init_io_uring()
         
-        ok AsyncFile {
+        ret ok AsyncFile {
             file: file,
             io_uring: uring,
         }
-    }
 
-    read_async :: (&self) -> !Future<Vec<u8>> => {
+    read_async :: (&self) -> !Future<Vec<u8>> =>
         # TODO: Implement async read using io_uring or epoll
         err StdError::Unsupported {
             feature: "Async IO not yet implemented",
         }
-    }
 
-    write_async :: (&self, data: Vec<u8>) -> !Future<u64> => {
+    write_async :: (&self, data: Vec<u8>) -> !Future<u64> =>
         # TODO: Implement async write
         err StdError::Unsupported {
             feature: "Async IO not yet implemented",
         }
-    }
-}
 
 extern platform_init_io_uring :: () -> ?IoUringHandle
 
-Future<T> :: {
+Future<T> :: struct
     # Placeholder for future implementation
     state: FutureState<T>,
-}
 
-FutureState<T> :: enum {
+FutureState<T> :: enum
     Pending,
-    Ready { value: T },
-    Error { error: StdError },
-}
+    Ready :: struct
+        value: T
+    Error :: struct
+        error: StdError

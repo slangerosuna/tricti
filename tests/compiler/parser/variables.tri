@@ -4,105 +4,88 @@
 # ============ VARIABLE DECLARATIONS (15 tests) ============
 
 # Test: simple variable declaration
-test_var_simple :: () -> i64 => {
+test_var_simple :: () -> i64 => do
     x := 42
     x
-}
 
 # Test: variable with type annotation
-test_var_typed :: () -> i64 => {
+test_var_typed :: () -> i64 => do
     x: i64 := 42
     x
-}
 
 # Test: variable with expression
-test_var_expr :: () -> i64 => {
+test_var_expr :: () -> i64 => do
     x := 10 + 20
     x
-}
 
 # Test: multiple variable declarations
-test_var_multiple :: () -> i64 => {
+test_var_multiple :: () -> i64 => do
     a := 1
     b := 2
     c := 3
     a + b + c
-}
 
 # Test: variable with function call
-test_var_fn_call :: () => {
+test_var_fn_call :: () => do
     result := compute()
     result
-}
 
 # Test: variable with static path
-test_var_static_path :: () => {
+test_var_static_path :: () => do
     v := Vec::new()
     v
-}
 
 # Test: variable with struct literal
-test_var_struct :: () => {
-    point := { x: 1, y: 2 }
+test_var_struct :: () => do
+    point := do x: 1, y: 2 }
     point
-}
 
 # Test: variable with comparison (parentheses needed)
-test_var_comparison :: () -> bool => {
+test_var_comparison :: () -> bool => do
     result := (10 > 5)
     result
-}
 
 # Test: variable with logical expression
-test_var_logical :: () -> bool => {
+test_var_logical :: () -> bool => do
     result := (true and false)
     result
-}
 
 # Test: variable with nested expression
-test_var_nested_expr :: () -> i64 => {
+test_var_nested_expr :: () -> i64 => do
     result := ((10 + 20) * 3)
     result
-}
 
 # Test: variable with match expression
-test_var_match :: () -> i64 => {
+test_var_match :: () -> i64 => do
     x := 1
     result := match x {
         1 => 100
         _ => 0
-    }
     result
-}
 
 # Test: variable with if expression
-test_var_if_expr :: () -> i64 => {
+test_var_if_expr :: () -> i64 => do
     x := 10
     result := if (x > 5) {
         ret 1
-    } else {
+    else:
         ret 0
-    }
-}
 
 # Test: variable shadowing
-test_var_shadowing :: () -> i64 => {
+test_var_shadowing :: () -> i64 => do
     x := 10
     x := 20
     x
-}
 
 # Test: variable with string
-test_var_string :: () => {
+test_var_string :: () => do
     name := "test"
     name
-}
 
 # Test: variable with boolean
-test_var_bool :: () -> bool => {
+test_var_bool :: () -> bool => do
     flag := true
     flag
-}
 
 
 # ============ CONST DECLARATIONS (10 tests) ============
@@ -117,13 +100,13 @@ test_const_typed :: i64 = 100
 test_const_expr :: i64 = 10 + 20
 
 # Test: const function
-test_const_function :: () -> i64 = { 42 }
+test_const_function :: () -> i64 = do 42 }
 
 # Test: const with generic type
 test_const_generic :: Vec<i64> = vec
 
 # Test: const with struct literal
-test_const_struct :: Point = { x: 1, y: 2 }
+test_const_struct :: Point = do x: 1, y: 2 }
 
 # Test: const with static path
 test_const_static :: Vec<i64> = Vec::new()
@@ -132,7 +115,6 @@ test_const_static :: Vec<i64> = Vec::new()
 test_const_table :: table {
     id: i64,
     name: String
-}
 
 # Test: const with string
 test_const_string :: String = "constant"
@@ -144,69 +126,59 @@ test_const_bool :: bool = true
 # ============ ASSIGNMENTS (10 tests) ============
 
 # Test: simple assignment
-test_assign_simple :: () -> i64 => {
+test_assign_simple :: () -> i64 => do
     x := 10
     x = 20
     x
-}
 
 # Test: assignment with expression
-test_assign_expr :: () -> i64 => {
+test_assign_expr :: () -> i64 => do
     x := 10
     x = 20 + 30
     x
-}
 
 # Test: compound addition assignment
-test_assign_add :: () -> i64 => {
+test_assign_add :: () -> i64 => do
     x := 10
     x += 5
     x
-}
 
 # Test: compound subtraction assignment
-test_assign_sub :: () -> i64 => {
+test_assign_sub :: () -> i64 => do
     x := 20
     x -= 5
     x
-}
 
 # Test: compound multiplication assignment
-test_assign_mul :: () -> i64 => {
+test_assign_mul :: () -> i64 => do
     x := 10
     x *= 2
     x
-}
 
 # Test: compound division assignment
-test_assign_div :: () -> i64 => {
+test_assign_div :: () -> i64 => do
     x := 20
     x /= 4
     x
-}
 
 # Test: element-wise multiplication assignment
-test_assign_elemwise_mul :: () => {
+test_assign_elemwise_mul :: () => do
     x := arr
     x .*= 2
-}
 
 # Test: element-wise division assignment
-test_assign_elemwise_div :: () => {
+test_assign_elemwise_div :: () => do
     x := arr
     x ./= 2
-}
 
 # Test: backslash assignment
-test_assign_backslash :: () => {
+test_assign_backslash :: () => do
     x := matrix
     x \= vector
-}
 
 # Test: multiple assignments
-test_assign_multiple :: () -> i64 => {
+test_assign_multiple :: () -> i64 => do
     x := 10
     x = 20
     x = 30
     x
-}

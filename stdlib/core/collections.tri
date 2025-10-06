@@ -124,20 +124,17 @@ impl<T> Vec<T>:
     is_empty :: (&self) -> bool => self.len == 0
 }
 
-impl Drop for Vec<T>:
-    drop :: (*self) => do
-        if self.capacity == 0: ret
+impl Drop for Vec<T>: drop :: (*self) => do
+    if self.capacity == 0: ret
 
-        # drop all elements
-        for i in 0..self.len:
-            unsafe: drop(*(self.data + i))
+    # drop all elements
+    for i in 0..self.len:
+        unsafe: drop(*(self.data + i))
 
-        unsafe: dealloc(self.data as *raw u8)
-        self.data = unsafe { 0 as *raw T }
-        self.len = 0
-        self.capacity = 0
-    }
-}
+    unsafe: dealloc(self.data as *raw u8)
+    self.data = unsafe { 0 as *raw T }
+    self.len = 0
+    self.capacity = 0
 
 # =============================================================================
 # LINKEDLIST - Doubly linked list

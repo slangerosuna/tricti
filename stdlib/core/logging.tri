@@ -3,30 +3,23 @@
 
 use prelude
 
-LogLevel :: enum {
+LogLevel :: enum
     Trace,
     Debug,
     Info,
     Warn,
     Error,
-}
 
-log_message :: (level: LogLevel, message: String) -> none => {
-    label := match level {
+log_message :: (level: LogLevel, message: String) => do
+    label := match level:
         LogLevel::Trace => "[trace]",
         LogLevel::Debug => "[debug]",
         LogLevel::Info => "[info]",
         LogLevel::Warn => "[warn]",
         LogLevel::Error => "[error]",
-    }
+
     println(label)
     println(message)
-}
 
-log_info :: (message: String) -> none => {
-    log_message(LogLevel::Info, message)
-}
-
-log_error :: (message: String) -> none => {
-    log_message(LogLevel::Error, message)
-}
+log_info :: (message: String) => log_message(LogLevel::Info, message)
+log_error :: (message: String) => log_message(LogLevel::Error, message)

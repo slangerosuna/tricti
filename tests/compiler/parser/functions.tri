@@ -4,224 +4,206 @@
 # ============ BASIC FUNCTIONS (15 tests) ============
 
 # Test: function with no parameters
-test_fn_no_params :: () => { }
+test_fn_no_params :: () => do
 
 # Test: function with return type
-test_fn_return_type :: () -> i64 => { 42 }
+test_fn_return_type :: () -> i64 => 42
 
 # Test: function with one parameter
-test_fn_one_param :: (x: i64) -> i64 => { x }
+test_fn_one_param :: (x: i64) -> i64 => x
 
 # Test: function with two parameters
-test_fn_two_params :: (x: i64, y: i64) -> i64 => { x + y }
+test_fn_two_params :: (x: i64, y: i64) -> i64 => x + y
 
 # Test: function with three parameters
-test_fn_three_params :: (a: i64, b: i64, c: i64) -> i64 => { a + b + c }
+test_fn_three_params :: (a: i64, b: i64, c: i64) -> i64 => a + b + c
 
 # Test: function with block body
-test_fn_block_body :: () -> i64 => {
+test_fn_block_body :: () -> i64 => do
     x := 10
     y := 20
     x + y
-}
 
 # Test: function with expression body
 test_fn_expr_body :: () -> i64 => 42
 
 # Test: function with multiple statements
-test_fn_multi_stmt :: () -> i64 => {
+test_fn_multi_stmt :: () -> i64 => do
     a := 1
     b := 2
     c := 3
     a + b + c
-}
 
 # Test: function with if statement
-test_fn_with_if :: (x: i64) -> i64 => {
-    if (x > 0) {
-        ret x
-    }
+test_fn_with_if :: (x: i64) -> i64 => do
+    if x > 0: ret x
     0
-}
 
 # Test: function with match
-test_fn_with_match :: (x: i64) -> i64 => {
-    match x {
-        0 => 0
-        _ => 1
-    }
-}
+test_fn_with_match :: (x: i64) -> i64 => match x:
+    0 => 0,
+    _ => 1,
 
 # Test: function with loop
-test_fn_with_loop :: () => {
-    for i in range {
+test_fn_with_loop :: () => do
+    for i in range:
         process(i)
-    }
-}
 
 # Test: function calling another function
-test_fn_call_fn :: () -> i64 => {
-    helper()
-}
+test_fn_call_fn :: () -> i64 => helper()
 
 # Test: function with nested blocks
-test_fn_nested_blocks :: () -> i64 => {
-    {
+test_fn_nested_blocks :: () -> i64 => do
+    result := do
         x := 10
-        {
+        do
             y := 20
             x + y
-        }
-    }
-}
+    result
 
 # Test: function with early return
-test_fn_early_return :: (x: i64) -> i64 => {
-    if (x < 0) {
-        ret 0
-    }
+test_fn_early_return :: (x: i64) -> i64 => do
+    if x < 0: ret 0
     x
-}
 
 # Test: function with no return type
-test_fn_no_return :: () => {
+test_fn_no_return :: () => do
     x := 42
-}
 
 
 # ============ FUNCTIONS WITH TYPE ANNOTATIONS (10 tests) ============
 
 # Test: function with typed parameter
-test_fn_typed_param :: (x: i64) -> i64 => { x }
+test_fn_typed_param :: (x: i64) -> i64 => x
 
 # Test: function with multiple typed parameters
-test_fn_multi_typed :: (x: i64, y: f64, z: bool) -> i64 => { x }
+test_fn_multi_typed :: (x: i64, y: f64, z: bool) -> i64 => x
 
 # Test: function with generic type parameter
-test_fn_generic_param :: (v: Vec<i64>) => { v }
+test_fn_generic_param :: (v: Vec<i64>) => v
 
 # Test: function with reference parameter
-test_fn_ref_param :: (x: &i64) -> i64 => { *x }
+test_fn_ref_param :: (x: &i64) -> i64 => *x
 
 # Test: function with mutable reference
-test_fn_mut_ref_param :: (x: &mut i64) => { *x = 10 }
+test_fn_mut_ref_param :: (x: &mut i64) => do
+    *x = 10
 
 # Test: function with optional parameter type
-test_fn_optional_param :: (x: ?i64) => { x }
+test_fn_optional_param :: (x: ?i64) => x
 
 # Test: function with result parameter type
-test_fn_result_param :: (x: !i64) => { x }
+test_fn_result_param :: (x: !i64) => x
 
 # Test: function returning reference
-test_fn_return_ref :: () -> &i64 => { ref_val }
+test_fn_return_ref :: () -> &i64 => ref_val
 
 # Test: function with tuple parameter
-test_fn_tuple_param :: (t: (i64, i64)) => { t }
+test_fn_tuple_param :: (t: (i64, i64)) => t
 
 # Test: function with complex return type
-test_fn_complex_return :: () -> Vec<Option<i64>> => { v }
+test_fn_complex_return :: () -> Vec<Option<i64>> => v
 
 
 # ============ GENERIC FUNCTIONS (10 tests) ============
 
 # Test: function with type parameter
-test_fn_type_param :: <T>() => { }
+test_fn_type_param :: <T>() => do
 
 # Test: function with type parameter and usage
-test_fn_type_param_usage :: <T>(x: T) -> T => { x }
+test_fn_type_param_usage :: <T>(x: T) -> T => x
 
 # Test: function with multiple type parameters
-test_fn_multi_type_params :: <T, U>(x: T, y: U) => { x }
+test_fn_multi_type_params :: <T, U>(x: T, y: U) => x
 
 # Test: function with generic return type
-test_fn_generic_return :: <T>() -> Vec<T> => { v }
+test_fn_generic_return :: <T>() -> Vec<T> => v
 
 # Test: function with constrained type parameter
-test_fn_constrained_type :: <T>(x: T) -> T => { x }
+test_fn_constrained_type :: <T>(x: T) -> T => x
 
 # Test: generic identity function
-test_fn_identity :: <T>(x: T) -> T => { x }
+test_fn_identity :: <T>(x: T) -> T => x
 
 # Test: generic with Vec parameter
-test_fn_generic_vec :: <T>(v: Vec<T>) => { v }
+test_fn_generic_vec :: <T>(v: Vec<T>) => v
 
 # Test: generic with Option
-test_fn_generic_option :: <T>(opt: Option<T>) -> T => { value }
+test_fn_generic_option :: <T>(opt: Option<T>) -> T => value
 
 # Test: generic with Result
-test_fn_generic_result :: <T, E>(res: Result<T, E>) -> T => { value }
+test_fn_generic_result :: <T, E>(res: Result<T, E>) -> T => value
 
 # Test: generic with nested types
-test_fn_generic_nested :: <T>(v: Vec<Vec<T>>) => { v }
+test_fn_generic_nested :: <T>(v: Vec<Vec<T>>) => v
 
 
 # ============ ASYNC FUNCTIONS (5 tests) ============
 
 # Test: simple async function
-test_fn_async_simple :: async () => { }
+test_fn_async_simple :: async () => do
 
 # Test: async function with return type
-test_fn_async_return :: async () -> i64 => { 42 }
+test_fn_async_return :: async () -> i64 => 42
 
 # Test: async function with parameters
-test_fn_async_params :: async (x: i64) -> i64 => { x }
+test_fn_async_params :: async (x: i64) -> i64 => x
 
 # Test: async generic function
-test_fn_async_generic :: async <T>(x: T) -> T => { x }
+test_fn_async_generic :: async <T>(x: T) -> T => x
 
 # Test: async function with await
-test_fn_async_await :: async () => {
+test_fn_async_await :: async () => do
     result := await_call().await
     result
-}
 
 
 # ============ FUNCTION PARAMETERS (10 tests) ============
 
 # Test: parameter with default value
-test_fn_default_param :: (x: i64 = 10) -> i64 => { x }
+test_fn_default_param :: (x: i64 = 10) -> i64 => x
 
 # Test: multiple parameters with defaults
-test_fn_multi_defaults :: (x: i64 = 1, y: i64 = 2) -> i64 => { x + y }
+test_fn_multi_defaults :: (x: i64 = 1, y: i64 = 2) -> i64 => x + y
 
 # Test: mixed parameters with and without defaults
-test_fn_mixed_defaults :: (x: i64, y: i64 = 10) -> i64 => { x + y }
+test_fn_mixed_defaults :: (x: i64, y: i64 = 10) -> i64 => x + y
 
 # Test: parameter without type annotation
-test_fn_inferred_param :: (x) => { x }
+test_fn_inferred_param :: (x) => x
 
 # Test: trailing comma in parameters
-test_fn_trailing_comma :: (x: i64, y: i64,) -> i64 => { x + y }
+test_fn_trailing_comma :: (x: i64, y: i64,) -> i64 => x + y
 
 # Test: self parameter
-test_fn_self :: (self) => { self }
+test_fn_self :: (self) => self
 
 # Test: reference self parameter
-test_fn_ref_self :: (&self) => { self }
+test_fn_ref_self :: (&self) => self
 
 # Test: mutable reference self
-test_fn_mut_self :: (&mut self) => { self }
+test_fn_mut_self :: (&mut self) => do self }
 
 # Test: pointer self
-test_fn_ptr_self :: (*self) => { self }
+test_fn_ptr_self :: (*self) => do self }
 
 # Test: complex parameter types
-test_fn_complex_params :: (v: Vec<i64>, opt: Option<bool>, res: Result<i64, bool>) => { v }
+test_fn_complex_params :: (v: Vec<i64>, opt: Option<bool>, res: Result<i64, bool>) => do v }
 
 
 # ============ CONST FUNCTIONS (5 tests) ============
 
 # Test: const function declaration
-test_const_fn :: () -> i64 = { 42 }
+test_const_fn :: () -> i64 = do 42 }
 
 # Test: const with type params
-test_const_fn_generic :: <T>() -> Vec<T> = { v }
+test_const_fn_generic :: <T>() -> Vec<T> = v
 
 # Test: const async function
-test_const_async_fn :: async () -> i64 = { 42 }
+test_const_async_fn :: async () -> i64 = 42
 
 # Test: const function with parameters
-test_const_fn_params :: (x: i64) -> i64 = { x }
+test_const_fn_params :: (x: i64) -> i64 = x
 
 # Test: const function complex
-test_const_fn_complex :: <T>(x: T, y: T) -> T = { x }
+test_const_fn_complex :: <T>(x: T, y: T) -> T = x

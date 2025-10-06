@@ -1,7 +1,7 @@
 # Test program for collections module
 # This program tests that the collections module can be imported and basic operations work
 
-main :: () -> i32 => {
+main :: () -> i32 => do
     # Test Vec
     vec := Vec::new()
     vec.push(1)
@@ -38,4 +38,3 @@ main :: () -> i32 => {
 
     println("All collection tests passed!")
     0
-}

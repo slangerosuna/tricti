@@ -8,25 +8,20 @@ use core::errors
 global_timestamp_counter: u64 := 0
 
 # Get current timestamp (monotonically increasing counter for now)
-current_timestamp :: () -> u64 => {
+current_timestamp :: () -> u64 => do
     global_timestamp_counter += 1
     global_timestamp_counter
-}
 
 # Reset timestamp counter (for testing)
-reset_timestamp :: () -> none => {
+reset_timestamp :: () => do
     global_timestamp_counter = 0
-}
 
 # Memory allocation (extern functions provided by runtime)
 extern alloc :: (size: u64) -> *raw none
 extern dealloc :: (ptr: *raw none) -> none
 
 # Platform capabilities
-platform_has_feature :: (feature: String) -> bool => {
-    match feature {
-        "timestamp" => true,
-        "alloc" => true,
-        _ => false,
-    }
-}
+platform_has_feature :: (feature: String) -> bool => match feature:
+    "timestamp" => true,
+    "alloc" => true,
+    _ => false,

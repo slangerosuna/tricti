@@ -4,522 +4,398 @@
 # ============ IF/ELSE STATEMENTS (20 tests) ============
 
 # Test: simple if statement
-test_if_simple :: () -> i64 => {
-    if true {
+test_if_simple :: () -> i64 => do
+    if true:
         ret 1
-    }
     0
-}
 
 # Test: if with else
-test_if_else :: () -> i64 => {
-    if false {
+test_if_else :: () -> i64 => do
+    if false:
         ret 0
-    } else {
+    else:
         ret 1
-    }
-}
 
 # Test: if with comparison
-test_if_comparison :: () -> i64 => {
-    if (10 > 5) {
+test_if_comparison :: () -> i64 => do
+    if 10 > 5:
         ret 1
-    }
     0
-}
 
 # Test: if with complex condition
-test_if_complex_cond :: () -> i64 => {
-    if ((10 > 5) and (5 < 20)) {
+test_if_complex_cond :: () -> i64 => do
+    if (10 > 5) and (5 < 20):
         ret 1
-    }
     0
-}
 
 # Test: nested if
-test_if_nested :: () -> i64 => {
-    if true {
-        if true {
+test_if_nested :: () -> i64 => do
+    if true:
+        if true:
             ret 1
-        }
-    }
     0
-}
 
 # Test: if else if
-test_if_else_if :: () -> i64 => {
+test_if_else_if :: () -> i64 => do
     x := 5
-    if (x < 3) {
+    if x < 3:
         ret 1
-    } else {
-        if (x < 7) {
+    else:
+        if x < 7:
             ret 2
-        } else {
+        else:
             ret 3
-        }
-    }
-}
 
 # Test: if with variable
-test_if_var :: () -> i64 => {
+test_if_var :: () -> i64 => do
     x := true
-    if x {
+    if x:
         ret 1
-    }
     0
-}
 
 # Test: if with arithmetic in condition
-test_if_arith_cond :: () -> i64 => {
-    if (5 + 5 == 10) {
+test_if_arith_cond :: () -> i64 => do
+    if 5 + 5 == 10:
         ret 1
-    }
     0
-}
 
 # Test: if without else
-test_if_no_else :: () -> i64 => {
+test_if_no_else :: () -> i64 => do
     result := 0
-    if true {
+    if true:
         result = 1
-    }
     result
-}
 
 # Test: if with multiple statements
-test_if_multi_stmt :: () -> i64 => {
-    if true {
+test_if_multi_stmt :: () -> i64 => do
+    if true:
         a := 1
         b := 2
         ret a + b
-    }
     0
-}
 
 # Test: if with logical operators
-test_if_logical :: () -> i64 => {
-    if (true or false) {
+test_if_logical :: () -> i64 => do
+    if true or false:
         ret 1
-    }
     0
-}
 
 # Test: if with negation
-test_if_negation :: () -> i64 => {
-    if !false {
+test_if_negation :: () -> i64 => do
+    if !false:
         ret 1
-    }
     0
-}
 
 # Test: deeply nested if
-test_if_deep_nested :: () -> i64 => {
-    if true {
-        if true {
-            if true {
+test_if_deep_nested :: () -> i64 => do
+    if true:
+        if true:
+            if true:
                 ret 1
-            }
-        }
-    }
     0
-}
 
 # Test: if with return in both branches
-test_if_both_returns :: () -> i64 => {
-    if true {
+test_if_both_returns :: () -> i64 => do
+    if true:
         ret 1
-    } else {
+    else:
         ret 0
-    }
-}
 
 # Test: if with block expressions
-test_if_block_expr :: () -> i64 => {
+test_if_block_expr :: () -> i64 => do
     x := 5
-    if (x > 0) {
+    if x > 0:
         x = x + 1
         ret x
-    }
     0
-}
 
 # Test: if condition with parentheses
-test_if_parens :: () -> i64 => {
-    if ((5 < 10)) {
+test_if_parens :: () -> i64 => do
+    if 5 < 10:
         ret 1
-    }
     0
-}
 
 # Test: if with comparison chain
-test_if_cmp_chain :: () -> i64 => {
-    if ((5 < 10) and (10 < 20) and (20 < 30)) {
+test_if_cmp_chain :: () -> i64 => do
+    if (5 < 10) and (10 < 20) and (20 < 30):
         ret 1
-    }
     0
-}
 
 # Test: if with assignment in body
-test_if_assignment :: () -> i64 => {
+test_if_assignment :: () -> i64 => do
     x := 0
-    if true {
+    if true:
         x = 42
-    }
     x
-}
 
 # Test: if with function call in condition
-test_if_fn_call :: () -> i64 => {
-    if helper() {
+test_if_fn_call :: () -> i64 => do
+    if helper():
         ret 1
-    }
     0
-}
 
 # Test: multiple if statements
-test_if_multiple :: () -> i64 => {
+test_if_multiple :: () -> i64 => do
     result := 0
-    if true {
+    if true:
         result = 1
-    }
-    if true {
+    if true:
         result = 2
-    }
     result
-}
 
 
 # ============ MATCH EXPRESSIONS (20 tests) ============
 
 # Test: simple match
-test_match_simple :: () -> i64 => {
+test_match_simple :: () -> i64 => do
     x := 1
-    match x {
+    match x:
         value => 100
-    }
-}
 
 # Test: match with wildcard
-test_match_wildcard :: () -> i64 => {
+test_match_wildcard :: () -> i64 => do
     x := 5
-    match x {
+    match x:
         _ => 999
-    }
-}
 
 # Test: match with Option
-test_match_option :: () -> i64 => {
+test_match_option :: () -> i64 => do
     x := Option::Some(42)
-    match x {
+    match x:
         Option::Some => 1
         Option::None => 0
-    }
-}
 
 # Test: match with Result
-test_match_result :: () -> i64 => {
+test_match_result :: () -> i64 => do
     x := Result::Ok(100)
-    match x {
+    match x:
         Result::Ok => 1
         Result::Err => 0
-    }
-}
 
 # Test: match with multiple patterns
-test_match_multi_pattern :: () -> i64 => {
+test_match_multi_pattern :: () -> i64 => do
     x := 3
-    match x {
+    match x:
         value => 300
-    }
-}
 
 # Test: match with boolean
-test_match_bool :: () -> i64 => {
+test_match_bool :: () -> i64 => do
     x := true
-    match x {
+    match x:
         value => 1
-    }
-}
 
 # Test: match with block bodies
-test_match_blocks :: () -> i64 => {
+test_match_blocks :: () -> i64 => do
     x := 1
-    match x {
-        value => {
+    match x:
+        value => do
             a := 10
             a
-        }
-    }
-}
 
 # Test: nested match
-test_match_nested :: () -> i64 => {
+test_match_nested :: () -> i64 => do
     x := 1
-    match x {
-        value => {
+    match x:
+        value => do
             y := 2
-            match y {
+            match y:
                 inner => 100
-            }
-        }
-    }
-}
 
 # Test: match with static path patterns
-test_match_static_path :: () -> i64 => {
+test_match_static_path :: () -> i64 => do
     x := Status::Active
-    match x {
+    match x:
         Status::Active => 1
         Status::Inactive => 2
-    }
-}
 
 # Test: match with value binding
-test_match_value_binding :: () -> i64 => {
+test_match_value_binding :: () -> i64 => do
     x := Option::Some(42)
-    match x {
+    match x:
         Option::Some(v) => v
         Option::None => 0
-    }
-}
 
 # Test: match with complex expression
-test_match_complex_expr :: () -> i64 => {
+test_match_complex_expr :: () -> i64 => do
     x := 5 + 5
-    match x {
+    match x:
         value => 1
-    }
-}
 
 # Test: match with return in arms
-test_match_return :: () -> i64 => {
+test_match_return :: () -> i64 => do
     x := 1
-    match x {
-        value => { ret 100 }
-    }
-}
+    match x:
+        value => do ret 100 }
 
 # Test: match with arithmetic in arms
-test_match_arith :: () -> i64 => {
+test_match_arith :: () -> i64 => do
     x := 1
-    match x {
+    match x:
         value => 10 + 20
-    }
-}
 
 # Test: match with string patterns
-test_match_identifier :: () -> i64 => {
+test_match_identifier :: () -> i64 => do
     x := value
-    match x {
+    match x:
         first => 1
-    }
-}
 
 # Test: match with nested Option
-test_match_nested_option :: () -> i64 => {
+test_match_nested_option :: () -> i64 => do
     x := Option::Some(Option::Some(42))
-    match x {
+    match x:
         Option::Some => 1
         Option::None => 0
-    }
-}
 
 # Test: match with multiple enum variants
-test_match_enum_variants :: () -> i64 => {
+test_match_enum_variants :: () -> i64 => do
     x := Color::Red
-    match x {
+    match x:
         Color::Red => 1
         Color::Green => 2
         Color::Blue => 3
-    }
-}
 
 # Test: match in variable assignment
-test_match_in_var :: () -> i64 => {
+test_match_in_var :: () -> i64 => do
     x := 1
     result := match x {
         value => 100
-    }
     result
-}
 
 # Test: match with function call
-test_match_fn_call :: () -> i64 => {
+test_match_fn_call :: () -> i64 => do
     x := get_value()
-    match x {
+    match x:
         value => 100
-    }
-}
 
 # Test: match with complex patterns
-test_match_complex_patterns :: () -> i64 => {
+test_match_complex_patterns :: () -> i64 => do
     x := Pair::new(1, 2)
-    match x {
+    match x:
         Pair::new => 1
         _ => 0
-    }
-}
 
 # Test: match without trailing comma
-test_match_no_comma :: () -> i64 => {
+test_match_no_comma :: () -> i64 => do
     x := 1
-    match x {
+    match x:
         value => 100
-    }
-}
 
 
 # ============ FOR LOOPS (10 tests) ============
 
 # Test: simple for loop
-test_for_simple :: () -> i64 => {
+test_for_simple :: () -> i64 => do
     sum := 0
-    for i in range {
+    for i in range:
         sum = sum + i
-    }
     sum
-}
 
 # Test: for loop with type annotation
-test_for_typed :: () -> i64 => {
+test_for_typed :: () -> i64 => do
     sum := 0
-    for i: i64 in range {
+    for i: i64 in range:
         sum = sum + i
-    }
     sum
-}
 
 # Test: for loop over array
-test_for_array :: () => {
-    for item in items {
+test_for_array :: () => do
+    for item in items:
         process(item)
-    }
-}
 
 # Test: nested for loops
-test_for_nested :: () -> i64 => {
+test_for_nested :: () -> i64 => do
     sum := 0
-    for i in outer {
-        for j in inner {
+    for i in outer:
+        for j in inner:
             sum = sum + 1
-        }
-    }
     sum
-}
 
 # Test: for loop with complex body
-test_for_complex_body :: () => {
-    for item in collection {
+test_for_complex_body :: () => do
+    for item in collection:
         x := item + 1
         y := x * 2
         process(y)
-    }
-}
 
 # Test: for loop with break
-test_for_break :: () -> i64 => {
-    for i in range {
-        if (i > 5) {
+test_for_break :: () -> i64 => do
+    for i in range:
+        if i > 5:
             break
-        }
-    }
     0
-}
 
 # Test: for loop with return
-test_for_return :: () -> i64 => {
-    for i in range {
-        if (i == 5) {
+test_for_return :: () -> i64 => do
+    for i in range:
+        if i == 5:
             ret i
-        }
-    }
     0
-}
 
 # Test: for loop with method call
-test_for_method :: () => {
-    for item in vec.iter() {
+test_for_method :: () => do
+    for item in vec.iter():
         process(item)
-    }
-}
 
 # Test: for loop with static path
-test_for_static_path :: () => {
-    for item in Vec::new() {
+test_for_static_path :: () => do
+    for item in Vec::new():
         process(item)
-    }
-}
 
 # Test: multiple for loops
-test_for_multiple :: () -> i64 => {
+test_for_multiple :: () -> i64 => do
     sum := 0
-    for i in first {
+    for i in first:
         sum = sum + i
-    }
-    for j in second {
+    for j in second:
         sum = sum + j
-    }
     sum
-}
 
 
 # ============ RETURN STATEMENTS (10 tests) ============
 
 # Test: simple return
-test_return_simple :: () -> i64 => {
+test_return_simple :: () -> i64 => do
     ret 42
-}
 
 # Test: return with expression
-test_return_expr :: () -> i64 => {
+test_return_expr :: () -> i64 => do
     ret 10 + 20
-}
 
 # Test: return in if
-test_return_in_if :: () -> i64 => {
-    if true {
+test_return_in_if :: () -> i64 => do
+    if true:
         ret 1
-    }
     0
-}
 
 # Test: early return
-test_return_early :: () -> i64 => {
+test_return_early :: () -> i64 => do
     ret 42
     0
-}
 
 # Test: return with variable
-test_return_var :: () -> i64 => {
+test_return_var :: () -> i64 => do
     x := 100
     ret x
-}
 
 # Test: return with function call
-test_return_fn_call :: () -> i64 => {
+test_return_fn_call :: () -> i64 => do
     ret compute()
-}
 
 # Test: return with static path
-test_return_static_path :: () => {
+test_return_static_path :: () => do
     ret Vec::new()
-}
 
 # Test: return with struct literal
-test_return_struct :: () => {
+test_return_struct :: () => do
     ret { x: 1, y: 2 }
-}
 
 # Test: multiple returns in branches
-test_return_branches :: () -> i64 => {
-    if true {
+test_return_branches :: () -> i64 => do
+    if true:
         ret 1
-    } else {
+    else:
         ret 0
-    }
-}
 
 # Test: return without value
-test_return_no_value :: () => {
+test_return_no_value :: () => do
     ret
-}

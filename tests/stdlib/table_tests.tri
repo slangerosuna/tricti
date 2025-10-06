@@ -8,7 +8,7 @@ use test::test_framework
 # TABLE SCHEMA TESTS
 # =============================================================================
 
-test_table_schema_creation :: () -> TestResult => {
+test_table_schema_creation :: () -> TestResult => do
     schema := TableSchema {
         name: "users",
         columns: [
@@ -18,57 +18,48 @@ test_table_schema_creation :: () -> TestResult => {
                 constraints: [ColumnConstraint::PrimaryKey, ColumnConstraint::NotNull],
                 is_computed: false,
                 compute_expr: none,
-            },
             ColumnDef {
                 name: "name",
                 column_type: ColumnType::String,
                 constraints: [ColumnConstraint::NotNull],
                 is_computed: false,
                 compute_expr: none,
-            },
         ],
         primary_key: some "id",
         indexes: [],
-    }
 
     assert_eq(schema.name, "users", "Schema name", "table_tests.tri", 28)
-}
 
-test_table_creation :: () -> TestResult => {
+test_table_creation :: () -> TestResult => do
     schema := TableSchema {
         name: "products",
         columns: [],
         primary_key: none,
         indexes: [],
-    }
 
     table := Table::new(schema)
     
     assert_eq(table.next_row_id, 1u64, "Initial row ID", "table_tests.tri", 41)
-}
 
 # =============================================================================
 # MVCC TRANSACTION TESTS
 # =============================================================================
 
-test_begin_transaction :: () -> TestResult => {
+test_begin_transaction :: () -> TestResult => do
     schema := create_simple_schema("test_table")
     table := Table::new(schema)
     
     tx_id := table.begin_transaction()
     
-    if tx_id > 0 {
+    if tx_id > 0:
         TestResult::Pass
-    } else {
+    else:
         TestResult::Fail {
             message: "Transaction ID should be positive",
             file: "table_tests.tri",
             line: 56,
-        }
-    }
-}
 
-test_insert_and_commit :: () -> TestResult => {
+test_insert_and_commit :: () -> TestResult => do
     schema := create_simple_schema("test_table")
     table := Table::new(schema)
     
@@ -78,23 +69,18 @@ test_insert_and_commit :: () -> TestResult => {
     data := create_test_row(42u64, "test")
     
     result := table.insert(tx_id, data)
-    match result {
-        err error => {
+    match result:
+        err error => do
             ret TestResult::Fail {
                 message: "Insert failed: " + std_error_message(error),
                 file: "table_tests.tri",
                 line: 76,
-            }
-        },
-        ok row_id => {
+        ok row_id => do
             # Commit transaction
             commit_result := table.commit_transaction(tx_id)
             assert_ok(commit_result, "Commit should succeed", "table_tests.tri", 83)
-        },
-    }
-}
 
-test_transaction_isolation :: () -> TestResult => {
+test_transaction_isolation :: () -> TestResult => do
     schema := create_simple_schema("test_table")
     table := Table::new(schema)
     
@@ -103,43 +89,33 @@ test_transaction_isolation :: () -> TestResult => {
     data1 := create_test_row(1u64, "row1")
     row_id := match table.insert(tx1, data1) {
         ok value => value,
-        err error => {
+        err error => do
             ret TestResult::Fail {
                 message: "Insert failed: " + std_error_message(error),
                 file: "table_tests.tri",
                 line: 99,
-            }
-        },
-    }
     
     # Transaction 2: Should NOT see uncommitted row from tx1
     tx2 := table.begin_transaction()
     get_result := table.get(tx2, row_id)
     
-    match get_result {
-        ok none => {
+    match get_result:
+        ok none => do
             # This is correct - tx2 shouldn't see uncommitted data
             table.commit_transaction(tx1)
             TestResult::Pass
-        },
-        ok some _ => {
+        ok some _ => do
             TestResult::Fail {
                 message: "Transaction isolation violated - tx2 saw uncommitted data from tx1",
                 file: "table_tests.tri",
                 line: 117,
-            }
-        },
-        err error => {
+        err error => do
             TestResult::Fail {
                 message: "Get failed: " + std_error_message(error),
                 file: "table_tests.tri",
                 line: 123,
-            }
-        },
-    }
-}
 
-test_transaction_rollback :: () -> TestResult => {
+test_transaction_rollback :: () -> TestResult => do
     schema := create_simple_schema("test_table")
     table := Table::new(schema)
     
@@ -149,14 +125,11 @@ test_transaction_rollback :: () -> TestResult => {
     
     row_id := match table.insert(tx_id, data) {
         ok value => value,
-        err error => {
+        err error => do
             ret TestResult::Fail {
                 message: "Insert failed: " + std_error_message(error),
                 file: "table_tests.tri",
                 line: 143,
-            }
-        },
-    }
     
     # Abort transaction
     table.abort_transaction(tx_id)
@@ -165,26 +138,20 @@ test_transaction_rollback :: () -> TestResult => {
     tx2 := table.begin_transaction()
     get_result := table.get(tx2, row_id)
     
-    match get_result {
+    match get_result:
         ok none => TestResult::Pass,
-        ok some _ => {
+        ok some _ => do
             TestResult::Fail {
                 message: "Aborted row should not be visible",
                 file: "table_tests.tri",
                 line: 162,
-            }
-        },
-        err error => {
+        err error => do
             TestResult::Fail {
                 message: "Get failed: " + std_error_message(error),
                 file: "table_tests.tri",
                 line: 168,
-            }
-        },
-    }
-}
 
-test_update_creates_new_version :: () -> TestResult => {
+test_update_creates_new_version :: () -> TestResult => do
     schema := create_simple_schema("test_table")
     table := Table::new(schema)
     
@@ -197,8 +164,6 @@ test_update_creates_new_version :: () -> TestResult => {
             message: "Insert failed",
             file: "table_tests.tri",
             line: 186,
-        },
-    }
     table.commit_transaction(tx1)
     
     # Update in new transaction
@@ -207,13 +172,12 @@ test_update_creates_new_version :: () -> TestResult => {
     update_result := table.update(tx2, row_id, data2)
     
     assert_ok(update_result, "Update should succeed", "table_tests.tri", 197)
-}
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
-create_simple_schema :: (name: string) -> TableSchema => {
+create_simple_schema :: (name: string) -> TableSchema => do
     TableSchema {
         name: name,
         columns: [
@@ -223,31 +187,26 @@ create_simple_schema :: (name: string) -> TableSchema => {
                 constraints: [ColumnConstraint::PrimaryKey],
                 is_computed: false,
                 compute_expr: none,
-            },
             ColumnDef {
                 name: "value",
                 column_type: ColumnType::String,
                 constraints: [],
                 is_computed: false,
                 compute_expr: none,
-            },
         ],
         primary_key: some "id",
         indexes: [],
-    }
-}
 
-create_test_row :: (id: u64, value: string) -> *none => {
+create_test_row :: (id: u64, value: string) -> *none => do
     # In a real implementation, this would allocate and populate a struct
     # For now, return a placeholder pointer
     unsafe { none as *none }
-}
 
 # =============================================================================
 # TEST SUITE
 # =============================================================================
 
-table_test_suite :: () -> TestSuite => {
+table_test_suite :: () -> TestSuite => do
     suite("Table Runtime", [
         test("Schema creation", test_table_schema_creation),
         test("Table creation", test_table_creation),
@@ -257,4 +216,3 @@ table_test_suite :: () -> TestSuite => {
         test("Transaction rollback", test_transaction_rollback),
         test("Update creates new version", test_update_creates_new_version),
     ])
-}

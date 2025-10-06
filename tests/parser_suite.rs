@@ -4,12 +4,15 @@ use tricti::parser;
 #[test]
 fn parse_struct_field_and_static_path() {
     let src = r#"
-        Vec2 :: { x: i64, y: i64 }
-        len :: (v: Vec2) -> i64 => { 0 }
-        main :: () -> i64 => {
+        Vec2 :: struct
+            x: i64,
+            y: i64,
+
+        len :: (v: Vec2) -> i64 => 0
+
+        main :: () -> i64 => do
             println(Vec2::new)
-            0
-        }
+            ret 0
     "#
     .to_string();
 
@@ -34,10 +37,10 @@ fn parses_char_literal() {
 #[test]
 fn parses_tuple_literal_and_pattern() {
     let src = r#"
-        main :: () => {
+        main :: () => do
             pair := (40, 2)
-            value := match pair { (a, b) => a + b }
-        }
+            value := match pair:
+                (a, b) => a + b,
     "#;
 
     let program = parser::parse(src.to_string());
@@ -47,11 +50,14 @@ fn parses_tuple_literal_and_pattern() {
 #[test]
 fn parse_struct_and_method_syntax() {
     let src = r#"
-        point :: { x: i64, y: i64 }
+        point :: struct
+            x: i64,
+            y: i64,
+
         impl point {
-            sum :: (self: &mut point) -> i64 => { self.x + self.y }
+            sum :: (self: &mut point) -> i64 => self.x + self.y
         }
-        main :: () -> i64 => { 0 }
+        main :: () -> i64 => 0
     "#
     .to_string();
 
@@ -61,9 +67,8 @@ fn parse_struct_and_method_syntax() {
 #[test]
 fn parse_struct_with_optional_field() {
     let src = r#"
-        StdError :: struct {
+        StdError :: struct
             parameter: ?string,
-        }
     "#
     .to_string();
 
@@ -112,7 +117,7 @@ fn parse_const_decl_with_attributes() {
 #[test]
 fn parse_function_with_attribute() {
     let src = r#"
-        @memoize fib :: (n: i32) -> i32 => { n }
+        @memoize fib :: (n: i32) -> i32 => n
     "#;
 
     let program = parser::parse(src.to_string());
@@ -139,7 +144,7 @@ fn parse_function_with_attribute() {
 fn parse_attribute_with_identifier_arguments() {
     let src = r#"
     @trigger(ExampleSignal, Database)
-        receiver_sys :: sys () => {}
+        receiver_sys :: sys () => do
     "#;
 
     let program = parser::parse(src.to_string());
@@ -205,7 +210,9 @@ fn parse_new_vec_expression() {
 #[test]
 fn parse_if_expression_in_block() {
     let src = r#"
-        abs_i64 :: (x: i64) -> i64 => { if x < 0 { -x } else { x } }
+        abs_i64 :: (x: i64) -> i64 => do
+            if x < 0: ret -x
+            ret x
     "#
     .to_string();
 
@@ -260,10 +267,9 @@ fn parse_integer_with_underscores() {
 #[test]
 fn parse_match_with_return_and_value_arms() {
     let src = r#"
-        result := match input {
+        result := match input:
             some value => value,
             none => ret default,
-        }
     "#
     .to_string();
 
@@ -280,9 +286,8 @@ fn parse_async_system_with_query_and_resource() {
                 where display == true,
             renderer: res &mut Gui,
             input_size: f32 = 1.5,
-        ) -> none => {
+        ) -> none => do
             println("hi")
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -387,9 +392,8 @@ fn parse_system_query_without_name_defaults() {
             query: select (id: &u64)
                 from Apps,
             renderer: res &Gui,
-        ) => {
+        ) => do
             println("ok")
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -434,7 +438,7 @@ fn parse_trait_type_and_impl_for() {
         }
         my_struct :: { }
         impl my_iterator for my_struct {
-            next :: (self: &mut my_struct) -> ?i32 => { }
+            next :: (self: &mut my_struct) -> ?i32 => do
         }
     "#
     .to_string();
@@ -482,11 +486,14 @@ fn parse_trait_type_and_impl_for() {
 #[test]
 fn debug_enum_ast_prints() {
     let src = r#"
-        Color :: enum { Red, Green, Blue }
-        main :: () => {
+        Color :: enum
+            Red,
+            Green,
+            Blue,
+
+        main :: () => do
             c: Color := 2
             println(c)
-        }
     "#;
     let program = parser::parse(src.to_string());
     println!("AST: {:#?}", program);
