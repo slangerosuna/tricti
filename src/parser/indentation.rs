@@ -27,29 +27,63 @@ fn strip_trailing(line: &str) -> (&'_ str, &'_ str) {
     (&line[..trimmed.len()], &line[trimmed.len()..])
 }
 
-fn ends_with_colon(candidate: &str) -> bool {
-    if !candidate.ends_with(':') {
-        return false;
+fn split_block_colon(candidate: &str) -> Option<(&str, &str)> {
+    let mut search_end = candidate.len();
+    while let Some(pos) = candidate[..search_end].rfind(':') {
+        let before = &candidate[..pos];
+        let after = &candidate[pos + 1..];
+
+        if before.ends_with(':') {
+            search_end = pos;
+            continue;
+        }
+        if after.starts_with(':') || after.starts_with('=') {
+            search_end = pos;
+            continue;
+        }
+
+        return Some((before, after));
     }
-    if candidate.ends_with("::") {
-        return false;
-    }
-    true
+    None
+}
+
+fn leading_keyword_allows_block(head: &str) -> bool {
+    let trimmed = head.trim_start();
+    trimmed.starts_with("if ")
+        || trimmed == "if"
+        || trimmed.starts_with("else")
+        || trimmed.starts_with("for ")
+        || trimmed == "for"
+        || trimmed.starts_with("loop")
+        || trimmed.starts_with("while")
+        || trimmed.starts_with("unsafe")
+        || trimmed.starts_with("match")
 }
 
 fn convert_do_segment(segment: &str) -> Option<String> {
     if let Some(pos) = segment.find("=> do") {
         let before = &segment[..pos];
         let after = &segment[pos + 5..];
-        if after.trim().is_empty() {
+        let trimmed_after = after.trim_start();
+
+        if trimmed_after.is_empty() {
             let mut out = before.to_string();
             out.push_str("=> {");
+            return Some(out);
+        }
+        if trimmed_after.starts_with('{') {
+            let mut out = before.to_string();
+            out.push_str("=>");
+            if after.starts_with(' ') || after.starts_with('\t') {
+                out.push(' ');
+            }
+            out.push_str(trimmed_after);
             return Some(out);
         }
         let mut out = before.to_string();
         out.push_str("=> {");
         out.push(' ');
-        out.push_str(after.trim_start());
+        out.push_str(trimmed_after);
         out.push_str(" }");
         return Some(out);
     }
@@ -82,11 +116,31 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
     }
 
     let (stripped, trailing_ws) = strip_trailing(segment);
-    if ends_with_colon(stripped) {
-        let mut base = stripped[..stripped.len() - 1].trim_end().to_string();
-        base.push_str(" {");
-        base.push_str(trailing_ws);
-        return (base, true);
+    if let Some((head, tail)) = split_block_colon(stripped) {
+        if leading_keyword_allows_block(head) {
+            let inline_body = tail.trim_start();
+            let trimmed_head = head.trim_end();
+            if inline_body.is_empty() {
+                let mut base = trimmed_head.to_string();
+                base.push_str(" {");
+                base.push_str(trailing_ws);
+                return (base, true);
+            }
+            if inline_body.starts_with('{') {
+                let mut base = trimmed_head.to_string();
+                base.push(' ');
+                base.push_str(inline_body);
+                base.push_str(trailing_ws);
+                return (base, false);
+            }
+            let mut base = trimmed_head.to_string();
+            base.push_str(" {");
+            base.push(' ');
+            base.push_str(inline_body);
+            base.push_str(" }");
+            base.push_str(trailing_ws);
+            return (base, false);
+        }
     }
 
     (segment.to_string(), false)

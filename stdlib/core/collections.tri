@@ -8,26 +8,24 @@ use core::traits
 # VEC - Dynamic length array (should have syntax sugar to allow writing Vec<T> as [T])
 # =============================================================================
 
-Vec<T> :: {
+Vec<T> :: struct
     data: *raw T,
     len: u64,
     capacity: u64,
-}
 
-impl<T> Vec<T> {
-    new :: () -> Vec<T> => {
+impl<T> Vec<T>:
+    new :: () -> Vec<T> =>
         Vec<T> {
             data: unsafe { 0 as *raw T },
             len: 0,
             capacity: 0,
         }
-    }
 
     # next power of two >= n (returns 1 for n == 0)
     # undefined for n = u64::MAX. this is ok because that exceeds the 64-bit addressing scheme anyways
     # @allow(dead_code) # because the part after the @ifdef is unreachable if it's defined
-    ceil_power_2 :: (n: u64) -> u64 => {
-        if n == 0 { ret 1 }
+    ceil_power_2 :: (n: u64) -> u64 => do
+        if n == 0: ret 1
 
         # @ifdef(__builtin_clzll) {
         #     ret 1u64 << (64 - __builtin_clzll(n - 1))
@@ -43,120 +41,98 @@ impl<T> Vec<T> {
         m = m or (m >> 32)
 
         ret m + 1
-    }
 
-    with_capacity :: (capacity: u64) -> Vec<T> => {
+    with_capacity :: (capacity: u64) -> Vec<T> => do
         cap := ceil_power_2(capacity)
-    data := unsafe { alloc(sizeof<T>() * cap) as *raw T }
+        data := unsafe { alloc(sizeof<T>() * cap) as *raw T }
 
-        Vec<T> {
+        ret Vec<T> {
             data: data,
             len: 0,
             capacity: cap,
         }
-    }
 
     # Set capacity to exactly `capacity`. Supports shrinking and growing.
     # If capacity >= current, allocates a new buffer, moves existing elements via __memmov,
     # and updates the pointer. If self.len >= capacity, drops elements above new capacity
     # (calls destructors) before resizing.
-    set_capacity :: (&mut self, capacity: u64) => {
-        if capacity == self.capacity { ret }
+    set_capacity :: (&mut self, capacity: u64) => do
+        if capacity == self.capacity: ret
 
         # Workaround for parser < bug
-    if self.len >= capacity and capacity >= 0 {
-        for i in capacity..self.len {
-                unsafe {
-                    drop(*(self.data + i))
-                }
-            }
+        if self.len >= capacity and capacity >= 0:
+            for i in capacity..self.len:
+                unsafe: drop(*(self.data + i))
+                
             self.len = capacity
-        }
 
-        if capacity == 0 {
+        if capacity == 0:
             # free old storage and reset pointer
-            if self.capacity > 0 {
-                unsafe { dealloc(self.data as *raw u8) }
-            }
+            if self.capacity > 0:
+                unsafe: dealloc(self.data as *raw u8)
+
             self.data = unsafe { 0 as *raw T }
             self.capacity = 0
             ret
-        }
 
         # Allocate new buffer
-    new_data := unsafe { alloc(sizeof<T>() * capacity) as *raw T }
+        new_data := unsafe { alloc(sizeof<T>() * capacity) as *raw T }
 
         # Workaround for parser < bug
-        if self.len >= 1 {
+        if self.len >= 1:
             # fallback: element-wise move (may call T's move semantics)
-            for i in 0..self.len {
-                unsafe {
-                    *(new_data + i) = *(self.data + i)
-                }
-            }
-        }
+            for i in 0..self.len: unsafe: *(new_data + i) = *(self.data + i)
 
         # free old buffer
-        if self.capacity > 0 {
-            unsafe { dealloc(self.data as *raw u8) }
-        }
+        if self.capacity > 0: unsafe: dealloc(self.data as *raw u8)
 
         self.data = new_data
         self.capacity = capacity
-    }
 
     # ensure capacity grows to at least `capacity` using ceil_power_2
-    extend_capacity :: (&mut self, capacity: u64) => {
+    extend_capacity :: (&mut self, capacity: u64) => do
         target := ceil_power_2(capacity)
-        if target <= self.capacity { ret }
+        if target <= self.capacity: ret
         self.set_capacity(target)
-    }
 
-    push :: (&mut self, value: T) => {
-        if self.len >= self.capacity {
-            next := if self.capacity == 0 { 1 } else { self.capacity * 2 }
+    push :: (&mut self, value: T) => do
+        if self.len >= self.capacity:
+            next := if self.capacity == 0: 1
+                else: self.capacity * 2
             self.extend_capacity(next)
-        }
 
-        unsafe {
-            *(self.data + self.len) = value
-        }
+        unsafe: *(self.data + self.len) = value
         self.len += 1
-    }
 
-    pop :: (&mut self) -> ?T => {
-        if self.len == 0 { ret none }
+    pop :: (&mut self) -> ?T => do
+        if self.len == 0: ret none
         self.len -= 1
         value := unsafe { *(self.data + self.len) }
 
-        some value
-    }
+        ret some value
 
-    get :: (&self, index: u64) -> ?T => {
-        if index >= self.len { ret none }
-        some unsafe { *(self.data + index) }
-    }
+    get :: (&self, index: u64) -> ?T =>
+        if index >= self.len: ret none
+        else some unsafe { *(self.data + index) }
 
-    set :: (&mut self, index: u64, value: T) -> bool => {
-        if index >= self.len { ret false }
-        unsafe { *(self.data + index) = value }
+    set :: (&mut self, index: u64, value: T) -> bool => do
+        if index >= self.len: ret false
+        unsafe: *(self.data + index) = value
         true
-    }
 
-    len :: (&self) -> u64 => { self.len }
-    is_empty :: (&self) -> bool => { self.len == 0 }
+    len :: (&self) -> u64 => self.len
+    is_empty :: (&self) -> bool => self.len == 0
 }
 
-impl Drop for Vec<T> {
-    drop :: (*self) => {
-        if self.capacity == 0 { ret }
+impl Drop for Vec<T>:
+    drop :: (*self) => do
+        if self.capacity == 0: ret
 
         # drop all elements
-    for i in 0..self.len {
-            unsafe { drop(*(self.data + i)) }
-        }
+        for i in 0..self.len:
+            unsafe: drop(*(self.data + i))
 
-        unsafe { dealloc(self.data as *raw u8) }
+        unsafe: dealloc(self.data as *raw u8)
         self.data = unsafe { 0 as *raw T }
         self.len = 0
         self.capacity = 0
@@ -165,588 +141,6 @@ impl Drop for Vec<T> {
 
 # =============================================================================
 # LINKEDLIST - Doubly linked list
-# =============================================================================
-
-# TODO
-
-# =============================================================================
-# HASHMAP - Hash table map (Concrete implementations)
-# =============================================================================
-
-# Simple hash function for u64 keys
-hash_u64 :: (key: u64) -> u64 => {
-    key
-}
-
-# =============================================================================
-# LEGACY MVCC HASHMAP CODE - COMMENTED OUT
-# =============================================================================
-# The following code uses empty array literal syntax [] which is not supported
-# by the current parser. This code is legacy - TriCTI now uses PostgreSQL for
-# database/MVCC functionality. Uncomment if empty array syntax is added to parser.
-# Lines 186-508 commented out on 2025-10-01
-# =============================================================================
-
-# # Bucket entry for HashMap_U64_TableRow
-# HashEntry_U64_TableRow :: {
-#     key: u64,
-#     value: TableRow,
-#     occupied: bool,
-# }
-# 
-# # HashMap for u64 -> TableRow (used in Table.rows)
-# HashMap_U64_TableRow :: {
-#     buckets: [HashEntry_U64_TableRow; 64],
-#     size: u64,
-# }
-# 
-# impl HashMap_U64_TableRow {
-#     new :: () -> HashMap_U64_TableRow => {
-#         empty_buckets: [HashEntry_U64_TableRow; 64] = [
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#             HashEntry_U64_TableRow { key: 0, value: TableRow { id: 0, versions: [], current_version: 0 }, occupied: false },
-#         ]
-#         
-#         HashMap_U64_TableRow {
-#             buckets: empty_buckets,
-#             size: 0,
-#         }
-#     }
-#     
-#     insert :: (&mut self, key: u64, value: TableRow) -> none => {
-#         hash := hash_u64(key)
-#         idx := hash % 64
-#         
-#         # Linear probing
-#         for i in 0:64 {
-#             probe_idx := (idx + i) % 64
-#             if ~self.buckets[probe_idx].occupied || self.buckets[probe_idx].key == key {
-#                 self.buckets[probe_idx] = HashEntry_U64_TableRow {
-#                     key: key,
-#                     value: value,
-#                     occupied: true,
-#                 }
-#                 if ~self.buckets[probe_idx].occupied {
-#                     self.size += 1
-#                 }
-#                 ret
-#             }
-#         }
-#     }
-#     
-#     get :: (&self, key: u64) -> ?&TableRow => {
-#         hash := hash_u64(key)
-#         idx := hash % 64
-#         
-#         for i in 0:64 {
-#             probe_idx := (idx + i) % 64
-#             if self.buckets[probe_idx].occupied && self.buckets[probe_idx].key == key {
-#                 ret some &self.buckets[probe_idx].value
-#             }
-#             if ~self.buckets[probe_idx].occupied {
-#                 ret none
-#             }
-#         }
-#         
-#         none
-#     }
-#     
-#     get_mut :: (&mut self, key: u64) -> ?&mut TableRow => {
-#         hash := hash_u64(key)
-#         idx := hash % 64
-#         
-#         for i in 0:64 {
-#             probe_idx := (idx + i) % 64
-#             if self.buckets[probe_idx].occupied && self.buckets[probe_idx].key == key {
-#                 ret some &mut self.buckets[probe_idx].value
-#             }
-#             if ~self.buckets[probe_idx].occupied {
-#                 ret none
-#             }
-#         }
-#         
-#         none
-#     }
-#     
-#     remove :: (&mut self, key: u64) -> bool => {
-#         hash := hash_u64(key)
-#         idx := hash % 64
-#         
-#         for i in 0:64 {
-#             probe_idx := (idx + i) % 64
-#             if self.buckets[probe_idx].occupied && self.buckets[probe_idx].key == key {
-#                 self.buckets[probe_idx].occupied = false
-#                 self.size -= 1
-#                 ret true
-#             }
-#             if ~self.buckets[probe_idx].occupied {
-#                 ret false
-#             }
-#         }
-#         
-#         false
-#     }
-# }
-# 
-# # Bucket entry for HashMap_U64_TransactionLog
-# HashEntry_U64_TransactionLog :: {
-#     key: u64,
-#     value: TransactionLog,
-#     occupied: bool,
-# }
-# 
-# # HashMap for u64 -> TransactionLog (used in Table.active_transactions)
-# HashMap_U64_TransactionLog :: {
-#     buckets: [HashEntry_U64_TransactionLog; 64],
-#     size: u64,
-# }
-# 
-# impl HashMap_U64_TransactionLog {
-#     new :: () -> HashMap_U64_TransactionLog => {
-#         empty_buckets: [HashEntry_U64_TransactionLog; 64] = [
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#             HashEntry_U64_TransactionLog { key: 0, value: TransactionLog { transaction_id: 0, state: TransactionState::Aborted { aborted_at: 0 }, read_snapshot: 0, write_set: [] }, occupied: false },
-#         ]
-#         
-#         HashMap_U64_TransactionLog {
-#             buckets: empty_buckets,
-#             size: 0,
-#         }
-#     }
-#     
-#     insert :: (&mut self, key: u64, value: TransactionLog) -> none => {
-#         hash := hash_u64(key)
-#         idx := hash % 64
-#         
-#         for i in 0:64 {
-#             probe_idx := (idx + i) % 64
-#             if ~self.buckets[probe_idx].occupied || self.buckets[probe_idx].key == key {
-#                 self.buckets[probe_idx] = HashEntry_U64_TransactionLog {
-#                     key: key,
-#                     value: value,
-#                     occupied: true,
-#                 }
-#                 if ~self.buckets[probe_idx].occupied {
-#                     self.size += 1
-#                 }
-#                 ret
-#             }
-#         }
-#     }
-#     
-#     get :: (&self, key: u64) -> ?&TransactionLog => {
-#         hash := hash_u64(key)
-#         idx := hash % 64
-#         
-#         for i in 0:64 {
-#             probe_idx := (idx + i) % 64
-#             if self.buckets[probe_idx].occupied && self.buckets[probe_idx].key == key {
-#                 ret some &self.buckets[probe_idx].value
-#             }
-#             if ~self.buckets[probe_idx].occupied {
-#                 ret none
-#             }
-#         }
-#         
-#         none
-#     }
-#     
-#     get_mut :: (&mut self, key: u64) -> ?&mut TransactionLog => {
-#         hash := hash_u64(key)
-#         idx := hash % 64
-#         
-#         for i in 0:64 {
-#             probe_idx := (idx + i) % 64
-#             if self.buckets[probe_idx].occupied && self.buckets[probe_idx].key == key {
-#                 ret some &mut self.buckets[probe_idx].value
-#             }
-#             if ~self.buckets[probe_idx].occupied {
-#                 ret none
-#             }
-#         }
-#         
-#         none
-#     }
-#     
-#     remove :: (&mut self, key: u64) -> bool => {
-#         hash := hash_u64(key)
-#         idx := hash % 64
-#         
-#         for i in 0:64 {
-#             probe_idx := (idx + i) % 64
-#             if self.buckets[probe_idx].occupied && self.buckets[probe_idx].key == key {
-#                 self.buckets[probe_idx].occupied = false
-#                 self.size -= 1
-#                 ret true
-#             }
-#             if ~self.buckets[probe_idx].occupied {
-#                 ret false
-#             }
-#         }
-#         
-#         false
-#     }
-# }
-
-# =============================================================================
-# CONCRETE VEC_U64 - Simple vector for u64 (C-style API for tests)
-# =============================================================================
-
-Vec_u64 :: struct {
-    data: *raw u64,
-    len: u64,
-    capacity: u64,
-}
-
-Vec_u64_new :: () -> *Vec_u64 => {
-    v := unsafe { alloc(24) as *Vec_u64 }
-    v.data = unsafe { 0 as *raw u64 }
-    v.len = 0
-    v.capacity = 0
-    v
-}
-
-Vec_u64_len :: (v: *Vec_u64) -> u64 => {
-    v.len
-}
-
-Vec_u64_push :: (v: *Vec_u64, value: u64) => {
-    if v.len >= v.capacity {
-        new_cap := if v.capacity == 0 { 16 } else { v.capacity * 2 }
-    new_data := unsafe { alloc(new_cap * 8) as *raw u64 }
-        
-        # Copy old data
-    for i in 0..v.len {
-            unsafe {
-                *(new_data + i) = *(v.data + i)
-            }
-        }
-        
-        # Free old data if it exists
-        if v.capacity > 0 {
-            dealloc(v.data as *raw u8)
-        }
-        
-        v.data = new_data
-        v.capacity = new_cap
-    }
-    
-    unsafe {
-        *(v.data + v.len) = value
-    }
-    v.len = v.len + 1
-}
-
-Vec_u64_get :: (v: *Vec_u64, index: u64) -> u64 => {
-    if index >= v.len {
-        ret 0
-    }
-    unsafe {
-        *(v.data + index)
-    }
-}
-
-Vec_u64_pop :: (v: *Vec_u64) -> u64 => {
-    if v.len == 0 {
-        ret 0
-    }
-    v.len = v.len - 1
-    unsafe {
-        *(v.data + v.len)
-    }
-}
-
-Vec_u64_set :: (v: *Vec_u64, index: u64, value: u64) => {
-    # Workaround for parser < bug: ~(index >= v.len) means index < v.len
-    if ~(index >= v.len) {
-        unsafe {
-            *(v.data + index) = value
-        }
-    }
-}
-
-# =============================================================================
-# CONCRETE HASHMAP_U64_U64 - Simple hashmap for u64->u64 (C-style API)
-# =============================================================================
-
-HashEntry_u64_u64 :: struct {
-    key: u64,
-    value: u64,
-    occupied: bool,
-}
-
-HashMap_u64_u64 :: struct {
-    buckets: *raw HashEntry_u64_u64,
-    capacity: u64,
-    size: u64,
-}
-
-hash_u64_simple :: (key: u64) -> u64 => {
-    key
-}
-
-HashMap_u64_u64_new :: () -> *HashMap_u64_u64 => {
-    m := unsafe { alloc(24) as *HashMap_u64_u64 }
-    capacity := 64
-    
-    # Allocate buckets
-    m.buckets = unsafe { alloc(capacity * 24) as *raw HashEntry_u64_u64 }
-    
-    # Initialize all buckets as unoccupied
-    for i in 0..capacity {
-        entry := unsafe { m.buckets + i }
-        entry.key = 0
-        entry.value = 0
-        entry.occupied = false
-    }
-    
-    m.capacity = capacity
-    m.size = 0
-    m
-}
-
-HashMap_u64_u64_size :: (m: *HashMap_u64_u64) -> u64 => {
-    m.size
-}
-
-HashMap_u64_u64_insert :: (m: *HashMap_u64_u64, key: u64, value: u64) => {
-    hash := hash_u64_simple(key)
-    idx := hash % m.capacity
-    
-    # Linear probing
-    for i in 0..m.capacity {
-        probe_idx := (idx + i) % m.capacity
-        entry := unsafe { m.buckets + probe_idx }
-        
-    if ~entry.occupied or entry.key == key {
-            was_occupied := entry.occupied
-            entry.key = key
-            entry.value = value
-            entry.occupied = true
-            
-            if ~was_occupied {
-                m.size = m.size + 1
-            }
-            ret
-        }
-    }
-}
-
-HashMap_u64_u64_get :: (m: *HashMap_u64_u64, key: u64) -> u64 => {
-    hash := hash_u64_simple(key)
-    idx := hash % m.capacity
-    
-    for i in 0..m.capacity {
-        probe_idx := (idx + i) % m.capacity
-        entry := unsafe { m.buckets + probe_idx }
-        
-    if entry.occupied and entry.key == key {
-            ret entry.value
-        }
-        if ~entry.occupied {
-            ret 0
-        }
-    }
-    
-    0
-}
-
-HashMap_u64_u64_remove :: (m: *HashMap_u64_u64, key: u64) -> bool => {
-    hash := hash_u64_simple(key)
-    idx := hash % m.capacity
-    
-    for i in 0..m.capacity {
-        probe_idx := (idx + i) % m.capacity
-        entry := unsafe { m.buckets + probe_idx }
-        
-    if entry.occupied and entry.key == key {
-            entry.occupied = false
-            m.size = m.size - 1
-            ret true
-        }
-        if ~entry.occupied {
-            ret false
-        }
-    }
-    
-    false
-}
-
-HashMap_u64_u64_has :: (m: *HashMap_u64_u64, key: u64) -> bool => {
-    hash := hash_u64_simple(key)
-    idx := hash % m.capacity
-    
-    for i in 0..m.capacity {
-        probe_idx := (idx + i) % m.capacity
-        entry := unsafe { m.buckets + probe_idx }
-        
-    if entry.occupied and entry.key == key {
-            ret true
-        }
-        if ~entry.occupied {
-            ret false
-        }
-    }
-    
-    false
-}
-
-# =============================================================================
-# STRING OPERATIONS - COMMENTED OUT (LEGACY)
-# =============================================================================
-
-# These extern declarations were for the old MVCC HashMap code.
-# They are no longer needed as we use String methods from stdlib/core/string.tri
-# Commented out on 2025-10-01 to fix parser issues with extern syntax
-#
-# extern string_length :: (s: string) -> u64
-# extern string_equals :: (a: string, b: string) -> bool
-# extern string_concat :: (a: string, b: string) -> string
-# extern string_substring :: (s: string, start: u64, len: u64) -> string
-
-# =============================================================================
-# BTREEMAP - B-tree map (ordered map)
-# =============================================================================
-
-# TODO
-
-# =============================================================================
-# HASHSET - Hash table set
-# =============================================================================
-
-# TODO
-
-# =============================================================================
-# BTREESET - B-tree set (ordered set)
-# =============================================================================
-
-# TODO
-
-# =============================================================================
-# BINARYMAP - Binary search tree map
 # =============================================================================
 
 # TODO

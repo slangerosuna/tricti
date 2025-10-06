@@ -268,7 +268,8 @@ mod tests {
     #[test]
     fn parses_stdlib_prelude_file() {
         let src = std::fs::read_to_string("stdlib/prelude.tri").expect("failed to read prelude");
-        PnParser::parse(Rule::program, &src).expect("failed to parse stdlib prelude");
+        let desugared = indentation::desugar_indentation(&src);
+        PnParser::parse(Rule::program, &desugared).expect("failed to parse stdlib prelude");
     }
 
     #[test]
@@ -914,6 +915,9 @@ fn parse_primary_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
             statements: parse_block(inner_pair),
         },
         Rule::unsafe_block => Expression::UnsafeBlock {
+            statements: parse_block(inner_pair.into_inner().next().unwrap()),
+        },
+        Rule::do_block => Expression::Block {
             statements: parse_block(inner_pair.into_inner().next().unwrap()),
         },
         Rule::function => parse_function(inner_pair),
