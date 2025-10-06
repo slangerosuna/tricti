@@ -796,7 +796,7 @@ mod async_execution_tests {
             Some(ty("i32")),
             vec![
                 Statement::VariableDecl {
-                    name: "result".to_string(),
+                    pattern: BindingPattern::Identifier("result".to_string()),
                     type_annotation: Some(ty("i32")),
                     value: integer_expr(0),
                 },

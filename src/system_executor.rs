@@ -1,4 +1,6 @@
-use crate::ast::{Expression, ResourceAccess, Statement, SystemDef, SystemParameter};
+use crate::ast::{
+    BindingPattern, Expression, ResourceAccess, Statement, SystemDef, SystemParameter,
+};
 use crate::async_runtime::{AsyncExecutionError, SystemExecutionResult, TaskId, YieldPoint};
 use crate::semantic::SemanticContext;
 use crate::table_runtime::{ColumnValue, RowId, TableRuntime};
@@ -550,10 +552,13 @@ impl SystemStateMachineExecutor {
         context: &mut ExecutionContext,
     ) -> Result<(), AsyncExecutionError> {
         match statement {
-            Statement::VariableDecl { name, value, .. } => {
+            Statement::VariableDecl {
+                pattern,
+                value,
+                type_annotation: _,
+            } => {
                 let val = self.evaluate_expression(value, context)?;
-                context.variables.insert(name.clone(), val);
-                Ok(())
+                self.bind_pattern_value(pattern, val, context)
             }
             Statement::Assignment { target, value, .. } => {
                 if let Expression::Identifier(var_name) = target {
@@ -635,6 +640,27 @@ impl SystemStateMachineExecutor {
                 // Other expressions not implemented yet
                 Ok(ColumnValue::String("placeholder".to_string()))
             }
+        }
+    }
+}
+
+impl SystemStateMachineExecutor {
+    fn bind_pattern_value(
+        &mut self,
+        pattern: &BindingPattern,
+        value: ColumnValue,
+        context: &mut ExecutionContext,
+    ) -> Result<(), AsyncExecutionError> {
+        match pattern {
+            BindingPattern::Identifier(name) => {
+                context.variables.insert(name.clone(), value);
+                Ok(())
+            }
+            BindingPattern::Discard => Ok(()),
+            BindingPattern::Tuple(_) => Err(AsyncExecutionError::SystemError {
+                system: "executor".to_string(),
+                message: "tuple destructuring is not supported in system executor".to_string(),
+            }),
         }
     }
 }

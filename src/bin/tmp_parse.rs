@@ -299,16 +299,16 @@ fn main() {
     }
     let program = tricti::parser::parse(source);
     println!("parsed {} statements", program.statements.len());
-        let match_arm_snippet = "some ref value => some value.clone(),";
-        match DebugParser::parse(Rule::match_arm, match_arm_snippet) {
-            Ok(_) => eprintln!("match_arm snippet parsed successfully"),
-            Err(err) => eprintln!("match_arm snippet failed: {}", err),
-        }
-        let ref_tail = "value => some value.clone(),";
-        match DebugParser::parse(Rule::pattern, ref_tail) {
-            Ok(_) => eprintln!("pattern snippet parsed successfully"),
-            Err(err) => eprintln!("pattern snippet failed: {}", err),
-        }
+    let match_arm_snippet = "some ref value => some value.clone(),";
+    match DebugParser::parse(Rule::match_arm, match_arm_snippet) {
+        Ok(_) => eprintln!("match_arm snippet parsed successfully"),
+        Err(err) => eprintln!("match_arm snippet failed: {}", err),
+    }
+    let ref_tail = "value => some value.clone(),";
+    match DebugParser::parse(Rule::pattern, ref_tail) {
+        Ok(_) => eprintln!("pattern snippet parsed successfully"),
+        Err(err) => eprintln!("pattern snippet failed: {}", err),
+    }
     for (idx, stmt) in program.statements.iter().enumerate() {
         println!("statement {}: {:#?}", idx, stmt);
     }

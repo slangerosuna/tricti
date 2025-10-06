@@ -369,7 +369,7 @@ match *self {
 
     #[test]
     fn parses_some_ref_match_arm() {
-    let src = "some ref value => some value.clone(),";
+        let src = "some ref value => some value.clone(),";
         PnParser::parse(Rule::match_arm, src)
             .expect("failed to parse match arm with some ref pattern");
     }
@@ -383,8 +383,7 @@ match *self {
 
     #[test]
     fn parses_ref_pattern() {
-        PnParser::parse(Rule::pattern, "ref value")
-            .expect("failed to parse bare ref pattern");
+        PnParser::parse(Rule::pattern, "ref value").expect("failed to parse bare ref pattern");
     }
 
     #[test]
@@ -1010,7 +1009,10 @@ fn parse_tuple_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
 fn parse_binding_pattern(pair: pest::iterators::Pair<Rule>) -> BindingPattern {
     match pair.as_rule() {
         Rule::binding_pattern => {
-            let inner = pair.into_inner().next().expect("binding pattern missing inner");
+            let inner = pair
+                .into_inner()
+                .next()
+                .expect("binding pattern missing inner");
             parse_binding_pattern(inner)
         }
         Rule::binding_tuple => {
@@ -1059,9 +1061,7 @@ fn parse_some_ref_option_pattern_pair(pair: pest::iterators::Pair<Rule>) -> Expr
 
 fn parse_ref_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut inner = pair.into_inner();
-    let target = inner
-        .next()
-        .expect("ref pattern missing inner pattern");
+    let target = inner.next().expect("ref pattern missing inner pattern");
     Expression::Call {
         function: Box::new(Expression::Identifier("ref".to_string())),
         type_args: vec![],
@@ -1090,8 +1090,12 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         let pattern = if pattern_pair.as_rule() == Rule::match_arm_pattern_text {
             let raw_pattern = pattern_pair.as_str();
             let trimmed = raw_pattern.trim();
-            let mut parsed_pairs = PnParser::parse(Rule::pattern, trimmed)
-                .unwrap_or_else(|err| panic!("failed to reparse match arm pattern '{}': {:?}", trimmed, err));
+            let mut parsed_pairs = PnParser::parse(Rule::pattern, trimmed).unwrap_or_else(|err| {
+                panic!(
+                    "failed to reparse match arm pattern '{}': {:?}",
+                    trimmed, err
+                )
+            });
             let parsed_pattern_pair = parsed_pairs
                 .next()
                 .expect("reparse of match arm pattern produced no pairs");
@@ -1611,9 +1615,10 @@ fn parse_function(pair: pest::iterators::Pair<Rule>) -> Expression {
                         }
                         Rule::block => {
                             let statements = parse_block(first);
-                            body_opt = Some(FunctionBody::Expression(Box::new(
-                                Expression::Block { statements },
-                            )));
+                            body_opt =
+                                Some(FunctionBody::Expression(Box::new(Expression::Block {
+                                    statements,
+                                })));
                         }
                         _ => {}
                     }
@@ -1934,9 +1939,10 @@ fn parse_impl_method(pair: pest::iterators::Pair<Rule>) -> Statement {
                         }
                         Rule::block => {
                             let statements = parse_block(first);
-                            body_opt = Some(FunctionBody::Expression(Box::new(
-                                Expression::Block { statements },
-                            )));
+                            body_opt =
+                                Some(FunctionBody::Expression(Box::new(Expression::Block {
+                                    statements,
+                                })));
                         }
                         _ => {}
                     }

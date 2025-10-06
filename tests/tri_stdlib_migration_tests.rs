@@ -3,11 +3,8 @@
 // modern stdlib evolves toward !-based error handling.
 
 use tricti::stdlib::modern::{
-    std_err as advanced_std_err,
-    std_error_message as advanced_std_error_message,
-    std_ok as advanced_std_ok,
-    StdError as AdvancedStdError,
-    StdResult as AdvancedStdResult,
+    std_err as advanced_std_err, std_error_message as advanced_std_error_message,
+    std_ok as advanced_std_ok, StdError as AdvancedStdError, StdResult as AdvancedStdResult,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -355,10 +352,7 @@ pub fn vec_len_i64(v: &VecI64) -> usize {
 mod tests {
     use super::*;
     use super::{
-        advanced_std_err,
-        advanced_std_error_message,
-        advanced_std_ok,
-        AdvancedStdError,
+        advanced_std_err, advanced_std_error_message, advanced_std_ok, AdvancedStdError,
         AdvancedStdResult,
     };
 
@@ -412,7 +406,10 @@ mod tests {
         assert_eq!(array_append(&base, 4), vec![1, 2, 3, 4]);
         assert_eq!(array_set_at(&base, 1, 99), vec![1, 99, 3]);
         assert_eq!(array_remove_at(&base, 0), vec![2, 3]);
-        assert_eq!(array_remove_where(&base, |value| value % 2 == 0), vec![1, 3]);
+        assert_eq!(
+            array_remove_where(&base, |value| value % 2 == 0),
+            vec![1, 3]
+        );
         assert_eq!(array_filter(&base, |value| value % 2 == 1), vec![1, 3]);
         assert_eq!(array_find_index(&base, |value| *value == 2), Some(1));
         assert!(array_contains(&base, |value| *value == 3));

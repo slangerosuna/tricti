@@ -2515,26 +2515,24 @@ fn bind_binding_pattern(
             Ok(())
         }
         BindingPattern::Discard => Ok(()),
-        BindingPattern::Tuple(elements) => {
-            match value_type {
-                Type::Tuple(element_types) => {
-                    if elements.len() != element_types.len() {
-                        return Err(SemanticError::ArgumentCountMismatch {
-                            expected: element_types.len(),
-                            found: elements.len(),
-                        });
-                    }
-                    for (element_pattern, element_type) in elements.iter().zip(element_types.iter()) {
-                        bind_binding_pattern(element_pattern, element_type, context)?;
-                    }
-                    Ok(())
+        BindingPattern::Tuple(elements) => match value_type {
+            Type::Tuple(element_types) => {
+                if elements.len() != element_types.len() {
+                    return Err(SemanticError::ArgumentCountMismatch {
+                        expected: element_types.len(),
+                        found: elements.len(),
+                    });
                 }
-                _ => Err(SemanticError::TypeMismatch {
-                    expected: Type::Tuple(Vec::new()),
-                    found: value_type.clone(),
-                }),
+                for (element_pattern, element_type) in elements.iter().zip(element_types.iter()) {
+                    bind_binding_pattern(element_pattern, element_type, context)?;
+                }
+                Ok(())
             }
-        }
+            _ => Err(SemanticError::TypeMismatch {
+                expected: Type::Tuple(Vec::new()),
+                found: value_type.clone(),
+            }),
+        },
     }
 }
 
@@ -2643,11 +2641,9 @@ fn analyze_pattern(
                                                     return Ok(());
                                                 }
                                                 _ => {
-                                                    return Err(
-                                                        SemanticError::UndefinedVariable(
-                                                            "invalid pattern".to_string(),
-                                                        ),
-                                                    );
+                                                    return Err(SemanticError::UndefinedVariable(
+                                                        "invalid pattern".to_string(),
+                                                    ));
                                                 }
                                             }
                                         }
@@ -2696,11 +2692,9 @@ fn analyze_pattern(
                                                     || ref_arguments.len() != 1
                                                     || ref_arguments[0].name.is_some()
                                                 {
-                                                    return Err(
-                                                        SemanticError::UndefinedVariable(
-                                                            "invalid pattern".to_string(),
-                                                        ),
-                                                    );
+                                                    return Err(SemanticError::UndefinedVariable(
+                                                        "invalid pattern".to_string(),
+                                                    ));
                                                 }
 
                                                 if let Expression::Identifier(ref_name) =
@@ -2734,17 +2728,14 @@ fn analyze_pattern(
                                                     } else {
                                                         return Err(
                                                             SemanticError::UndefinedVariable(
-                                                                "invalid pattern"
-                                                                    .to_string(),
+                                                                "invalid pattern".to_string(),
                                                             ),
                                                         );
                                                     }
                                                 } else {
-                                                    return Err(
-                                                        SemanticError::UndefinedVariable(
-                                                            "invalid pattern".to_string(),
-                                                        ),
-                                                    );
+                                                    return Err(SemanticError::UndefinedVariable(
+                                                        "invalid pattern".to_string(),
+                                                    ));
                                                 }
                                             }
                                             _ => {
@@ -2818,11 +2809,9 @@ fn analyze_pattern(
                                                 || ref_arguments.len() != 1
                                                 || ref_arguments[0].name.is_some()
                                             {
-                                                return Err(
-                                                    SemanticError::UndefinedVariable(
-                                                        "invalid pattern".to_string(),
-                                                    ),
-                                                );
+                                                return Err(SemanticError::UndefinedVariable(
+                                                    "invalid pattern".to_string(),
+                                                ));
                                             }
                                             if let Expression::Identifier(ref_name) =
                                                 ref_func.as_ref()
@@ -2835,8 +2824,7 @@ fn analyze_pattern(
                                                                     var_name.clone(),
                                                                     Type::Reference {
                                                                         inner: Box::new(
-                                                                            payload_type
-                                                                                .clone(),
+                                                                            payload_type.clone(),
                                                                         ),
                                                                         is_mutable: false,
                                                                     },
@@ -2846,8 +2834,7 @@ fn analyze_pattern(
                                                         _ => {
                                                             return Err(
                                                                 SemanticError::UndefinedVariable(
-                                                                    "invalid pattern"
-                                                                        .to_string(),
+                                                                    "invalid pattern".to_string(),
                                                                 ),
                                                             );
                                                         }
@@ -2986,13 +2973,14 @@ fn promote_numeric_types(left: &Type, right: &Type) -> Type {
                 (numeric_info(ln), numeric_info(rn))
             {
                 if l_kind == NumericKind::Float || r_kind == NumericKind::Float {
-                    let target_bits = if l_kind == NumericKind::Float && r_kind == NumericKind::Float {
-                        l_bits.max(r_bits)
-                    } else if l_kind == NumericKind::Float {
-                        l_bits
-                    } else {
-                        r_bits
-                    };
+                    let target_bits =
+                        if l_kind == NumericKind::Float && r_kind == NumericKind::Float {
+                            l_bits.max(r_bits)
+                        } else if l_kind == NumericKind::Float {
+                            l_bits
+                        } else {
+                            r_bits
+                        };
                     let target = if target_bits >= 64 { "f64" } else { "f32" };
                     return Type::Identifier {
                         name: target.to_string(),
@@ -3268,7 +3256,7 @@ fn extract_statement_column_references(
     column_names: &std::collections::HashSet<String>,
 ) {
     match stmt {
-    Statement::VariableDecl { value, .. } => {
+        Statement::VariableDecl { value, .. } => {
             extract_column_references_recursive(value, references, column_names);
         }
         Statement::ConstDecl {
