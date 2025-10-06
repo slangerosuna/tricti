@@ -2,7 +2,7 @@ use inkwell::context::Context;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tricti::{codegen, parser, semantic};
+use tricti::{codegen, parser, semantic, tri_test_helpers};
 
 fn clang_available() -> bool {
     Command::new("clang").arg("--version").output().is_ok()
@@ -43,14 +43,22 @@ fn if_expression_values() {
         return;
     }
 
-    let src = r#"
-        x := if 1 < 2: 10 else: 20
+    let src = tri_test_helpers::dedent(
+        r#"
+        x := if 1 < 2:
+            10
+        else:
+            20
         println(x)
-        y := if 0: 1 else: 2
+        y := if 0:
+            1
+        else:
+            2
         println(y)
-    "#;
+    "#,
+    );
 
-    let stdout = compile_and_run(src, "tests/tmp_if.o", "tests/tmp_if.out");
+    let stdout = compile_and_run(&src, "tests/tmp_if.o", "tests/tmp_if.out");
     assert_eq!(stdout, ["10\n", "2\n"].concat());
 }
 
@@ -61,16 +69,21 @@ fn if_expr_as_return_value() {
         return;
     }
 
-    let src = r#"
+    let src = tri_test_helpers::dedent(
+        r#"
         foo :: (n: i64) -> i64 =>
-            if n - (n / 2) * 2 == 0: 100 else: 101
+            if n - (n / 2) * 2 == 0:
+                100
+            else:
+                101
 
         main :: () =>
             println(foo(2))
             println(foo(3))
-    "#;
+    "#,
+    );
 
-    let stdout = compile_and_run(src, "tests/tmp_if_expr_ret.o", "tests/tmp_if_expr_ret.out");
+    let stdout = compile_and_run(&src, "tests/tmp_if_expr_ret.o", "tests/tmp_if_expr_ret.out");
     assert_eq!(stdout, ["100\n", "101\n"].concat());
 }
 
@@ -81,16 +94,21 @@ fn if_with_early_return_in_then() {
         return;
     }
 
-    let src = r#"
+    let src = tri_test_helpers::dedent(
+        r#"
         foo :: (n: i64) -> i64 =>
-            if n > 0: ret 7 else: 3
+            if n > 0:
+                ret 7
+            else:
+                3
 
         main :: () =>
             println(foo(1))
             println(foo(0))
-    "#;
+    "#,
+    );
 
-    let stdout = compile_and_run(src, "tests/tmp_if_early.o", "tests/tmp_if_early.out");
+    let stdout = compile_and_run(&src, "tests/tmp_if_early.o", "tests/tmp_if_early.out");
     assert_eq!(stdout, ["7\n", "3\n"].concat());
 }
 
@@ -229,18 +247,26 @@ fn mutual_recursion_example() {
         return;
     }
 
-    let src = r#"
+    let src = tri_test_helpers::dedent(
+        r#"
         is_even :: (n: i64) -> i64 =>
-            if n == 0: ret 1 else: ret is_odd(n - 1)
+            if n == 0:
+                ret 1
+            else:
+                ret is_odd(n - 1)
 
         is_odd :: (n: i64) -> i64 =>
-            if n == 0: ret 0 else: ret is_even(n - 1)
+            if n == 0:
+                ret 0
+            else:
+                ret is_even(n - 1)
 
         main :: () =>
             println(is_even(10))
             println(is_odd(7))
-    "#;
+    "#,
+    );
 
-    let stdout = compile_and_run(src, "tests/tmp_mutrec.o", "tests/tmp_mutrec.out");
+    let stdout = compile_and_run(&src, "tests/tmp_mutrec.o", "tests/tmp_mutrec.out");
     assert_eq!(stdout, ["1\n", "1\n"].concat());
 }

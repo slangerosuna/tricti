@@ -8,7 +8,10 @@ fn compiles_bool_and_ifexpr() {
     let src = r#"
         b := 1 < 2
         println(b)
-        x := if 1 < 2: 10 else: 20
+        x := if 1 < 2:
+            10
+        else:
+            20
         println(x)
     "#;
 

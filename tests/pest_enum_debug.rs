@@ -11,12 +11,7 @@ fn pest_enum_debug() {
         }
     }
 
-    let src = r#"
-Color :: enum
-    Red,
-    Green: i64,
-    Blue,
-"#;
+    let src = "Color :: enum { Red, Green: i64, Blue }";
     let pairs = PnParser::parse(Rule::program, src).expect("parse");
 
     for pair in pairs {

@@ -138,7 +138,7 @@ expression_no_block    = { binary_expression_no_block }
 
 binary_expression = { unary ~ (WHITESPACE* ~ binary_operator ~ WHITESPACE* ~ unary)* }
 binary_expression_no_block = { unary_no_block ~ (WHITESPACE* ~ binary_operator ~ WHITESPACE* ~ unary_no_block)* }
-binary_operator = _{ op_or | op_and | op_cmp | op_shift | op_add | op_mul | op_range }
+binary_operator = _{ op_or | op_and | op_shift | op_cmp | op_add | op_mul | op_range }
 op_or         = { "or" | "xor" }
 op_and        = { "and" }
 op_cmp        = { "==" | "~=" | "<=" | ">=" | ">" | "<" }

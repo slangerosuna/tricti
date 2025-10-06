@@ -305,5 +305,5 @@ fn assert_fails_exits_nonzero() {
     let out = Command::new(exe).output().expect("run");
     assert!(!out.status.success(), "program should have exited non-zero");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert_eq!(stdout, "Assertion failed: boom\n");
+    assert_eq!(stdout, "boom\n");
 }

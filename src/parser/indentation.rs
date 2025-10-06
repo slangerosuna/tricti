@@ -28,21 +28,49 @@ fn strip_trailing(line: &str) -> (&'_ str, &'_ str) {
 }
 
 fn split_block_colon(candidate: &str) -> Option<(&str, &str)> {
-    let mut search_end = candidate.len();
-    while let Some(pos) = candidate[..search_end].rfind(':') {
-        let before = &candidate[..pos];
-        let after = &candidate[pos + 1..];
+    let mut angle_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut brace_depth = 0usize;
+    let mut idx = 0;
+    let bytes = candidate.as_bytes();
+    while idx < bytes.len() {
+        match bytes[idx] {
+            b'<' => angle_depth += 1,
+            b'>' => {
+                if angle_depth > 0 {
+                    angle_depth -= 1;
+                }
+            }
+            b'(' => paren_depth += 1,
+            b')' => {
+                if paren_depth > 0 {
+                    paren_depth -= 1;
+                }
+            }
+            b'{' => brace_depth += 1,
+            b'}' => {
+                if brace_depth > 0 {
+                    brace_depth -= 1;
+                }
+            }
+            b':' if angle_depth == 0 && paren_depth == 0 && brace_depth == 0 => {
+                let before = &candidate[..idx];
+                let after = &candidate[idx + 1..];
 
-        if before.ends_with(':') {
-            search_end = pos;
-            continue;
-        }
-        if after.starts_with(':') || after.starts_with('=') {
-            search_end = pos;
-            continue;
-        }
+                if before.ends_with(':') {
+                    idx += 1;
+                    continue;
+                }
+                if after.starts_with(':') || after.starts_with('=') {
+                    idx += 1;
+                    continue;
+                }
 
-        return Some((before, after));
+                return Some((before, after));
+            }
+            _ => {}
+        }
+        idx += 1;
     }
     None
 }
@@ -54,7 +82,8 @@ fn leading_keyword_allows_block(head: &str) -> bool {
         if matches!(
             first,
             "if" | "else" | "for" | "loop" | "while" | "unsafe" | "match" | "impl"
-        ) {
+        ) || first.starts_with("impl<")
+        {
             return true;
         }
         if first == "mod" {
@@ -62,7 +91,7 @@ fn leading_keyword_allows_block(head: &str) -> bool {
         }
         if first == "pub" {
             if let Some(next) = tokens.next() {
-                if next == "mod" {
+                if next == "mod" || next == "impl" {
                     return true;
                 }
                 if next == "fn" {
@@ -126,6 +155,71 @@ fn convert_struct_like(segment: &str, keyword: &str) -> Option<String> {
     None
 }
 
+fn convert_inline_segment(segment: &str) -> String {
+    let trimmed = segment.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if let Some((head, tail)) = split_block_colon(trimmed) {
+        if leading_keyword_allows_block(head) {
+            let inner_body = tail.trim_start();
+            let trimmed_head = head.trim_end();
+
+            if inner_body.is_empty() {
+                let mut out = trimmed_head.to_string();
+                out.push_str(" {}");
+                return out;
+            }
+
+            if let Some(idx) = inner_body.find(" else:") {
+                let (then_part, else_raw) = inner_body.split_at(idx);
+                let else_part = else_raw[" else:".len()..].trim_start();
+                let then_converted = convert_inline_segment(then_part);
+                let else_converted = convert_inline_segment(else_part);
+
+                let mut out = trimmed_head.to_string();
+                out.push_str(" {");
+                if !then_converted.is_empty() {
+                    out.push(' ');
+                    out.push_str(&then_converted);
+                    out.push(' ');
+                }
+                out.push_str("}");
+                out.push(' ');
+                out.push_str("else {");
+                if !else_converted.is_empty() {
+                    out.push(' ');
+                    out.push_str(&else_converted);
+                    out.push(' ');
+                }
+                out.push('}');
+                return out;
+            }
+
+            if inner_body.starts_with('{') {
+                let mut out = trimmed_head.to_string();
+                out.push(' ');
+                out.push_str(inner_body);
+                return out;
+            }
+
+            let nested = convert_inline_segment(inner_body);
+            let mut out = trimmed_head.to_string();
+            out.push_str(" {");
+            if !nested.is_empty() {
+                out.push(' ');
+                out.push_str(&nested);
+                out.push(' ');
+            }
+            out.push('}');
+            return out;
+        }
+    }
+
+    trimmed.to_string()
+}
+
 fn convert_block_leader(segment: &str) -> (String, bool) {
     if let Some(converted) = convert_do_segment(segment) {
         let opens_block =
@@ -150,6 +244,30 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
                 base.push_str(trailing_ws);
                 return ensure_arrow_block(base, true);
             }
+            if let Some(idx) = inline_body.find(" else:") {
+                let (then_part, else_part_raw) = inline_body.split_at(idx);
+                let else_part = else_part_raw[" else:".len()..].trim_start();
+                let then_converted = convert_inline_segment(then_part);
+                let else_converted = convert_inline_segment(else_part);
+                let mut base = trimmed_head.to_string();
+                base.push_str(" {");
+                if !then_converted.is_empty() {
+                    base.push(' ');
+                    base.push_str(&then_converted);
+                    base.push(' ');
+                }
+                base.push('}');
+                base.push(' ');
+                base.push_str("else {");
+                if !else_converted.is_empty() {
+                    base.push(' ');
+                    base.push_str(&else_converted);
+                    base.push(' ');
+                }
+                base.push('}');
+                base.push_str(trailing_ws);
+                return (base, false);
+            }
             if inline_body.starts_with('{') {
                 let mut base = trimmed_head.to_string();
                 base.push(' ');
@@ -157,13 +275,53 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
                 base.push_str(trailing_ws);
                 return ensure_arrow_block(base, false);
             }
+            let converted_inline = convert_inline_segment(inline_body);
             let mut base = trimmed_head.to_string();
             base.push_str(" {");
             base.push(' ');
-            base.push_str(inline_body);
+            base.push_str(&converted_inline);
             base.push_str(" }");
             base.push_str(trailing_ws);
             return ensure_arrow_block(base, false);
+        }
+    }
+
+    let trimmed = stripped.trim_start();
+    if trimmed.starts_with("else") {
+        let mut remainder = &trimmed["else".len()..];
+        if let Some(ch) = remainder.chars().next() {
+            if ch == ':' {
+                // fall back to default handling for colon-style else
+            } else if ch.is_whitespace() {
+                remainder = remainder.trim_start();
+                let converted = convert_inline_segment(remainder);
+                let mut base = String::from("else {");
+                if !converted.is_empty() {
+                    base.push(' ');
+                    base.push_str(&converted);
+                    base.push(' ');
+                }
+                base.push('}');
+                base.push_str(trailing_ws);
+                return (base, false);
+            } else {
+                // else followed immediately by identifier without space; treat similarly
+                let converted = convert_inline_segment(remainder);
+                let mut base = String::from("else {");
+                if !converted.is_empty() {
+                    base.push(' ');
+                    base.push_str(&converted);
+                    base.push(' ');
+                }
+                base.push('}');
+                base.push_str(trailing_ws);
+                return (base, false);
+            }
+        } else {
+            let mut base = String::from("else {");
+            base.push('}');
+            base.push_str(trailing_ws);
+            return (base, false);
         }
     }
 
@@ -190,6 +348,10 @@ pub fn desugar_indentation(source: &str) -> String {
     let mut pending: Vec<PendingBlock> = Vec::new();
     let mut open_blocks: Vec<OpenBlock> = Vec::new();
     let mut lines = normalized.split_inclusive('\n').peekable();
+    #[cfg(test)]
+    let trace = std::env::var("TRACE_INDENT").ok().is_some();
+    #[cfg(not(test))]
+    let trace = false;
 
     while let Some(raw_line) = lines.next() {
         let mut line = raw_line;
@@ -203,10 +365,36 @@ pub fn desugar_indentation(source: &str) -> String {
         let trimmed = rest.trim();
         let is_comment_line = trimmed.starts_with('#');
 
+        let mut leading_closers = if trimmed.is_empty() {
+            0
+        } else {
+            trimmed.chars().take_while(|&c| c == '}').count()
+        };
+
         if !trimmed.is_empty() {
             while let Some(last) = open_blocks.last() {
                 if indent < last.content_indent {
                     let block = open_blocks.pop().unwrap();
+                    if leading_closers > 0 {
+                        leading_closers -= 1;
+                        if trace {
+                            eprintln!(
+                                "consumed leading close at indent {} (content {}) before line {:?}",
+                                block.brace_indent,
+                                block.content_indent,
+                                trimmed
+                            );
+                        }
+                        continue;
+                    }
+                    if trace {
+                        eprintln!(
+                            "closing block at indent {} (content {}) before line {:?}",
+                            block.brace_indent,
+                            block.content_indent,
+                            trimmed
+                        );
+                    }
                     let mut close_line = String::new();
                     close_line.push_str(&" ".repeat(block.brace_indent));
                     close_line.push('}');
@@ -222,6 +410,13 @@ pub fn desugar_indentation(source: &str) -> String {
             while let Some(last) = pending.last() {
                 if indent > last.opening_indent {
                     let block = pending.pop().unwrap();
+                    if trace {
+                        eprintln!(
+                            "opening block content indent {} brace {}",
+                            indent,
+                            block.opening_indent
+                        );
+                    }
                     open_blocks.push(OpenBlock {
                         content_indent: indent,
                         brace_indent: block.opening_indent,
@@ -256,6 +451,9 @@ pub fn desugar_indentation(source: &str) -> String {
         }
 
         if opens_block {
+            if trace {
+                eprintln!("pending block indent {} for {:?}", indent, rest.trim_end());
+            }
             pending.push(PendingBlock {
                 opening_indent: indent,
             });
@@ -263,6 +461,9 @@ pub fn desugar_indentation(source: &str) -> String {
     }
 
     while let Some(block) = open_blocks.pop() {
+        if trace {
+            eprintln!("final close block indent {} content {}", block.brace_indent, block.content_indent);
+        }
         let mut close_line = String::new();
         close_line.push_str(&" ".repeat(block.brace_indent));
         close_line.push('}');
@@ -271,6 +472,9 @@ pub fn desugar_indentation(source: &str) -> String {
     }
 
     while let Some(block) = pending.pop() {
+        if trace {
+            eprintln!("final pending block indent {}", block.opening_indent);
+        }
         let mut close_line = String::new();
         close_line.push_str(&" ".repeat(block.opening_indent));
         close_line.push_str("{}");
@@ -279,4 +483,37 @@ pub fn desugar_indentation(source: &str) -> String {
     }
 
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{convert_block_leader, desugar_indentation};
+
+    #[test]
+    fn converts_for_inline_unsafe_block() {
+        let input = "for i in 0..self.len: unsafe: *(new_data + i) = *(self.data + i)\n";
+        let output = desugar_indentation(input);
+        let (converted, _) = convert_block_leader("for i in 0..self.len: unsafe: *(new_data + i) = *(self.data + i)");
+        assert!(output.contains("for i in 0..self.len { unsafe {"));
+        assert!(!output.contains(": unsafe"));
+    }
+    
+    #[test]
+    fn converts_else_without_colon() {
+        let input = "if index >= self.len: ret none\nelse some unsafe { *(self.data + index) }\n";
+        let output = desugar_indentation(input);
+        eprintln!("OUTPUT:{}", output);
+        assert!(output.contains("if index >= self.len { ret none }"));
+        assert!(output.contains("else { some unsafe { *(self.data + index) } }"));
+    }
+
+    #[test]
+    #[ignore]
+    fn dump_collections_desugar() {
+        let src = std::fs::read_to_string("stdlib/core/collections.tri").unwrap();
+        let output = desugar_indentation(&src);
+        std::fs::write("/tmp/collections_desugared.tri", &output).unwrap();
+        println!("wrote /tmp/collections_desugared.tri");
+        panic!("dump complete");
+    }
 }
