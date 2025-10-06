@@ -61,11 +61,12 @@ impl DynLib:
  
 impl Drop for DynLib:
     drop :: (*self) => do
-        if not self.is_open: ret
+        if ~self.is_open: ret
 
         ffi_dlclose(self.handle)
         self.is_open = false
         self.handle = unsafe { 0 as *raw u8 }
+*** End Patch
 
 # FFI helper functions - implemented in Rust runtime
 extern ffi_dlopen :: (path: *raw u8) -> *raw u8

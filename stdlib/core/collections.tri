@@ -27,9 +27,8 @@ impl<T> Vec<T>:
     ceil_power_2 :: (n: u64) -> u64 => do
         if n == 0: ret 1
 
-        # @ifdef(__builtin_clzll) {
+        # @ifdef(__builtin_clzll):
         #     ret 1u64 << (64 - __builtin_clzll(n - 1))
-        # }
 
         m := n - 1
 

@@ -35,369 +35,294 @@ extern isspace :: (c: i32) -> i32
 ptr_offset :: unsafe (base: *raw u8, offset: u64) -> *raw u8 => unsafe { base as u64 + offset }
 
 # String implementation with associated functions
-impl String {
+impl String:
     # Constructor: Create empty string
-    new :: () -> String => {
+    new :: () -> String => do
         data := malloc(1)
         data[0] = 0
-        {
+        ret String {
             data: data,
             len: 0,
-            capacity: 1
+            capacity: 1,
         }
-    }
 
     # Constructor: Create string from C string
-    from_cstr :: (cstr: *raw u8) -> String => {
-        if cstr == (0 as *raw u8) {
+    from_cstr :: (cstr: *raw u8) -> String => do
+        if cstr == (0 as *raw u8):
             ret String::new()
-        }
-        
+
         len := strlen(cstr)
-        if len == 0 {
+        if len == 0:
             ret String::new()
-        }
-        
+
         capacity := len + 1
         data := malloc(capacity)
         strcpy(data, cstr)
-        
-        {
+
+        ret String {
             data: data,
             len: len,
-            capacity: capacity
+            capacity: capacity,
         }
-    }
 
     # Constructor: Create string with pre-allocated capacity
-    with_capacity :: (cap: u64) -> String => {
-        if cap == 0 {
+    with_capacity :: (cap: u64) -> String => do
+        if cap == 0:
             ret String::new()
-        }
-        
+
         data := malloc(cap)
         memset(data, 0, cap)
-        
-        {
+
+        ret String {
             data: data,
             len: 0,
-            capacity: cap
+            capacity: cap,
         }
-    }
 
     # Get length
-    len :: (self: &String) -> u64 => {
-        self.len
-    }
+    len :: (&self) -> u64 => self.len
 
     # Check if empty
-    is_empty :: (self: &String) -> bool => {
-        self.len == 0
-    }
+    is_empty :: (&self) -> bool => self.len == 0
 
     # Get capacity
-    capacity :: (self: &String) -> u64 => {
-        self.capacity
-    }
+    capacity :: (&self) -> u64 => self.capacity
 
     # Reserve additional capacity
-    reserve :: (self: &mut String, additional: u64) -> none => {
+    reserve :: (&mut self, additional: u64) -> none => do
         needed := self.len + additional + 1
-        if needed <= self.capacity {
+        if needed <= self.capacity:
             ret none
-        }
-        
+
         new_cap := needed * 2
         new_data := malloc(new_cap)
-        
-        if self.data ~= (0 as *u8) {
+
+        if self.data ~= (0 as *u8):
             memcpy(new_data, self.data, self.len)
             free(self.data)
-        }
-        
+
         new_data[self.len] = 0
         self.data = new_data
         self.capacity = new_cap
-    }
 
     # Shrink capacity to fit current length
-    shrink_to_fit :: (self: &mut String) -> none => {
-        if self.len == 0 {
-            if self.data ~= (0 as *raw u8) {
+    shrink_to_fit :: (&mut self) -> none => do
+        if self.len == 0:
+            if self.data ~= (0 as *raw u8):
                 free(self.data)
-            }
             self.data = malloc(1)
             self.data[0] = 0
             self.capacity = 1
             ret none
-        }
-        
-        if self.capacity <= self.len + 1 {
+
+        if self.capacity <= self.len + 1:
             ret none
-        }
-        
+
         new_cap := self.len + 1
         new_data := malloc(new_cap)
         memcpy(new_data, self.data, self.len)
         new_data[self.len] = 0
         free(self.data)
-        
+
         self.data = new_data
         self.capacity = new_cap
-    }
 
     # Access character at index
-    char_at :: (self: &String, index: u64) -> u8 => {
-        if index >= self.len {
+    char_at :: (&self, index: u64) -> u8 => do
+        if index >= self.len:
             panic("String index out of bounds")
-        }
-        ptr_offset(self.data, index)[0]
-    }
+        ret ptr_offset(self.data, index)[0]
 
     # Get bytes as C string
-    as_cstr :: (self: &String) -> *raw u8 => {
-        if self.data == (0 as *raw u8) {
+    as_cstr :: (&self) -> *raw u8 => do
+        if self.data == (0 as *raw u8):
             ret "" as *raw u8
-        }
-        self.data
-    }
+        ret self.data
 
     # Get raw bytes pointer
-    bytes :: (self: &String) -> *raw u8 => {
-        self.data
-    }
+    bytes :: (&self) -> *raw u8 => self.data
 
     # Push string
-    push_str :: (self: &mut String, other: &String) -> none => {
-        if other.len == 0 {
+    push_str :: (&mut self, other: &String) -> none => do
+        if other.len == 0:
             ret none
-        }
-        
+
         new_len := self.len + other.len
-        if new_len + 1 >= self.capacity {
+        if new_len + 1 >= self.capacity:
             String::reserve(self, other.len)
-        }
-        
+
         memmove(ptr_offset(self.data, self.len), other.data, other.len)
         self.len = new_len
         ptr_offset(self.data, self.len)[0] = 0
-    }
 
     # Push C string
-    push_cstr :: (self: *String, cstr: *u8) -> none => {
-        if cstr == (0 as *u8) {
+    push_cstr :: (*self, cstr: *u8) -> none => do
+        if cstr == (0 as *u8):
             ret none
-        }
-        
-    cstr_in_self := (cstr >= self.data and cstr < ptr_offset(self.data, self.len))
+
+        cstr_in_self := cstr >= self.data and cstr < ptr_offset(self.data, self.len)
         offset := 0
-        if cstr_in_self {
+        if cstr_in_self:
             offset = (cstr as u64) - (self.data as u64)
-        }
-        
+
         len := strlen(cstr)
-        if len == 0 {
+        if len == 0:
             ret none
-        }
-        
+
         String::reserve(self, self.len + len)
-        
+
         src := cstr
-        if cstr_in_self {
+        if cstr_in_self:
             src = ptr_offset(self.data, offset)
-        }
-        
+
         memmove(ptr_offset(self.data, self.len), src, len)
         self.len = self.len + len
         ptr_offset(self.data, self.len)[0] = 0
-    }
 
     # Push single character
-    push_char :: (self: *String, ch: u8) -> none => {
-        if self.len + 1 >= self.capacity {
+    push_char :: (*self, ch: u8) -> none => do
+        if self.len + 1 >= self.capacity:
             String::reserve(self, 1)
-        }
-        
+
         ptr_offset(self.data, self.len)[0] = ch
         self.len = self.len + 1
         ptr_offset(self.data, self.len)[0] = 0
-    }
 
     # Pop last character
-    pop :: (self: *String) -> u8 => {
-        if self.len == 0 {
+    pop :: (*self) -> u8 => do
+        if self.len == 0:
             panic("Cannot pop from empty string")
-        }
-        
+
         self.len = self.len - 1
         ch := ptr_offset(self.data, self.len)[0]
         ptr_offset(self.data, self.len)[0] = 0
-        ch
-    }
+        ret ch
 
     # Clear string
-    clear :: (self: *String) -> none => {
-        if self.data ~= (0 as *u8) {
+    clear :: (*self) -> none => do
+        if self.data ~= (0 as *u8):
             memset(self.data, 0, self.capacity)
-        }
         self.len = 0
-    }
 
     # Truncate to length
-    truncate :: (self: *String, new_len: u64) -> none => {
-        if new_len >= self.len {
+    truncate :: (*self, new_len: u64) -> none => do
+        if new_len >= self.len:
             ret none
-        }
-        
+
         self.len = new_len
-        if self.data ~= (0 as *u8) {
+        if self.data ~= (0 as *u8):
             ptr_offset(self.data, self.len)[0] = 0
-        }
-    }
 
     # Check if contains substring
-    contains :: (self: *String, needle: *String) -> bool => {
-        if needle.len == 0 {
+    contains :: (*self, needle: *String) -> bool => do
+        if needle.len == 0:
             ret true
-        }
-        if self.len == 0 or needle.len > self.len {
+        if self.len == 0 or needle.len > self.len:
             ret false
-        }
-        
+
         result := strstr(self.data, needle.data)
-        result ~= (0 as *u8)
-    }
+        ret result ~= (0 as *u8)
 
     # Check if starts with
-    starts_with :: (self: *String, prefix: *String) -> bool => {
-        if prefix.len > self.len {
+    starts_with :: (*self, prefix: *String) -> bool => do
+        if prefix.len > self.len:
             ret false
-        }
-        if prefix.len == 0 {
+        if prefix.len == 0:
             ret true
-        }
-        
-        strncmp(self.data, prefix.data, prefix.len) == 0
-    }
+
+        ret strncmp(self.data, prefix.data, prefix.len) == 0
 
     # Check if ends with
-    ends_with :: (self: *String, suffix: *String) -> bool => {
-        if suffix.len > self.len {
+    ends_with :: (*self, suffix: *String) -> bool => do
+        if suffix.len > self.len:
             ret false
-        }
-        if suffix.len == 0 {
+        if suffix.len == 0:
             ret true
-        }
-        
+
         offset := self.len - suffix.len
-        strncmp(ptr_offset(self.data, offset), suffix.data, suffix.len) == 0
-    }
+        ret strncmp(ptr_offset(self.data, offset), suffix.data, suffix.len) == 0
 
     # Find first occurrence of substring
-    find :: (self: *String, needle: *String) -> i64 => {
-        if needle.len == 0 {
+    find :: (*self, needle: *String) -> i64 => do
+        if needle.len == 0:
             ret 0
-        }
-    if self.len == 0 or needle.len > self.len {
+        if self.len == 0 or needle.len > self.len:
             ret -1
-        }
-        
+
         result := strstr(self.data, needle.data)
-        if result == (0 as *u8) {
+        if result == (0 as *u8):
             ret -1
-        }
-        
-        (result as u64 - self.data as u64) as i64
-    }
+
+        ret (result as u64 - self.data as u64) as i64
 
     # Index of (alias for find)
-    index_of :: (self: *String, needle: *String) -> i64 => {
-        String::find(self, needle)
-    }
+    index_of :: (*self, needle: *String) -> i64 => String::find(self, needle)
 
     # Equals comparison
-    equals :: (self: *String, other: *String) -> bool => {
-        if self.len ~= other.len {
+    equals :: (*self, other: *String) -> bool => do
+        if self.len ~= other.len:
             ret false
-        }
-        if self.len == 0 {
+        if self.len == 0:
             ret true
-        }
-        
-        strcmp(self.data, other.data) == 0
-    }
+
+        ret strcmp(self.data, other.data) == 0
 
     # Compare (returns -1, 0, or 1)
-    compare :: (self: *String, other: *String) -> i32 => {
+    compare :: (*self, other: *String) -> i32 => do
         result := strcmp(self.data, other.data)
-        if result >= 0 {
-            if result >= 1 {
+        if result >= 0:
+            if result >= 1:
                 ret 1
-            }
             ret 0
-        }
-        -1
-    }
+        ret -1
 
     # Case-insensitive equality
-    eq_ignore_case :: (self: *String, other: *String) -> bool => {
-        if self.len ~= other.len {
+    eq_ignore_case :: (*self, other: *String) -> bool => do
+        if self.len ~= other.len:
             ret false
-        }
-        if self.len == 0 {
+        if self.len == 0:
             ret true
-        }
-        
-    for i in 0..self.len {
+
+        for i in 0..self.len:
             c1 := tolower(ptr_offset(self.data, i)[0] as i32)
             c2 := tolower(ptr_offset(other.data, i)[0] as i32)
-            if c1 ~= c2 {
+            if c1 ~= c2:
                 ret false
-            }
-        }
-        true
-    }
+        ret true
 
     # Convert to uppercase
-    to_uppercase :: (self: *String) -> String => {
+    to_uppercase :: (*self) -> String => do
         result := String::with_capacity(self.len + 1)
-        
-    for i in 0..self.len {
+
+        for i in 0..self.len:
             ch := ptr_offset(self.data, i)[0] as i32
             upper := toupper(ch) as u8
             String::push_char(&result, upper)
-        }
-        
-        result
-    }
+
+        ret result
 
     # Convert to lowercase
-    to_lowercase :: (self: *String) -> String => {
+    to_lowercase :: (*self) -> String => do
         result := String::with_capacity(self.len + 1)
-        
-    for i in 0..self.len {
+
+        for i in 0..self.len:
             ch := ptr_offset(self.data, i)[0] as i32
             lower := tolower(ch) as u8
             String::push_char(&result, lower)
-        }
-        
-        result
-    }
+
+        ret result
 
     # Trim whitespace from both ends
-    trim :: (self: *String) -> String => {
-        if self.len == 0 {
+    trim :: (*self) -> String => do
+        if self.len == 0:
             ret String::new()
-        }
-        
+
         start := self.len
-    for i in 0..self.len {
+        for i in 0..self.len:
             ch := ptr_offset(self.data, i)[0] as i32
-            if isspace(ch) == 0 {
+            if isspace(ch) == 0:
                 start = i
                 break
-            }
-        }
         
         if start == self.len {
             ret String::new()
@@ -474,366 +399,294 @@ impl String {
             }
         }
         
-        String::substring(self, 0, end)
-    }
+        ret String::substring(self, 0, end)
 
     # Concatenate strings
-    concat :: (self: *String, other: *String) -> String => {
+    concat :: (*self, other: *String) -> String => do
         result := String::with_capacity(self.len + other.len + 1)
         String::push_str(&result, self)
         String::push_str(&result, other)
-        result
-    }
+        ret result
 
     # Repeat string n times
-    repeat :: (self: *String, n: u64) -> String => {
-    if n == 0 or self.len == 0 {
+    repeat :: (*self, n: u64) -> String => do
+        if n == 0 or self.len == 0:
             ret String::new()
-        }
-        
+
         result := String::with_capacity(self.len * n + 1)
-    for i in 0..n {
+        for _ in 0..n:
             String::push_str(&result, self)
-        }
-        result
-    }
+        ret result
 
     # Get substring
-    substring :: (self: *String, start: u64, end: u64) -> String => {
-        if start >= self.len {
+    substring :: (*self, start: u64, end: u64) -> String => do
+        if start >= self.len:
             ret String::new()
-        }
-        if end >= self.len {
+        if end >= self.len:
             end = self.len
-        }
-        if start >= end {
+        if start >= end:
             ret String::new()
-        }
-        
+
         len := end - start
         result := String::with_capacity(len + 1)
-        
+
         memcpy(result.data, ptr_offset(self.data, start), len)
         result.len = len
         ptr_offset(result.data, len)[0] = 0
-        
-        result
-    }
+
+        ret result
 
     # Slice (alias for substring)
-    slice :: (self: *String, start: u64, end: u64) -> String => {
-        String::substring(self, start, end)
-    }
+    slice :: (*self, start: u64, end: u64) -> String => String::substring(self, start, end)
 
     # Split at index
-    split_at :: (self: *String, index: u64) -> (String, String) => {
-        if index >= self.len {
+    split_at :: (*self, index: u64) -> (String, String) => do
+        if index >= self.len:
             ret (String::substring(self, 0, self.len), String::new())
-        }
-        
+
         left := String::substring(self, 0, index)
         right := String::substring(self, index, self.len)
-        (left, right)
-    }
+        ret (left, right)
 
     # Convert to i64
-    to_i64 :: (self: *String) -> i64 => {
-        if self.len == 0 {
+    to_i64 :: (*self) -> i64 => do
+        if self.len == 0:
             ret 0
-        }
-        atoi(self.data) as i64
-    }
+        ret atoi(self.data) as i64
 
     # Convert to f64
-    to_f64 :: (self: *String) -> f64 => {
-        if self.len == 0 {
+    to_f64 :: (*self) -> f64 => do
+        if self.len == 0:
             ret 0.0
-        }
-        atof(self.data)
-    }
+        ret atof(self.data)
 
     # Create string from i64
-    from_i64 :: (value: i64) -> String => {
+    from_i64 :: (value: i64) -> String => do
         buffer := malloc(32) as *u8
         snprintf(buffer, 32, "%ld" as *u8, value)
-        
+
         result := String::from_cstr(buffer)
         free(buffer)
-        result
-    }
+        ret result
 
     # Create string from u64 (without i64 cast to avoid overflow)
-    from_u64 :: (value: u64) -> String => {
-        if value == 0 {
+    from_u64 :: (value: u64) -> String => do
+        if value == 0:
             ret String::from_cstr("0" as *u8)
-        }
-        
+
         result := String::new()
         n := value
         digits: [u8; 20] = [0 as u8; 20]
         count := 0
-        
-        loop {
-            if n > 0 {
+
+        loop:
+            if n > 0:
                 digits[count] = ((n % 10) as u8) + 48
                 n = n / 10
                 count = count + 1
-            } else {
+            else:
                 break
-            }
-        }
-        
+
         i := count
-        loop {
-            if i > 0 {
+        loop:
+            if i > 0:
                 i = i - 1
                 String::push_char(&result, digits[i])
-            } else {
+            else:
                 break
-            }
-        }
-        
-        result
-    }
+
+        ret result
 
     # Create string from f64
-    from_f64 :: (value: f64) -> String => {
+    from_f64 :: (value: f64) -> String => do
         buffer := malloc(64) as *u8
         snprintf(buffer, 64, "%f" as *u8, value)
-        
+
         result := String::from_cstr(buffer)
         free(buffer)
-        result
-    }
+        ret result
 
     # Iterate over characters with callback
-    each_char :: (self: *String, callback: (u8) -> none) -> none => {
-    for i in 0..self.len {
+    each_char :: (*self, callback: (u8) -> none) -> none => do
+        for i in 0..self.len:
             ch := ptr_offset(self.data, i)[0]
             callback(ch)
-        }
-    }
 
     # Clone/copy string
-    clone :: (self: *String) -> String => {
-        String::substring(self, 0, self.len)
-    }
+    clone :: (*self) -> String => String::substring(self, 0, self.len)
 
     # Destroy string and free memory
-    destroy :: (self: *String) -> none => {
-        if self.data ~= (0 as *u8) {
+    destroy :: (*self) -> none => do
+        if self.data ~= (0 as *u8):
             free(self.data)
             self.data = 0 as *u8
-        }
         self.len = 0
         self.capacity = 0
-    }
 
     # Replace first occurrence
-    replace_first :: (self: *String, old: *String, new: *String) -> String => {
+    replace_first :: (*self, old: *String, new: *String) -> String => do
         index := String::find(self, old)
-        if index < 0 {
+        if index < 0:
             ret String::clone(self)
-        }
-        
+
         result := String::with_capacity(self.len - old.len + new.len + 1)
-        
+
         left := String::substring(self, 0, index as u64)
         right := String::substring(self, (index as u64) + old.len, self.len)
         String::push_str(&result, &left)
         String::push_str(&result, new)
         String::push_str(&result, &right)
-        
-        result
-    }
+
+        ret result
 
     # Count occurrences of character
-    count_char :: (self: *String, ch: u8) -> u64 => {
+    count_char :: (*self, ch: u8) -> u64 => do
         count := 0
-    for i in 0..self.len {
-            if ptr_offset(self.data, i)[0] == ch {
+        for i in 0..self.len:
+            if ptr_offset(self.data, i)[0] == ch:
                 count = count + 1
-            }
-        }
-        count
-    }
+        ret count
 
     # Reverse string
-    reverse :: (self: *String) -> String => {
-        if self.len <= 1 {
+    reverse :: (*self) -> String => do
+        if self.len <= 1:
             ret String::clone(self)
-        }
-        
+
         result := String::with_capacity(self.len + 1)
         i := 0
-        loop {
-            if i < self.len {
+        loop:
+            if i < self.len:
                 idx := self.len - 1 - i
                 String::push_char(&result, ptr_offset(self.data, idx)[0])
                 i = i + 1
-            } else {
+            else:
                 break
-            }
-        }
-        result
-    }
+        ret result
 
     # Parse string to i64
-    parse_i64 :: (self: *String) -> ?i64 => {
-        if self.len == 0 {
+    parse_i64 :: (*self) -> ?i64 => do
+        if self.len == 0:
             ret none
-        }
-        
+
         trimmed := String::trim(self)
-        if trimmed.len == 0 {
+        if trimmed.len == 0:
             ret none
-        }
-        
+
         start_idx := 0
         is_negative := false
-        
+
         first_char := ptr_offset(trimmed.data, 0)[0]
-        if first_char == 45 {
+        if first_char == 45:
             is_negative = true
             start_idx = 1
-        } else if first_char == 43 {
+        elif first_char == 43:
             start_idx = 1
-        }
-        
-        if start_idx >= trimmed.len {
+
+        if start_idx >= trimmed.len:
             ret none
-        }
-        
+
         result: i64 = 0
-    for i in start_idx..trimmed.len {
+        for i in start_idx..trimmed.len:
             ch := ptr_offset(trimmed.data, i)[0]
-            if ch < 48 or ch > 57 {
+            if ch < 48 or ch > 57:
                 ret none
-            }
             digit := (ch - 48) as i64
-            
-            if is_negative {
-                if result < -922337203685477580 {
+
+            if is_negative:
+                if result < -922337203685477580:
                     ret none
-                }
-                if result == -922337203685477580 and digit > 8 {
+                if result == -922337203685477580 and digit > 8:
                     ret none
-                }
                 result = result * 10 - digit
-            } else {
-                if result > 922337203685477580 {
+            else:
+                if result > 922337203685477580:
                     ret none
-                }
-                if result == 922337203685477580 and digit > 7 {
+                if result == 922337203685477580 and digit > 7:
                     ret none
-                }
                 result = result * 10 + digit
-            }
-        }
-        
-        some result
-    }
+
+        ret some result
 
     # Parse string to u64
-    parse_u64 :: (self: *String) -> ?u64 => {
-        if self.len == 0 {
+    parse_u64 :: (*self) -> ?u64 => do
+        if self.len == 0:
             ret none
-        }
-        
+
         trimmed := String::trim(self)
-        if trimmed.len == 0 {
+        if trimmed.len == 0:
             ret none
-        }
-        
+
         start_idx := 0
         first_char := ptr_offset(trimmed.data, 0)[0]
-        if first_char == 43 {
+        if first_char == 43:
             start_idx = 1
-        } else if first_char == 45 {
+        elif first_char == 45:
             ret none
-        }
-        
-        if start_idx >= trimmed.len {
+
+        if start_idx >= trimmed.len:
             ret none
-        }
-        
+
         result: u64 = 0
-    for i in start_idx..trimmed.len {
+        for i in start_idx..trimmed.len:
             ch := ptr_offset(trimmed.data, i)[0]
-            if ch < 48 or ch > 57 {
+            if ch < 48 or ch > 57:
                 ret none
-            }
             digit := (ch - 48) as u64
-            
-            if result > 1844674407370955161 {
+
+            if result > 1844674407370955161:
                 ret none
-            }
-            if result == 1844674407370955161 and digit > 5 {
+            if result == 1844674407370955161 and digit > 5:
                 ret none
-            }
             result = result * 10 + digit
-        }
-        
-        some result
-    }
+
+        ret some result
 
     # Parse string to f64
-    parse_f64 :: (self: *String) -> ?f64 => {
-        if self.len == 0 {
+    parse_f64 :: (*self) -> ?f64 => do
+        if self.len == 0:
             ret none
-        }
-        
+
         trimmed := String::trim(self)
-        if trimmed.len == 0 {
+        if trimmed.len == 0:
             ret none
-        }
-        
+
         has_digit := false
         has_dot := false
         start_idx := 0
-        
+
         first_char := ptr_offset(trimmed.data, 0)[0]
-    if first_char == 45 or first_char == 43 {
+        if first_char == 45 or first_char == 43:
             start_idx = 1
-        }
-        
-    for i in start_idx..trimmed.len {
+
+        for i in start_idx..trimmed.len:
             ch := ptr_offset(trimmed.data, i)[0]
-            if ch >= 48 and ch <= 57 {
+            if ch >= 48 and ch <= 57:
                 has_digit = true
-            } else if ch == 46 {
-                if has_dot {
+            elif ch == 46:
+                if has_dot:
                     ret none
-                }
                 has_dot = true
-            } else if ch == 101 or ch == 69 {
+            elif ch == 101 or ch == 69:
                 break
-            } else {
+            else:
                 ret none
-            }
-        }
-        
-        if ~has_digit {
+
+        if not has_digit:
             ret none
-        }
-        
+
         result := atof(trimmed.data)
-        some result
-    }
+        ret some result
 
     # Parse string to bool
-    parse_bool :: (self: *String) -> ?bool => {
+    parse_bool :: (*self) -> ?bool => do
         trimmed := String::trim(self)
-        
+
         true_str := String::from_cstr("true" as *u8)
         false_str := String::from_cstr("false" as *u8)
-        
-        if String::equals(&trimmed, &true_str) {
+
+        if String::equals(&trimmed, &true_str):
             ret some true
-        } else if String::equals(&trimmed, &false_str) {
+        elif String::equals(&trimmed, &false_str):
             ret some false
-        } else {
+        else:
             ret none
-        }
-    }
-}
