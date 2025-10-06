@@ -77,7 +77,7 @@ fn if_expr_as_return_value() {
             else:
                 101
 
-        main :: () =>
+        main :: () => do
             println(foo(2))
             println(foo(3))
     "#,
@@ -102,7 +102,7 @@ fn if_with_early_return_in_then() {
             else:
                 3
 
-        main :: () =>
+        main :: () => do
             println(foo(1))
             println(foo(0))
     "#,
@@ -261,7 +261,7 @@ fn mutual_recursion_example() {
             else:
                 ret is_even(n - 1)
 
-        main :: () =>
+        main :: () => do
             println(is_even(10))
             println(is_odd(7))
     "#,

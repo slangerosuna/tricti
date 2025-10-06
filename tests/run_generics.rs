@@ -46,7 +46,7 @@ fn run_generic_identity_e2e() {
     let src = r#"
         id <T> :: (x: T) -> T => x
 
-        main :: () =>
+        main :: () => do
             println(streq(id("hello"), "hello"))
             println(id(42))
     "#;
@@ -69,7 +69,7 @@ fn run_identity_e2e() {
     let src = r#"
         id :: (x: i64) -> i64 => x
 
-        main :: () -> i64 =>
+        main :: () -> i64 => do
             println(id(42))
             0
     "#;

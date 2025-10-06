@@ -53,9 +53,16 @@ fn split_block_colon(candidate: &str) -> Option<(&str, &str)> {
                     brace_depth -= 1;
                 }
             }
-            b':' if angle_depth == 0 && paren_depth == 0 && brace_depth == 0 => {
-                let before = &candidate[..idx];
+            b':' => {
                 let after = &candidate[idx + 1..];
+                let colon_ready = angle_depth == 0 && paren_depth == 0 && brace_depth == 0
+                    || (angle_depth > 0 && paren_depth == 0 && brace_depth == 0 && !after.contains('>'));
+                if !colon_ready {
+                    idx += 1;
+                    continue;
+                }
+
+                let before = &candidate[..idx];
 
                 if before.ends_with(':') {
                     idx += 1;
@@ -443,9 +450,45 @@ pub fn desugar_indentation(source: &str) -> String {
             continue;
         }
 
-        let (converted_core, opens_block) = convert_block_leader(rest);
-        output.push_str(&" ".repeat(indent));
-        output.push_str(&converted_core);
+        let mut adjusted_segment_storage: Option<String> = None;
+        let segment = if rest.starts_with("elif") {
+            let next = rest.chars().nth(4);
+            if next.map(|c| c.is_whitespace() || c == ':').unwrap_or(false) {
+                let mut rebuilt = String::from("else if");
+                rebuilt.push_str(&rest[4..]);
+                adjusted_segment_storage = Some(rebuilt);
+                adjusted_segment_storage.as_ref().unwrap().as_str()
+            } else {
+                rest
+            }
+        } else {
+            rest
+        };
+
+        let (converted_core, opens_block) = convert_block_leader(segment);
+        let trimmed_converted = converted_core.trim_start();
+        let attach_to_previous = (trimmed.starts_with("else") || trimmed.starts_with("elif"))
+            && (trimmed_converted.starts_with("else {")
+                || trimmed_converted.starts_with("else if"));
+
+        if attach_to_previous {
+            while output.ends_with(' ') || output.ends_with('\t') {
+                output.pop();
+            }
+            if output.ends_with('\n') {
+                output.pop();
+                while output.ends_with(' ') || output.ends_with('\t') {
+                    output.pop();
+                }
+            }
+            if !output.is_empty() && !output.ends_with(' ') && !output.ends_with('{') {
+                output.push(' ');
+            }
+            output.push_str(trimmed_converted);
+        } else {
+            output.push_str(&" ".repeat(indent));
+            output.push_str(&converted_core);
+        }
         if has_newline {
             output.push('\n');
         }
@@ -503,8 +546,29 @@ mod tests {
         let input = "if index >= self.len: ret none\nelse some unsafe { *(self.data + index) }\n";
         let output = desugar_indentation(input);
         eprintln!("OUTPUT:{}", output);
-        assert!(output.contains("if index >= self.len { ret none }"));
-        assert!(output.contains("else { some unsafe { *(self.data + index) } }"));
+        assert!(output.contains(
+            "if index >= self.len { ret none } else { some unsafe { *(self.data + index) } }"
+        ));
+    }
+
+    #[test]
+    fn converts_colon_else_block() {
+        let input = "if value < 0:\n    ret -value\nelse:\n    ret value\n";
+        let output = desugar_indentation(input);
+        eprintln!("COLON OUTPUT:{}", output);
+        eprintln!("SPLIT:{:?}", super::split_block_colon("if value < 0:"));
+        assert!(output.contains("if value < 0 {"));
+        assert!(output.contains("} else {"));
+    }
+
+    #[test]
+    fn converts_elif_chain() {
+        let input = "if ch >= 0:\n    ret 1\nelif ch == 1:\n    ret 2\nelse:\n    ret 3\n";
+        let output = desugar_indentation(input);
+        eprintln!("ELIF OUTPUT:{}", output);
+        assert!(output.contains("if ch >= 0 {"));
+        assert!(output.contains("} else if ch == 1 {"));
+        assert!(output.contains("} else {"));
     }
 
     #[test]
@@ -512,8 +576,8 @@ mod tests {
     fn dump_collections_desugar() {
         let src = std::fs::read_to_string("stdlib/core/collections.tri").unwrap();
         let output = desugar_indentation(&src);
-        std::fs::write("/tmp/collections_desugared.tri", &output).unwrap();
-        println!("wrote /tmp/collections_desugared.tri");
+        std::fs::write("tmp/collections_desugared.tri", &output).unwrap();
+        println!("wrote tmp/collections_desugared.tri");
         panic!("dump complete");
     }
 }

@@ -3,6 +3,7 @@ use pest::pratt_parser::{Assoc, Op, PrattParser};
 use pest::*;
 use pest_derive::*;
 use std::collections::HashMap;
+use std::fs;
 
 mod indentation;
 
@@ -100,6 +101,8 @@ pub fn parse(file: String) -> Program {
     let successful_parse = match PnParser::parse(Rule::program, &desugared) {
         Ok(p) => p,
         Err(e) => {
+            let _ = fs::create_dir_all("tmp");
+            let _ = fs::write("tmp/last_parse_failure.tri", &desugared);
             eprintln!("Pest parse error: {}", e);
             panic!("Pest parse error (debug): {:?}", e);
         }

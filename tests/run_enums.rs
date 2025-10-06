@@ -70,7 +70,7 @@ fn enum_variant_static_path_lowering() {
             Green,
             Blue,
 
-        main :: () =>
+        main :: () => do
             c: i64 := Color::Green
             println(c)
     "#;
@@ -94,7 +94,7 @@ fn enum_match_basic() {
             Green,
             Blue,
 
-        main :: () =>
+        main :: () => do
             c := Color::Green
             v := match c:
                 Color::Red => 10
@@ -118,7 +118,7 @@ fn enum_match_destructure() {
             Green: i64,
             Blue,
 
-        main :: () =>
+        main :: () => do
             c := Color::Green(42)
             v := match c:
                 Color::Red => -1
@@ -146,7 +146,7 @@ fn enum_match_wildcard_default() {
             Green,
             Blue,
 
-        main :: () =>
+        main :: () => do
             c: Color := Color::Blue
             v := match c:
                 Color::Red => 10
@@ -173,7 +173,7 @@ fn enum_payload_basic() {
             Green: i64,
             Blue,
 
-        main :: () =>
+        main :: () => do
             c := Color::Green(42)
             v := match c:
                 Color::Red => -1

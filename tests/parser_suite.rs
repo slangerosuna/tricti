@@ -37,7 +37,7 @@ fn parses_char_literal() {
 #[test]
 fn parses_tuple_literal_and_pattern() {
     let src = r#"
-main :: () =>
+main :: () => do
     pair := (40, 2)
     value := match pair:
         (a, b) =>

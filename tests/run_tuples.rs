@@ -42,7 +42,7 @@ fn tuple_literal_and_match_runs() {
         return;
     }
     let src = r#"
-        main :: () =>
+        main :: () => do
             pair := (40, 2)
             println(match pair:
                 (a, b) => a

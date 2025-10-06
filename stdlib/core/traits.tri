@@ -252,7 +252,7 @@ DoubleEndedIterator<T> :: trait
 # =============================================================================
 # bool implementations
 # =============================================================================
-            _ => true,
+
 
 # Default for Option<T> - always None
 impl<T> Default for ?T:

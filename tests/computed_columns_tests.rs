@@ -4,11 +4,10 @@ use tricti::parser;
 #[test]
 fn test_computed_column_basic() {
     let src = r#"
-        Users :: table {
+        Users :: table
             first_name: String,
             last_name: String,
             full_name: computed(first_name + " " + last_name),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
