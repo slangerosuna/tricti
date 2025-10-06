@@ -15,22 +15,17 @@ fn trait_impl_static_dispatch_runs() {
         return;
     }
     let src = r#"
-        my_iterator :: trait {
-            T: type,
-            next: ( &mut self ) -> ?T,
-        }
-        my_struct :: { }
-        impl my_iterator for my_struct {
+        my_iterator :: trait
+            T :: type,
+            next :: (&mut self) -> ?T,
+        my_struct :: struct
+        impl my_iterator for my_struct:
             T :: i32,
-            next :: (self: &mut my_struct) -> ?i32 => {
-                5
-            }
-        }
-        call_next :: () -> i64 => { 5 }
-        main :: () -> i64 => {
+            next :: (self: &mut my_struct) -> ?i32 => 5
+        call_next :: () -> i64 => 5
+        main :: () -> i64 =>
             println(call_next())
             0
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -64,15 +59,18 @@ fn trait_static_dispatch_e2e() {
         return;
     }
     let src = r#"
-        point :: { x: i64 }
-    ValLike :: trait { val: (&point) -> i64, }
-        impl point { val :: (self: &point) -> i64 => { 111 } }
-    impl ValLike for point { val :: (self: &point) -> i64 => { 222 } }
-        main :: () -> i64 => {
+        point :: struct
+            x: i64
+        ValLike :: trait
+            val :: (&point) -> i64,
+        impl point:
+            val :: (self: &point) -> i64 => 111
+        impl ValLike for point:
+            val :: (self: &point) -> i64 => 222
+        main :: () -> i64 =>
             p: point := { x: 5 }
             println(p.val())
             0
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -105,16 +103,19 @@ fn trait_static_path_call_e2e() {
         return;
     }
     let src = r#"
-        point :: { x: i64 }
-        ValLike :: trait { val: (&point) -> i64, }
-        impl point { val :: (self: &point) -> i64 => { 111 } }
-        impl ValLike for point { val :: (self: &point) -> i64 => { 222 } }
-        main :: () -> i64 => {
+        point :: struct
+            x: i64
+        ValLike :: trait
+            val :: (&point) -> i64,
+        impl point:
+            val :: (self: &point) -> i64 => 111
+        impl ValLike for point:
+            val :: (self: &point) -> i64 => 222
+        main :: () -> i64 =>
             p: point := { x: 5 }
             v: i64 := ValLike::val(p)
             println(v)
             0
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -143,16 +144,19 @@ fn trait_static_path_call_e2e() {
 #[test]
 fn ambiguous_trait_method_errors() {
     let src = r#"
-        T :: { }
-        TA :: trait { foo: (&T) -> i64, }
-        TB :: trait { foo: (&T) -> i64, }
-        impl TA for T { foo :: (self: &T) -> i64 => { 1 } }
-        impl TB for T { foo :: (self: &T) -> i64 => { 2 } }
-        main :: () -> i64 => {
+        T :: struct
+        TA :: trait
+            foo :: (&T) -> i64,
+        TB :: trait
+            foo :: (&T) -> i64,
+        impl TA for T:
+            foo :: (self: &T) -> i64 => 1
+        impl TB for T:
+            foo :: (self: &T) -> i64 => 2
+        main :: () -> i64 =>
             t: T := { }
             println(t.foo())
             0
-        }
     "#
     .to_string();
 

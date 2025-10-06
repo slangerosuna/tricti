@@ -2,7 +2,7 @@ use inkwell::context::Context;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tricti::{codegen, parser, semantic};
+use tricti::{codegen, parser, semantic, tri_test_helpers};
 
 fn clang_available() -> bool {
     Command::new("clang").arg("--version").output().is_ok()
@@ -41,13 +41,15 @@ fn comparisons_print_bools() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let src = r#"
+    let src = tri_test_helpers::dedent(
+        r#"
         println(1 < 2)
         println(2 < 1)
         println(3 == 3)
         println(3 == 4)
-    "#;
-    let stdout = compile_and_run(src, "tests/tmp_cmp.o", "tests/tmp_cmp.out");
+    "#,
+    );
+    let stdout = compile_and_run(&src, "tests/tmp_cmp.o", "tests/tmp_cmp.out");
     assert_eq!(stdout, ["true\n", "false\n", "true\n", "false\n"].concat());
 }
 
@@ -58,32 +60,34 @@ fn stdlib_abs_min_max_i64() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
-        main :: () => {
+    let user = tri_test_helpers::dedent(
+        r#"
+        main :: () => do
             println(abs_i64(-5))
             println(min_i64(3, 9))
             println(max_i64(3, 9))
-        }
-    "#;
+    "#,
+    );
     let src = format!("{}\n{}", prelude, user);
     let stdout = compile_and_run(&src, "tests/tmp_absminmax.o", "tests/tmp_absminmax.out");
     assert_eq!(stdout, "5\n3\n9\n");
 }
 
 #[test]
-fn stdlib_rem_i64() {
+fn mod_operator_i64() {
     if !clang_available() {
         eprintln!("clang not found; skipping");
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
-        main :: () => {
-            println(rem_i64(10, 3))
-            println(rem_i64(11, 3))
-            println(rem_i64(3, 3))
-        }
-    "#;
+    let user = tri_test_helpers::dedent(
+        r#"
+        main :: () => do
+            println(10 % 3)
+            println(11 % 3)
+            println(3 % 3)
+    "#,
+    );
     let src = format!("{}\n{}", prelude, user);
     let stdout = compile_and_run(&src, "tests/tmp_rem.o", "tests/tmp_rem.out");
     assert_eq!(stdout, "1\n2\n0\n");
@@ -96,8 +100,9 @@ fn small_integer_widths_behave() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
-        main :: () => {
+    let user = tri_test_helpers::dedent(
+        r#"
+        main :: () => do
             x: u8 := 255u8
             println(x)
 
@@ -110,8 +115,8 @@ fn small_integer_widths_behave() {
 
             c: i8 := -1i8
             println(c)
-        }
-    "#;
+    "#,
+    );
     let src = format!("{}\n{}", prelude, user);
     let stdout = compile_and_run(
         &src,

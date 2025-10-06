@@ -45,11 +45,14 @@ fn enum_as_i64_tag_basics() {
         return;
     }
     let src = r#"
-        Color :: enum { Red, Green, Blue }
-        main :: () => {
+        Color :: enum
+            Red,
+            Green,
+            Blue,
+
+        main :: () => do
             c: i64 := Color::Blue
             println(c)
-        }
     "#;
     let stdout = compile_and_run(src, "tests/tmp_enum_basic.o", "tests/tmp_enum_basic.out");
     assert_eq!(stdout, "2\n");
@@ -62,11 +65,14 @@ fn enum_variant_static_path_lowering() {
         return;
     }
     let src = r#"
-        Color :: enum { Red, Green, Blue }
-        main :: () => {
+        Color :: enum
+            Red,
+            Green,
+            Blue,
+
+        main :: () =>
             c: i64 := Color::Green
             println(c)
-        }
     "#;
     let stdout = compile_and_run(
         src,
@@ -83,12 +89,18 @@ fn enum_match_basic() {
         return;
     }
     let src = r#"
-        Color :: enum { Red, Green, Blue }
-        main :: () => {
+        Color :: enum
+            Red,
+            Green,
+            Blue,
+
+        main :: () =>
             c := Color::Green
-            v := match c { Color::Red => 10, Color::Green => 20, Color::Blue => 30 }
+            v := match c:
+                Color::Red => 10
+                Color::Green => 20
+                Color::Blue => 30
             println(v)
-        }
     "#;
     let stdout = compile_and_run(src, "tests/tmp_enum_match.o", "tests/tmp_enum_match.out");
     assert_eq!(stdout, "20\n");
@@ -101,12 +113,18 @@ fn enum_match_destructure() {
         return;
     }
     let src = r#"
-        Color :: enum { Red, Green: i64, Blue }
-        main :: () => {
+        Color :: enum
+            Red,
+            Green: i64,
+            Blue,
+
+        main :: () =>
             c := Color::Green(42)
-            v := match c { Color::Red => -1, Color::Green(x) => x, Color::Blue => -2 }
+            v := match c:
+                Color::Red => -1
+                Color::Green(x) => x
+                Color::Blue => -2
             println(v)
-        }
     "#;
     let stdout = compile_and_run(
         src,
@@ -123,12 +141,17 @@ fn enum_match_wildcard_default() {
         return;
     }
     let src = r#"
-        Color :: enum { Red, Green, Blue }
-        main :: () => {
+        Color :: enum
+            Red,
+            Green,
+            Blue,
+
+        main :: () =>
             c: Color := Color::Blue
-            v := match c { Color::Red => 10, _ => 99 }
+            v := match c:
+                Color::Red => 10
+                _ => 99
             println(v)
-        }
     "#;
     let stdout = compile_and_run(
         src,
@@ -145,12 +168,18 @@ fn enum_payload_basic() {
         return;
     }
     let src = r#"
-        Color :: enum { Red, Green: i64, Blue }
-        main :: () => {
+        Color :: enum
+            Red,
+            Green: i64,
+            Blue,
+
+        main :: () =>
             c := Color::Green(42)
-            v := match c { Color::Red => -1, Color::Green => 100, Color::Blue => -2 }
+            v := match c:
+                Color::Red => -1
+                Color::Green => 100
+                Color::Blue => -2
             println(v)
-        }
     "#;
     let stdout = compile_and_run(
         src,

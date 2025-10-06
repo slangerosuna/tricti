@@ -53,11 +53,10 @@ fn test_module_system_parsing() {
 #[test]
 fn test_public_module_parsing() {
     let source = r#"
-        pub mod public_module {
+        pub mod public_module:
             public_function :: () -> i64 => 100
-        }
 
-        pub use public_module::public_function as pf;
+        pub use public_module::public_function as pf
     "#;
 
     let program = parse(source.to_string());
@@ -94,13 +93,11 @@ fn test_public_module_parsing() {
 #[test]
 fn test_nested_module_paths() {
     let source = r#"
-        mod outer {
-            pub mod inner {
+        mod outer:
+            pub mod inner:
                 nested_function :: () -> i64 => 200
-            }
-        }
 
-        use outer::inner::nested_function;
+        use outer::inner::nested_function
     "#;
 
     let program = parse(source.to_string());

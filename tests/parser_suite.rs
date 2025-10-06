@@ -494,22 +494,38 @@ impl my_iterator for my_struct:
             methods,
             type_params,
             ..
-        } => (trait_name.as_deref(), type_name.as_str(), methods.as_slice(), type_params.as_slice()),
+        } => (
+            trait_name.as_deref(),
+            type_name.as_str(),
+            methods.as_slice(),
+            type_params.as_slice(),
+        ),
         Statement::Expression(Expression::Block { statements }) => {
-            assert_eq!(statements.len(), 1, "impl block block wrapper should contain one statement");
+            assert_eq!(
+                statements.len(),
+                1,
+                "impl block block wrapper should contain one statement"
+            );
             match &statements[0] {
-                Statement::ImplBlock { trait_name, type_name, methods, type_params, .. } => {
-                    (
-                        trait_name.as_deref(),
-                        type_name.as_str(),
-                        methods.as_slice(),
-                        type_params.as_slice(),
-                    )
-                }
+                Statement::ImplBlock {
+                    trait_name,
+                    type_name,
+                    methods,
+                    type_params,
+                    ..
+                } => (
+                    trait_name.as_deref(),
+                    type_name.as_str(),
+                    methods.as_slice(),
+                    type_params.as_slice(),
+                ),
                 other => panic!("expected ImplBlock inside block, got {:?}", other),
             }
         }
-        other => panic!("expected ImplBlock or block-wrapped ImplBlock, got {:?}", other),
+        other => panic!(
+            "expected ImplBlock or block-wrapped ImplBlock, got {:?}",
+            other
+        ),
     };
 
     assert_eq!(trait_name, Some("my_iterator"));

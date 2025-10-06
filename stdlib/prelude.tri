@@ -35,9 +35,32 @@ log_message :: (level: LogLevel, message: String) => do
         println("[log]")
         println(message)
 
-log_info :: (message: String) => log_message(LogLevel::Info, message)
+log_info :: (message: String) => do
+        log_message(LogLevel::Info, message)
 
-log_error :: (message: String) => log_message(LogLevel::Error, message)
+log_error :: (message: String) => do
+        log_message(LogLevel::Error, message)
+
+# Basic math helpers
+abs_i64 :: (value: i64) -> i64 => do
+        if value < 0:
+                ret -value
+        else:
+                ret value
+
+min_i64 :: (a: i64, b: i64) -> i64 => do
+        if a < b:
+                ret a
+        else:
+                ret b
+
+max_i64 :: (a: i64, b: i64) -> i64 => do
+        if a > b:
+                ret a
+        else:
+                ret b
+
+rem_i64 :: (a: i64, b: i64) -> i64 => a % b
 
 RuntimeConfigOptions :: struct
         enable_preemption: bool,

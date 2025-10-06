@@ -37,4 +37,4 @@ main :: () -> i32 => do
     assert(!set.contains("item3"))
 
     println("All collection tests passed!")
-    0
+    ret 0

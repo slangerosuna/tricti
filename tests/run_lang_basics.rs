@@ -44,9 +44,9 @@ fn if_expression_values() {
     }
 
     let src = r#"
-        x := if 1 < 2 { 10 } else { 20 }
+        x := if 1 < 2: 10 else: 20
         println(x)
-        y := if 0 { 1 } else { 2 }
+        y := if 0: 1 else: 2
         println(y)
     "#;
 
@@ -62,13 +62,12 @@ fn if_expr_as_return_value() {
     }
 
     let src = r#"
-        foo :: (n: i64) -> i64 => {
-            ret if n - (n / 2) * 2 == 0 { 100 } else { 101 }
-        }
-        main :: () => {
+        foo :: (n: i64) -> i64 =>
+            if n - (n / 2) * 2 == 0: 100 else: 101
+
+        main :: () =>
             println(foo(2))
             println(foo(3))
-        }
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_if_expr_ret.o", "tests/tmp_if_expr_ret.out");
@@ -83,13 +82,12 @@ fn if_with_early_return_in_then() {
     }
 
     let src = r#"
-        foo :: (n: i64) -> i64 => {
-            if n > 0 { ret 7 } else { 3 }
-        }
-        main :: () => {
+        foo :: (n: i64) -> i64 =>
+            if n > 0: ret 7 else: 3
+
+        main :: () =>
             println(foo(1))
             println(foo(0))
-        }
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_if_early.o", "tests/tmp_if_early.out");
@@ -104,9 +102,8 @@ fn numeric_for_loop_prints_indices() {
     }
 
     let src = r#"
-        for i in 3 {
+        for i in 3:
             println(i)
-        }
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_for.o", "tests/tmp_for.out");
@@ -121,7 +118,8 @@ fn for_loop_with_range_start_end() {
     }
 
     let src = r#"
-    for i in 1..4 { println(i) }
+        for i in 1..4:
+            println(i)
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_for_range1.o", "tests/tmp_for_range1.out");
@@ -136,7 +134,8 @@ fn for_loop_with_range_and_step() {
     }
 
     let src = r#"
-    for i in 0..6..2 { println(i) }
+        for i in 0..6..2:
+            println(i)
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_for_range2.o", "tests/tmp_for_range2.out");
@@ -151,7 +150,8 @@ fn for_loop_negative_range() {
     }
 
     let src = r#"
-    for i in 3..0..-1 { println(i) }
+        for i in 3..0..-1:
+            println(i)
     "#;
 
     let stdout = compile_and_run(
@@ -170,8 +170,9 @@ fn for_loop_dynamic_step() {
     }
 
     let src = r#"
-    step := 2
-    for i in 0..6..step { println(i) }
+        step := 2
+        for i in 0..6..step:
+            println(i)
     "#;
 
     let stdout = compile_and_run(
@@ -190,9 +191,10 @@ fn for_loop_with_dynamic_negative_step() {
     }
 
     let src = r#"
-    x := 2
-    step := -x
-    for i in 5..0..step { println(i) }
+        x := 2
+        step := -x
+        for i in 5..0..step:
+            println(i)
     "#;
 
     let stdout = compile_and_run(
@@ -212,7 +214,8 @@ fn for_loop_with_var_bound() {
 
     let src = r#"
         n := 4
-        for i in n { println(i) }
+        for i in n:
+            println(i)
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_for_var.o", "tests/tmp_for_var.out");
@@ -227,16 +230,15 @@ fn mutual_recursion_example() {
     }
 
     let src = r#"
-        is_even :: (n: i64) -> i64 => {
-            if n == 0 { ret 1 } else { ret is_odd(n - 1) }
-        }
-        is_odd :: (n: i64) -> i64 => {
-            if n == 0 { ret 0 } else { ret is_even(n - 1) }
-        }
-        main :: () => {
+        is_even :: (n: i64) -> i64 =>
+            if n == 0: ret 1 else: ret is_odd(n - 1)
+
+        is_odd :: (n: i64) -> i64 =>
+            if n == 0: ret 0 else: ret is_even(n - 1)
+
+        main :: () =>
             println(is_even(10))
             println(is_odd(7))
-        }
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_mutrec.o", "tests/tmp_mutrec.out");

@@ -4,10 +4,9 @@ use tricti::parser;
 #[test]
 fn test_simple_table_definition() {
     let src = r#"
-        Users :: table {
-            id: u64,
-            name: String,
-        }
+Users :: table
+    id: u64,
+    name: String,
     "#;
 
     let program = parser::parse(src.to_string());
@@ -55,11 +54,10 @@ fn test_simple_table_definition() {
 #[test]
 fn test_table_with_primary_key_annotation() {
     let src = r#"
-        Apps :: table {
-            @primary id: u64,
-            title: String,
-        }
-    "#;
+Apps :: table
+    @primary id: u64,
+    title: String,
+"#;
 
     let program = parser::parse(src.to_string());
     assert_eq!(program.statements.len(), 1);
@@ -88,12 +86,11 @@ fn test_table_with_primary_key_annotation() {
 #[test]
 fn test_table_with_default_values() {
     let src = r#"
-        Products :: table {
-            id: u64,
-            name: String,
-            active: bool = true,
-            price: f64 = 0.0,
-        }
+Products :: table
+    id: u64,
+    name: String,
+    active: bool = true,
+    price: f64 = 0.0,
     "#;
 
     let program = parser::parse(src.to_string());
@@ -134,12 +131,11 @@ fn test_table_with_default_values() {
 #[test]
 fn test_table_with_multiple_annotations() {
     let src = r#"
-        Orders :: table {
-            @primary @autoincrement id: u64,
-            @indexed customer_id: u64,
-            @nullable description: String,
-            total: f64,
-        }
+Orders :: table
+    @primary @autoincrement id: u64,
+    @indexed customer_id: u64,
+    description: ?String,
+    total: f64,
     "#;
 
     let program = parser::parse(src.to_string());
@@ -173,13 +169,12 @@ fn test_table_with_multiple_annotations() {
 #[test]
 fn test_table_with_complex_types() {
     let src = r#"
-        Documents :: table {
-            id: u64,
-            tags: [String],
-            metadata: {name: String, value: String},
-            owner: ?User,
-        }
-    "#;
+Documents :: table
+    id: u64,
+    tags: [String],
+    metadata: {name: String, value: String},
+    owner: ?User,
+"#;
 
     let program = parser::parse(src.to_string());
     assert_eq!(program.statements.len(), 1);
@@ -224,8 +219,8 @@ fn test_table_with_complex_types() {
 #[test]
 fn test_empty_table_definition() {
     let src = r#"
-        EmptyTable :: table {
-        }
+EmptyTable :: table
+    # No columns
     "#;
 
     let program = parser::parse(src.to_string());
@@ -249,12 +244,11 @@ fn test_empty_table_definition() {
 #[test]
 fn test_annotation_with_parameters() {
     let src = r#"
-        Logs :: table {
-            @primary @autoincrement id: u64,
-            @size(255) message: String,
-            @precision(10, 2) amount: f64,
-        }
-    "#;
+Logs :: table
+    @primary @autoincrement id: u64,
+    @size(255) message: String,
+    @precision(10, 2) amount: f64,
+"#;
 
     let program = parser::parse(src.to_string());
     assert_eq!(program.statements.len(), 1);

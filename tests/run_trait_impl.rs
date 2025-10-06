@@ -7,22 +7,21 @@ use tricti::semantic::analyze_program;
 #[test]
 fn trait_impl_static_dispatch_runs() {
     let src = r#"
-        my_iterator :: trait {
-            T: type,
-            next: ( &mut self ) -> ?T,
-        }
-        my_struct :: { }
-        impl my_iterator for my_struct {
+        my_iterator :: trait
+            T :: type,
+            next :: (&mut self) -> ?T,
+
+        my_struct :: struct
+            x: i64,
+
+        impl my_iterator for my_struct:
             T :: i32,
-            next :: (self: &mut my_struct) -> ?i32 => {
-                5
-            }
-        }
-        call_next :: () -> i64 => { 5 }
-        main :: () -> i64 => {
+            next :: (self: &mut my_struct) -> ?i32 => some 5
+
+        call_next :: () -> i64 => 5
+        main :: () -> i64 =>
             println(call_next())
-            0
-        }
+            ret 0
     "#
     .to_string();
 

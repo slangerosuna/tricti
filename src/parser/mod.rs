@@ -313,11 +313,9 @@ mod tests {
         panic(msg)
 ";
         let function_src = indentation::desugar_indentation(function_src);
-        PnParser::parse(Rule::function, &function_src)
-            .expect("failed to parse function snippet");
+        PnParser::parse(Rule::function, &function_src).expect("failed to parse function snippet");
 
-        let statement_src =
-            r"assert :: (cond: bool, msg: string) -> none => do
+        let statement_src = r"assert :: (cond: bool, msg: string) -> none => do
     if ~cond:
         panic(msg)
 ";
@@ -330,12 +328,14 @@ mod tests {
         PnParser::parse(Rule::program, &single_program_src)
             .expect("failed to parse single assert program");
 
-        let two_simple_consts = "foo :: () -> none => do\n    ret none\nbar :: () -> none => do\n    ret none\n";
+        let two_simple_consts =
+            "foo :: () -> none => do\n    ret none\nbar :: () -> none => do\n    ret none\n";
         let two_simple_consts = indentation::desugar_indentation(two_simple_consts);
         PnParser::parse(Rule::program, &two_simple_consts)
             .expect("failed to parse two simple const declarations");
 
-        let blank_line_between_consts = "foo :: () -> none => do\n    ret none\n\nbar :: () -> none => do\n    ret none\n";
+        let blank_line_between_consts =
+            "foo :: () -> none => do\n    ret none\n\nbar :: () -> none => do\n    ret none\n";
         let blank_line_between_consts = indentation::desugar_indentation(blank_line_between_consts);
         PnParser::parse(Rule::program, &blank_line_between_consts)
             .expect("failed to parse const declarations separated by blank line");
@@ -389,7 +389,7 @@ assert :: (cond: bool, msg: string) -> none => do
             src.trim(),
             "two const declarations should not be parsed as a single statement",
         );
-    PnParser::parse(Rule::program, &src).expect("failed to parse assert block snippet");
+        PnParser::parse(Rule::program, &src).expect("failed to parse assert block snippet");
     }
 
     #[test]

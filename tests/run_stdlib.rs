@@ -108,12 +108,11 @@ fn contains_substring_basic() {
         return;
     }
     let src = r#"
-        main :: () => {
+        main :: () => do
             println(contains("hello", "ell"))
             println(contains("hello", "world"))
             s := "héllo"
             println(contains(s, "hé"))
-        }
     "#;
     let stdout = compile_and_run(src, "tests/tmp_contains.o", "tests/tmp_contains.out");
     assert_eq!(stdout, "true\nfalse\ntrue\n");
@@ -143,14 +142,13 @@ fn starts_with_and_ends_with() {
         return;
     }
     let src = r#"
-        main :: () => {
+        main :: () => do
             println(starts_with("hello", "he"))
             println(starts_with("hello", "hello"))
             println(starts_with("hello", "hello!"))
             println(ends_with("hello", "lo"))
             println(ends_with("héllo", "llo"))
             println(ends_with("héllo", "éllo"))
-        }
     "#;
     let stdout = compile_and_run(
         src,
@@ -167,12 +165,11 @@ fn find_returns_index_or_minus_one() {
         return;
     }
     let src = r#"
-        main :: () => {
+        main :: () => do
             println(find("hello", "ell"))
             println(find("hello", "world"))
             s := "héllo"
             println(find(s, "hé"))
-        }
     "#;
     let stdout = compile_and_run(src, "tests/tmp_find.o", "tests/tmp_find.out");
     assert_eq!(stdout, "1\n-1\n0\n");
@@ -185,7 +182,7 @@ fn string_helper_edge_cases() {
         return;
     }
     let src = r#"
-        main :: () => {
+        main :: () => do
             println(contains("", ""))
             println(contains("abc", ""))
             println(starts_with("abc", ""))
@@ -196,7 +193,6 @@ fn string_helper_edge_cases() {
             println(find("abc", ""))
             println(find("abc", "c"))
             println(find("abc", "d"))
-        }
     "#;
     let stdout = compile_and_run(
         src,

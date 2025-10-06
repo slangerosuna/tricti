@@ -44,12 +44,11 @@ fn run_generic_identity_e2e() {
     }
 
     let src = r#"
-        id <T> :: (x: T) -> T => { ret x }
+        id <T> :: (x: T) -> T => x
 
-        main :: () => {
+        main :: () =>
             println(streq(id("hello"), "hello"))
             println(id(42))
-        }
     "#;
 
     let stdout = compile_and_run(
@@ -68,12 +67,11 @@ fn run_identity_e2e() {
     }
 
     let src = r#"
-        id :: (x: i64) -> i64 => { ret x }
+        id :: (x: i64) -> i64 => x
 
-        main :: () -> i64 => {
+        main :: () -> i64 =>
             println(id(42))
-            ret 0
-        }
+            0
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_identity.o", "tests/tmp_identity.out");
@@ -88,10 +86,13 @@ fn run_fact_e2e() {
     }
 
     let src = r#"
-        fact :: (n: i64) -> i64 => {
-            if n <= 1 { ret 1 } else { ret n * fact(n - 1) }
-        }
-        main :: () => { println(fact(6)) }
+        fact :: (n: i64) -> i64 =>
+            if n <= 1:
+                ret 1
+            else:
+                ret n * fact(n - 1)
+
+        main :: () => println(fact(6))
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_fact.o", "tests/tmp_fact.out");
@@ -106,16 +107,13 @@ fn run_fib_e2e() {
     }
 
     let src = r#"
-        fib :: (n: i64) -> i64 => {
-            if n <= 1 {
+        fib :: (n: i64) -> i64 =>
+            if n <= 1:
                 ret n
-            } else {
+            else:
                 ret fib(n - 1) + fib(n - 2)
-            }
-        }
-        main :: () => {
-            println(fib(10))
-        }
+
+        main :: () => println(fib(10))
     "#;
 
     let stdout = compile_and_run(src, "tests/tmp_fib.o", "tests/tmp_fib.out");
@@ -130,7 +128,7 @@ fn typed_function_return_and_call() {
     }
 
     let src = r#"
-        add_i32 :: (a:i32, b:i32) -> i64 => { a + b }
+        add_i32 :: (a:i32, b:i32) -> i64 => a + b
         println(add_i32(5, 7))
     "#;
 

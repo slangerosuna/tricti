@@ -3863,7 +3863,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             } => {
                 let left_val = self.generate_expression(left)?;
                 let right_val = self.generate_expression(right)?;
-                self.generate_binary_op(left_val, operator, right_val)
+                let operands_unsigned =
+                    self.expression_is_unsigned(left) && self.expression_is_unsigned(right);
+                self.generate_binary_op(left_val, operator, right_val, operands_unsigned)
             }
 
             Expression::UnaryOp { operator, operand } => {
@@ -4087,6 +4089,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         left: BasicValueEnum<'ctx>,
         operator: &BinaryOperator,
         right: BasicValueEnum<'ctx>,
+        operands_unsigned: bool,
     ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
         match operator {
             BinaryOperator::Add => {
@@ -4195,10 +4198,15 @@ impl<'ctx> CodeGenerator<'ctx> {
             BinaryOperator::Div => {
                 if left.is_int_value() && right.is_int_value() {
                     let (l, r, _ty) = self.unify_ints(left, right)?;
-                    let result = self
-                        .builder
-                        .build_int_signed_div(l, r, "divtmp")
-                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    let result = if operands_unsigned {
+                        self.builder
+                            .build_int_unsigned_div(l, r, "divtmp")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    } else {
+                        self.builder
+                            .build_int_signed_div(l, r, "divtmp")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    };
                     Ok(result.into())
                 } else if left.is_float_value() && right.is_float_value() {
                     let result = self
@@ -4213,6 +4221,26 @@ impl<'ctx> CodeGenerator<'ctx> {
                 } else {
                     Err(CodegenError::InvalidOperation(
                         "Invalid types for division".to_string(),
+                    ))
+                }
+            }
+
+            BinaryOperator::Mod => {
+                if left.is_int_value() && right.is_int_value() {
+                    let (l, r, _ty) = self.unify_ints(left, right)?;
+                    let result = if operands_unsigned {
+                        self.builder
+                            .build_int_unsigned_rem(l, r, "modtmp")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    } else {
+                        self.builder
+                            .build_int_signed_rem(l, r, "modtmp")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    };
+                    Ok(result.into())
+                } else {
+                    Err(CodegenError::InvalidOperation(
+                        "Invalid types for modulo".to_string(),
                     ))
                 }
             }
@@ -4271,9 +4299,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             BinaryOperator::Less => {
                 if left.is_int_value() && right.is_int_value() {
                     let (l, r, _ty) = self.unify_ints(left, right)?;
+                    let predicate = if operands_unsigned {
+                        IntPredicate::ULT
+                    } else {
+                        IntPredicate::SLT
+                    };
                     let result = self
                         .builder
-                        .build_int_compare(IntPredicate::SLT, l, r, "lttmp")
+                        .build_int_compare(predicate, l, r, "lttmp")
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     Ok(result.into())
                 } else if left.is_float_value() && right.is_float_value() {
@@ -4296,9 +4329,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             BinaryOperator::Greater => {
                 if left.is_int_value() && right.is_int_value() {
                     let (l, r, _ty) = self.unify_ints(left, right)?;
+                    let predicate = if operands_unsigned {
+                        IntPredicate::UGT
+                    } else {
+                        IntPredicate::SGT
+                    };
                     let result = self
                         .builder
-                        .build_int_compare(IntPredicate::SGT, l, r, "gttmp")
+                        .build_int_compare(predicate, l, r, "gttmp")
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     Ok(result.into())
                 } else if left.is_float_value() && right.is_float_value() {
@@ -4321,9 +4359,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             BinaryOperator::LessEqual => {
                 if left.is_int_value() && right.is_int_value() {
                     let (l, r, _ty) = self.unify_ints(left, right)?;
+                    let predicate = if operands_unsigned {
+                        IntPredicate::ULE
+                    } else {
+                        IntPredicate::SLE
+                    };
                     let result = self
                         .builder
-                        .build_int_compare(IntPredicate::SLE, l, r, "letmp")
+                        .build_int_compare(predicate, l, r, "letmp")
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     Ok(result.into())
                 } else if left.is_float_value() && right.is_float_value() {
@@ -4346,9 +4389,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             BinaryOperator::GreaterEqual => {
                 if left.is_int_value() && right.is_int_value() {
                     let (l, r, _ty) = self.unify_ints(left, right)?;
+                    let predicate = if operands_unsigned {
+                        IntPredicate::UGE
+                    } else {
+                        IntPredicate::SGE
+                    };
                     let result = self
                         .builder
-                        .build_int_compare(IntPredicate::SGE, l, r, "getmp")
+                        .build_int_compare(predicate, l, r, "getmp")
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     Ok(result.into())
                 } else if left.is_float_value() && right.is_float_value() {

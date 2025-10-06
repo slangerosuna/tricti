@@ -2,7 +2,7 @@ use inkwell::context::Context;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tricti::{codegen, parser, semantic};
+use tricti::{codegen, parser, semantic, tri_test_helpers};
 
 fn clang_available() -> bool {
     Command::new("clang").arg("--version").output().is_ok()
@@ -15,13 +15,14 @@ fn assert_passes() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
-        main :: () => {
+    let user = tri_test_helpers::dedent(
+        r#"
+        main :: () => do
             assert(true, "should not print")
             assert_eq_i64(2+2, 4, "math broke")
             println(123)
-        }
-    "#;
+    "#,
+    );
     let src = format!("{}\n{}", prelude, user);
 
     let program = parser::parse(src.to_string());

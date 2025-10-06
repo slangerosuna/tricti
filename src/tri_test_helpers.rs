@@ -38,6 +38,45 @@ pub fn compile_and_run_tri(src: &str, obj_path: &str, exe_path: &str) -> String 
     String::from_utf8_lossy(&run_output.stdout).to_string()
 }
 
+/// Dedent helper for multi-line Tri snippets embedded in tests. Removes common leading whitespace
+/// and trims surrounding blank lines while preserving a trailing newline for parser stability.
+pub fn dedent(input: &str) -> String {
+    let mut lines: Vec<&str> = input.lines().collect();
+
+    while matches!(lines.first(), Some(line) if line.trim().is_empty()) {
+        lines.remove(0);
+    }
+
+    while matches!(lines.last(), Some(line) if line.trim().is_empty()) {
+        lines.pop();
+    }
+
+    let min_indent = lines
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.chars().take_while(|c| c.is_whitespace()).count())
+        .min()
+        .unwrap_or(0);
+
+    let mut dedented: Vec<String> = Vec::with_capacity(lines.len());
+    for line in lines {
+        if line.trim().is_empty() {
+            dedented.push(String::new());
+        } else {
+            let trimmed = line
+                .char_indices()
+                .skip_while(|(idx, c)| *idx < min_indent && c.is_whitespace())
+                .map(|(_, c)| c)
+                .collect();
+            dedented.push(trimmed);
+        }
+    }
+
+    let mut result = dedented.join("\n");
+    result.push('\n');
+    result
+}
+
 /// Macro to define a test that compiles and runs TriCTI code, asserting stdout equals expected.
 /// Usage: tri_test!(test_name, tri_code, expected_stdout);
 /// The tri_code should include the prelude if needed.
@@ -53,8 +92,9 @@ macro_rules! tri_test {
             }
             let obj_path = format!("tests/tmp_{}.o", stringify!($name));
             let exe_path = format!("tests/tmp_{}.out", stringify!($name));
+            let tri_code = tricti::tri_test_helpers::dedent($tri_code);
             let stdout =
-                tricti::tri_test_helpers::compile_and_run_tri($tri_code, &obj_path, &exe_path);
+                tricti::tri_test_helpers::compile_and_run_tri(&tri_code, &obj_path, &exe_path);
             assert_eq!(stdout, $expected);
         }
     };
@@ -120,7 +160,8 @@ macro_rules! tri_test_with_prelude {
                 return;
             }
             let prelude = std::fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-            let full_code = format!("{}\n{}", prelude, $user_code);
+            let user_code = tricti::tri_test_helpers::dedent($user_code);
+            let full_code = format!("{}\n{}", prelude, user_code);
             let obj_path = format!("tests/tmp_{}.o", stringify!($name));
             let exe_path = format!("tests/tmp_{}.out", stringify!($name));
             let stdout =

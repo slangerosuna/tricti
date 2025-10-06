@@ -7,16 +7,19 @@ use tricti::semantic::analyze_program;
 #[test]
 fn trait_static_path_call_e2e() {
     let src = r#"
-        point :: { x: i64 }
-        ValLike :: trait { val: (&point) -> i64, }
-        impl point { val :: (self: &point) -> i64 => { 111 } }
-        impl ValLike for point { val :: (self: &point) -> i64 => { 222 } }
-        main :: () -> i64 => {
-            p: point := { x: 5 }
-            v: i64 := ValLike::val(p)
-            println(v)
-            0
-        }
+            point :: struct
+                x: i64
+            ValLike :: trait
+                val :: (&point) -> i64,
+            impl point:
+                val :: (self: &point) -> i64 => 111
+            impl ValLike for point:
+                val :: (self: &point) -> i64 => 222
+            main :: () -> i64 =>
+                p: point := { x: 5 }
+                v: i64 := ValLike::val(p)
+                println(v)
+                0
     "#
     .to_string();
 

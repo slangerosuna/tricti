@@ -2330,7 +2330,7 @@ fn infer_binary_op_type(
             }
         }
 
-        BinaryOperator::Sub | BinaryOperator::Mul | BinaryOperator::Div | BinaryOperator::Mod => {
+        BinaryOperator::Sub | BinaryOperator::Mul | BinaryOperator::Div => {
             if matches!(left, Type::None) {
                 return Ok(right.clone());
             }
@@ -2338,6 +2338,23 @@ fn infer_binary_op_type(
                 return Ok(left.clone());
             }
             if types_compatible(left, right) && (is_numeric_type(left) || is_numeric_type(right)) {
+                Ok(promote_numeric_types(left, right))
+            } else {
+                Err(SemanticError::InvalidOperation {
+                    operator: format!("{:?}", operator),
+                    operand_types: vec![left.clone(), right.clone()],
+                })
+            }
+        }
+
+        BinaryOperator::Mod => {
+            if matches!(left, Type::None) {
+                return Ok(right.clone());
+            }
+            if matches!(right, Type::None) {
+                return Ok(left.clone());
+            }
+            if types_compatible(left, right) && is_integer_type(left) && is_integer_type(right) {
                 Ok(promote_numeric_types(left, right))
             } else {
                 Err(SemanticError::InvalidOperation {
@@ -3047,6 +3064,15 @@ fn is_numeric_type(t: &Type) -> bool {
         Type::Identifier { name, .. } => is_numeric_identifier_name(name.as_str()),
         _ => false,
     }
+}
+
+fn is_integer_type(t: &Type) -> bool {
+    if let Some(name) = numeric_type_name(t) {
+        if let Some((_, kind)) = numeric_info(name) {
+            return kind != NumericKind::Float;
+        }
+    }
+    false
 }
 
 fn is_string_type(t: &Type) -> bool {

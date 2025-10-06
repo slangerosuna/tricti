@@ -57,6 +57,19 @@ fn leading_keyword_allows_block(head: &str) -> bool {
         ) {
             return true;
         }
+        if first == "mod" {
+            return true;
+        }
+        if first == "pub" {
+            if let Some(next) = tokens.next() {
+                if next == "mod" {
+                    return true;
+                }
+                if next == "fn" {
+                    // fall through for blocks like "pub fn" where colon shouldn't open block
+                }
+            }
+        }
         if first == "}" {
             if let Some(next) = tokens.next() {
                 if matches!(next, "else") {

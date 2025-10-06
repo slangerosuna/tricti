@@ -16,9 +16,7 @@ fn stdlib_rt_can_coexist_with_hosted_main() {
     }
     let rt = fs::read_to_string("stdlib/rt.tri").expect("read rt");
     let user = r#"
-        main :: () => {
-            println("rt present")
-        }
+        main :: () => println("rt present")
     "#;
     let src = format!("{}\n{}", rt, user);
 

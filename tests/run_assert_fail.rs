@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 use tricti::ast::{Expression, Statement};
-use tricti::{codegen, parser, semantic};
+use tricti::{codegen, parser, semantic, tri_test_helpers};
 
 fn log_if_identifiers(program: &tricti::ast::Program) {
     fn walk_expr(expr: &Expression, path: &mut Vec<String>) {
@@ -269,12 +269,13 @@ fn assert_fails_exits_nonzero() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
-        main :: () => {
-            assert(false, "boom");
-            println(999); # unreachable
-        }
-    "#;
+    let user = tri_test_helpers::dedent(
+        r#"
+        main :: () => do
+            assert(false, "boom")
+            println(999) # unreachable
+    "#,
+    );
     let src = format!("{}\n{}", prelude, user);
 
     let program = parser::parse(src.to_string());

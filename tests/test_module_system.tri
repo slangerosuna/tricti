@@ -1,9 +1,8 @@
 # Test module system functionality
-mod test_module {
+mod test_module:
     test_function :: () -> i64 => 42
 
     pub test_public_function :: () -> i64 => 84
-}
 
 use test_module::test_public_function
 

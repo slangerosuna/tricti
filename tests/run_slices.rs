@@ -2,18 +2,15 @@ use inkwell::context::Context;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tricti::{codegen, parser, semantic};
+use tricti::{codegen, parser, semantic, tri_test_helpers};
 
 const VEC_HELPERS: &str = r#"
-vec_get_i64 :: (v: *Vec_i64, idx: i64) -> i64 => {
-    if ~(idx >= 0) { panic("vec index negative") }
-    if idx >= vec_len_i64(v) { panic("vec index out of bounds") }
+vec_get_i64 :: (v: *Vec_i64, idx: i64) -> i64 => do
+    if idx < 0: panic("vec index negative")
+    if idx >= vec_len_i64(v): panic("vec index out of bounds")
     v.ptr[idx]
-}
 
-vec_is_empty_i64 :: (v: *Vec_i64) -> bool => {
-    vec_len_i64(v) == 0
-}
+vec_is_empty_i64 :: (v: *Vec_i64) -> bool => vec_len_i64(v) == 0
 "#;
 
 fn clang_available() -> bool {
@@ -27,7 +24,8 @@ fn user_defined_vec_bool_iteration() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
+    let user = tri_test_helpers::dedent(
+        r#"
         v := new_vec_i64()
         vec_push_i64(&v, 1)
         vec_push_i64(&v, 0)
@@ -35,12 +33,13 @@ fn user_defined_vec_bool_iteration() {
         vec_push_i64(&v, 1)
         acc := 0
         len := vec_len_i64(&v)
-    for i in 0..len {
-            if vec_get_i64(&v, i) == 1 { acc = acc + 1 }
-        }
+        for i in 0..len:
+            if vec_get_i64(&v, i) == 1:
+                acc = acc + 1
         println(acc)
         println(vec_len_i64(&v))
-    "#;
+    "#,
+    );
     let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
 
     let stdout = compile_and_run(
@@ -85,7 +84,8 @@ fn iterate_vec_i64() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
+    let user = tri_test_helpers::dedent(
+        r#"
         v := new_vec_i64()
         vec_push_i64(&v, 1)
         vec_push_i64(&v, 2)
@@ -94,11 +94,11 @@ fn iterate_vec_i64() {
         vec_push_i64(&v, 5)
         acc := 0
         len := vec_len_i64(&v)
-    for i in 0..len {
+        for i in 0..len:
             acc = acc + vec_get_i64(&v, i)
-        }
         println(acc)
-    "#;
+    "#,
+    );
     let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
     let stdout = compile_and_run(&src, "tests/tmp_slice.o", "tests/tmp_slice.out");
     assert_eq!(stdout, "15\n");
@@ -111,7 +111,8 @@ fn vec_len_and_empty() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
+    let user = tri_test_helpers::dedent(
+        r#"
         v := new_vec_i64()
         vec_push_i64(&v, 1)
         vec_push_i64(&v, 2)
@@ -123,7 +124,8 @@ fn vec_len_and_empty() {
         e := new_vec_i64()
         println(vec_len_i64(&e))
         println(vec_is_empty_i64(&e))
-    "#;
+    "#,
+    );
     let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
     let stdout = compile_and_run(
         &src,
@@ -140,7 +142,8 @@ fn vec_get_reads_elements() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
+    let user = tri_test_helpers::dedent(
+        r#"
         v := new_vec_i64()
         vec_push_i64(&v, 1)
         vec_push_i64(&v, 2)
@@ -150,7 +153,8 @@ fn vec_get_reads_elements() {
         println(vec_get_i64(&v, 0))
         println(vec_get_i64(&v, 4))
         println(vec_get_i64(&v, 2))
-    "#;
+    "#,
+    );
     let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
     let stdout = compile_and_run(&src, "tests/tmp_slice_get.o", "tests/tmp_slice_get.out");
     assert_eq!(stdout, "1\n5\n3\n");
@@ -163,8 +167,9 @@ fn vec_iteration_in_prelude() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
-        main :: () => {
+    let user = tri_test_helpers::dedent(
+        r#"
+        main :: () => do
             v := new_vec_i64()
             vec_push_i64(&v, 1)
             vec_push_i64(&v, 2)
@@ -175,12 +180,11 @@ fn vec_iteration_in_prelude() {
             println(vec_get_i64(&v, 3))
             acc := 0
             len := vec_len_i64(&v)
-            for i in 0..len {
+            for i in 0..len:
                 acc = acc + vec_get_i64(&v, i)
-            }
             println(acc)
-        }
-    "#;
+    "#,
+    );
     let src = format!("{}\n{}\n{}", prelude, VEC_HELPERS, user);
     let stdout = compile_and_run(&src, "tests/tmp_slice_new.o", "tests/tmp_slice_new.out");
     assert_eq!(stdout, "5\n4\n15\n");
@@ -193,8 +197,9 @@ fn vec_i64_push_pop_len() {
         return;
     }
     let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
-    let user = r#"
-    tricti_main :: () => {
+    let user = tri_test_helpers::dedent(
+        r#"
+        tricti_main :: () => do
             println("start")
             v := new_vec_i64()
             vec_push_i64(&v, 10)
@@ -206,9 +211,9 @@ fn vec_i64_push_pop_len() {
             println(vec_pop_i64(&v))
             println(vec_pop_i64(&v))
             println(vec_len_i64(&v))
-        }
-    tricti_main()
-    "#;
+        tricti_main()
+    "#,
+    );
     let src = format!("{}\n{}", prelude, user);
     let stdout = compile_and_run(&src, "tests/tmp_vec_i64.o", "tests/tmp_vec_i64.out");
     assert_eq!(stdout, "start\n3\n30\n2\n20\n10\n0\n");
