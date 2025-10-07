@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use std::fs;
 
-mod indentation;
+pub mod indentation;
 
 #[derive(Parser)]
 #[grammar = "src/parser/grammar.pest"]

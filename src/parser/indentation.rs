@@ -675,10 +675,10 @@ mod tests {
     #[test]
     #[ignore]
     fn dump_collections_desugar() {
-        let src = std::fs::read_to_string("stdlib/core/collections.tri").unwrap();
+        let src = std::fs::read_to_string("../tripm/src/main.tri").unwrap();
         let output = desugar_indentation(&src);
-        std::fs::write("tmp/collections_desugared.tri", &output).unwrap();
-        println!("wrote tmp/collections_desugared.tri");
+        std::fs::write("tmp/tripm_main_desugared.tri", &output).unwrap();
+        println!("wrote tmp/tripm_main_desugared.tri");
         panic!("dump complete");
     }
 }
