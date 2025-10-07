@@ -3,6 +3,7 @@ use pest::pratt_parser::{Assoc, Op, PrattParser};
 use pest::*;
 use pest_derive::*;
 use std::collections::HashMap;
+
 use std::fs;
 
 mod indentation;
@@ -930,6 +931,12 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
                     object: Box::new(expr),
                     indices,
                 };
+            }
+            Rule::postfix_question => {
+                expr = Expression::Question(Box::new(expr));
+            }
+            Rule::postfix_bang => {
+                expr = Expression::Unwrap(Box::new(expr));
             }
             _ => {}
         }
@@ -2544,35 +2551,55 @@ fn parse_compose_def(pair: pest::iterators::Pair<Rule>) -> ComposeDef {
 }
 
 fn parse_compose_entry(pair: pest::iterators::Pair<Rule>) -> ComposeEntry {
-    let mut source = ComposeNode::Single(String::new());
-    let mut targets = Vec::new();
-    let mut is_first = true;
+    let mut inner = pair.into_inner();
+    let source_pair = inner
+        .next()
+        .expect("compose entry requires at least one node");
+    let source = parse_compose_node(source_pair);
+    let mut edges = Vec::new();
 
-    for inner_pair in pair.into_inner() {
-        match inner_pair.as_rule() {
-            Rule::identifier => {
-                let node = ComposeNode::Single(inner_pair.as_str().to_string());
-                if is_first {
-                    source = node;
-                    is_first = false;
-                } else {
-                    targets.push(node);
+    for edge_pair in inner {
+        match edge_pair.as_rule() {
+            Rule::compose_arrow => {
+                if let Some(target_pair) = edge_pair.into_inner().next() {
+                    edges.push(ComposeEdge {
+                        kind: ComposeEdgeKind::Sequential,
+                        target: parse_compose_node(target_pair),
+                    });
                 }
             }
-            Rule::tuple_chain => {
-                let node = parse_tuple_chain(inner_pair);
-                if is_first {
-                    source = node;
-                    is_first = false;
-                } else {
-                    targets.push(node);
+            Rule::compose_optional => {
+                if let Some(target_pair) = edge_pair.into_inner().next() {
+                    edges.push(ComposeEdge {
+                        kind: ComposeEdgeKind::Optional,
+                        target: parse_compose_node(target_pair),
+                    });
                 }
+            }
+            Rule::compose_node => {
+                edges.push(ComposeEdge {
+                    kind: ComposeEdgeKind::Sequential,
+                    target: parse_compose_node(edge_pair),
+                });
             }
             _ => {}
         }
     }
 
-    ComposeEntry { source, targets }
+    ComposeEntry { source, edges }
+}
+
+fn parse_compose_node(pair: pest::iterators::Pair<Rule>) -> ComposeNode {
+    match pair.as_rule() {
+        Rule::identifier => ComposeNode::Single(pair.as_str().to_string()),
+        Rule::tuple_chain => parse_tuple_chain(pair),
+        Rule::compose_vector => parse_compose_vector(pair),
+        Rule::compose_node => {
+            let inner = pair.into_inner().next().expect("compose node expected child");
+            parse_compose_node(inner)
+        }
+        _ => ComposeNode::Single(pair.as_str().to_string()),
+    }
 }
 
 fn parse_tuple_chain(pair: pest::iterators::Pair<Rule>) -> ComposeNode {
@@ -2585,6 +2612,18 @@ fn parse_tuple_chain(pair: pest::iterators::Pair<Rule>) -> ComposeNode {
     }
 
     ComposeNode::Tuple(names)
+}
+
+fn parse_compose_vector(pair: pest::iterators::Pair<Rule>) -> ComposeNode {
+    let mut names = Vec::new();
+
+    for inner_pair in pair.into_inner() {
+        if inner_pair.as_rule() == Rule::identifier {
+            names.push(inner_pair.as_str().to_string());
+        }
+    }
+
+    ComposeNode::Vector(names)
 }
 
 fn parse_db_def(pair: pest::iterators::Pair<Rule>) -> DatabaseDef {

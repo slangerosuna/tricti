@@ -1,0 +1,52 @@
+# Command-line utilities for TriCTI programs
+# Provides access to process arguments until a richer process module exists
+
+use prelude
+use core::collections
+use core::string
+
+CommandLine :: struct
+    args: [String]
+
+impl CommandLine:
+    current :: () -> CommandLine => do
+        args := CommandLine::load_args()
+        ret CommandLine {
+            args: args,
+        }
+
+    len :: (&self) -> u64 => self.args.len
+
+    is_empty :: (&self) -> bool => self.args.len == 0
+
+    get :: (&self, index: u64) -> ?String =>
+        if index >= self.args.len:
+            none
+        else:
+            some self.args.get(index)?
+
+    slice_from :: (&self, index: u64) -> [String] => do
+        if index >= self.args.len:
+            ret new [String]
+
+        result := new [String]
+        for i in index..self.args.len:
+            result.push(self.args.get(i)?)
+        ret result
+
+    # Internal helper: read argv via runtime bridge
+    load_args :: () -> [String] => do
+        count := platform_arg_count()
+        if count == 0:
+            ret new [String]
+
+        result := new [String]
+        for i in 0..count:
+            cstr := platform_arg_at(i)
+            if cstr == (0 as *raw u8):
+                cont
+            result.push(String::from_cstr(cstr))
+        ret result
+
+extern platform_arg_count :: () -> u64
+extern platform_arg_at :: (index: u64) -> *raw u8

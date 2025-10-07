@@ -9,6 +9,7 @@ use io::file
 use io::path
 use io::metadata
 use io::dir
+use io::command
 
 # Re-export main types and functions for convenience
 pub use io::file::File
@@ -24,3 +25,4 @@ pub use io::dir::move_file
 pub use io::dir::exists
 pub use io::dir::is_file
 pub use io::dir::is_dir
+pub use io::command::CommandLine

@@ -509,13 +509,26 @@ pub struct ComposeDef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComposeEntry {
     pub source: ComposeNode,
-    pub targets: Vec<ComposeNode>,
+    pub edges: Vec<ComposeEdge>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComposeEdge {
+    pub kind: ComposeEdgeKind,
+    pub target: ComposeNode,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComposeEdgeKind {
+    Sequential,
+    Optional,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComposeNode {
     Single(String),
     Tuple(Vec<String>),
+    Vector(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

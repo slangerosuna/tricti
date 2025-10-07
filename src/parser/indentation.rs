@@ -140,26 +140,123 @@ fn convert_do_segment(segment: &str) -> Option<String> {
             out.push_str(trimmed_after);
             return Some(out);
         }
+        let (body_core, trailing_ws) = strip_trailing(trimmed_after);
+        let mut body = body_core.trim_end().to_string();
+        if body.ends_with('}') {
+            body.pop();
+            while body.ends_with(' ') || body.ends_with('\t') {
+                body.pop();
+            }
+        }
+
         let mut out = before.to_string();
         out.push_str("=> {");
-        out.push(' ');
-        out.push_str(trimmed_after);
-        out.push_str(" }");
+        if !body.is_empty() {
+            out.push(' ');
+            out.push_str(&body);
+            out.push(' ');
+        }
+        out.push('}');
+        out.push_str(trailing_ws);
         return Some(out);
     }
     None
 }
 
 fn convert_struct_like(segment: &str, keyword: &str) -> Option<String> {
-    let needle = format!(":: {}", keyword);
-    if segment.trim_end().ends_with(&needle) {
-        let trimmed = segment.trim_end();
-        let prefix = &trimmed[..trimmed.len() - needle.len()];
-        let mut out = prefix.to_string();
-        out.push_str(&format!(":: {} {{", keyword));
+    let (core, trailing_ws) = strip_trailing(segment);
+    let direct = format!(":: {}", keyword);
+
+    if core.ends_with(&direct) {
+        let prefix = &core[..core.len() - direct.len()];
+        let mut out = String::with_capacity(core.len() + 3 + trailing_ws.len());
+        out.push_str(prefix);
+        out.push_str(&direct);
+        out.push_str(" {");
+        out.push_str(trailing_ws);
         return Some(out);
     }
+
+    let trimmed = core.trim_end();
+    if let Some(idx) = trimmed.rfind("::") {
+        let after = trimmed[idx + 2..].trim();
+        if after.is_empty() {
+            return None;
+        }
+
+        let tokens: Vec<&str> = after.split_whitespace().collect();
+        if tokens.is_empty() {
+            return None;
+        }
+
+        if tokens.last().copied() != Some(keyword) {
+            return None;
+        }
+
+        let attrs_ok = tokens[..tokens.len() - 1]
+            .iter()
+            .all(|token| token.starts_with('@'));
+        if !attrs_ok {
+            return None;
+        }
+
+        let prefix = &trimmed[..idx];
+        let mut out = String::with_capacity(core.len() + 3 + trailing_ws.len());
+        out.push_str(prefix);
+        out.push_str(":: ");
+        out.push_str(&tokens.join(" "));
+        out.push_str(" {");
+        out.push_str(trailing_ws);
+        return Some(out);
+    }
+
     None
+}
+
+fn convert_attribute_args(segment: &str) -> Option<String> {
+    let (core, trailing_ws) = strip_trailing(segment);
+    let trimmed = core.trim_start();
+    if !trimmed.starts_with('@') {
+        return None;
+    }
+
+    if trimmed.contains('(') {
+        return None;
+    }
+
+    let leading = &core[..core.len() - trimmed.len()];
+    let rest = &trimmed[1..];
+    let mut name_end = rest.len();
+    for (idx, ch) in rest.char_indices() {
+        if ch == ' ' || ch == '\t' {
+            name_end = idx;
+            break;
+        }
+    }
+
+    let name = &rest[..name_end];
+    if name.is_empty() {
+        return None;
+    }
+
+    let args = rest[name_end..].trim();
+    if args.is_empty() {
+        return None;
+    }
+
+    if args.contains(':') {
+        return None;
+    }
+
+    let mut out = String::with_capacity(segment.len() + 2);
+    out.push_str(leading);
+    out.push('@');
+    out.push_str(name);
+    out.push('(');
+    out.push_str(args);
+    out.push(')');
+    out.push_str(trailing_ws);
+    Some(out)
 }
 
 fn convert_inline_segment(segment: &str) -> String {
@@ -232,6 +329,10 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
         let opens_block =
             converted.trim_end().ends_with("{") && segment.trim_end().ends_with("=> do");
         return ensure_arrow_block(converted, opens_block);
+    }
+
+    if let Some(converted) = convert_attribute_args(segment) {
+        return (converted, false);
     }
 
     for keyword in ["struct", "table", "compose", "db", "enum", "trait"] {

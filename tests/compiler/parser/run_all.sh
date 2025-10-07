@@ -72,6 +72,7 @@ TEST_FILES=(
     "tuples.tri"
     "generics_edge.tri"
     "whitespace.tri"
+    "composition.tri"
 )
 
 # Counters

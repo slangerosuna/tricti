@@ -121,7 +121,11 @@ join_clause = { join_type ~ "join" ~ identifier ~ "on" ~ expression }
 join_type = { "inner" | "left" | "right" | "full" | "" }
 
 compose_def = { "compose" ~ "{" ~ compose_entry* ~ "}" }
-compose_entry = { (identifier | tuple_chain) ~ ("->" ~ (identifier | tuple_chain))* ~ ","? }
+compose_entry = { compose_node ~ (compose_arrow | compose_optional)* ~ ","? }
+compose_arrow = { "->" ~ compose_node }
+compose_optional = { "?->" ~ compose_node }
+compose_node = { identifier | tuple_chain | compose_vector }
+compose_vector = { "[" ~ identifier ~ ("," ~ identifier)* ~ ","? ~ "]" }
 tuple_chain = { "(" ~ identifier ~ ("," ~ identifier)* ~ ")" }
 
 table_def = { "table" ~ "{" ~ table_fields? ~ "}" }
@@ -154,8 +158,8 @@ cast_expr_no_block = { post_fix_no_block ~ (WHITESPACE* ~ cast_tail)* }
 cast_tail     = { "as" ~ WHITESPACE* ~ type }
 static_path_suffix = { "::" ~ identifier }
 field_suffix  = { "." ~ identifier }
-postfix_question = { "?" ~ !ASCII_ALPHANUMERIC ~ !"*" }
-postfix_bang = { "!" ~ !ASCII_ALPHANUMERIC ~ !"*" }
+postfix_question = { "?" }
+postfix_bang = { "!" }
 index_suffix = { "[" ~ (expression ~ ","?)+ ~ "]" }
 post_fix      = { primary ~ (WHITESPACE* ~ (call_suffix | static_path_suffix | field_suffix | postfix_question | postfix_bang | index_suffix) )* }
 post_fix_no_block = { primary_no_block ~ (WHITESPACE* ~ (call_suffix | static_path_suffix | field_suffix | postfix_question | postfix_bang | index_suffix) )* }
@@ -241,9 +245,8 @@ function_type_param = { (identifier ~ ":" ~ WHITESPACE*)? ~ type }
 function_type_params = { (function_type_param | variadic_param) ~ ("," ~ WHITESPACE* ~ (function_type_param | variadic_param))* ~ ","? }
 function_type = { "(" ~ WHITESPACE* ~ function_type_params? ~ ")" ~ return_type ~ !"=>" }
 
-enum          = { "enum" ~ "{" ~ (enum_variant ~ ("," ~ enum_variant)*)? ~ ","? ~ "}" }
-enum_variant = { identifier ~ (":" ~ type)? }
-
+enum          = { "enum" ~ "{" ~ (enum_variant ~ (WHITESPACE* ~ enum_variant)*)? ~ WHITESPACE* ~ "}" }
+enum_variant  = { identifier ~ ((":" | "::") ~ type)? ~ ","? }
 struct        = { "struct" ~ WHITESPACE* ~ "{" ~ struct_fields? ~ "}" }
 struct_fields = _{ (identifier ~ ":" ~ type) ~ ("," ~ identifier ~ ":" ~ type)* ~ ","? }
 

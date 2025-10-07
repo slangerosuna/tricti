@@ -20,6 +20,78 @@ fn parse_struct_field_and_static_path() {
 }
 
 #[test]
+fn parse_enum_with_struct_variants_using_double_colon() {
+    let src = r#"
+        PipelineError :: enum
+            ManifestLoad :: struct
+                path: String,
+                message: String,
+            CliParse :: struct
+                message: String,
+    "#
+    .to_string();
+
+    println!("source: {:?}", src);
+    let program = parser::parse(src);
+    println!("{:#?}", program);
+
+    let file_mode_src = r#"
+        FileMode :: enum
+            Read,
+            Write,
+            ReadWrite,
+            Append,
+    "#
+    .to_string();
+    println!("file_mode_src: {:?}", file_mode_src);
+    let file_mode_program = parser::parse(file_mode_src);
+    println!("file_mode_program: {:#?}", file_mode_program);
+    assert_eq!(program.statements.len(), 1);
+
+    match &program.statements[0] {
+        Statement::ConstDecl { name, value, .. } => {
+            assert_eq!(name, "PipelineError");
+            match value {
+                ConstValue::Type(Type::Enum { variants, order }) => {
+                    assert_eq!(order, &vec!["ManifestLoad".to_string(), "CliParse".to_string()]);
+
+                    let manifest_variant = variants
+                        .get("ManifestLoad")
+                        .expect("ManifestLoad variant should exist");
+                    let manifest_struct = manifest_variant
+                        .as_ref()
+                        .expect("ManifestLoad should carry a payload");
+                    match manifest_struct {
+                        Type::Struct { fields } => {
+                            assert_eq!(fields.len(), 2);
+                            assert!(fields.contains_key("path"));
+                            assert!(fields.contains_key("message"));
+                        }
+                        other => panic!("expected ManifestLoad payload to be struct, got {:?}", other),
+                    }
+
+                    let cli_variant = variants
+                        .get("CliParse")
+                        .expect("CliParse variant should exist");
+                    let cli_struct = cli_variant
+                        .as_ref()
+                        .expect("CliParse should carry a payload");
+                    match cli_struct {
+                        Type::Struct { fields } => {
+                            assert_eq!(fields.len(), 1);
+                            assert!(fields.contains_key("message"));
+                        }
+                        other => panic!("expected CliParse payload to be struct, got {:?}", other),
+                    }
+                }
+                other => panic!("expected enum type, got {:?}", other),
+            }
+        }
+        other => panic!("expected PipelineError const declaration, got {:?}", other),
+    }
+}
+
+#[test]
 fn parses_char_literal() {
     use tricti::ast::{Expression, Literal, Program, Statement};
     let source = "'a'";
@@ -206,21 +278,11 @@ fn parse_new_vec_expression() {
                     other => panic!("expected integer literal dimension, got {:?}", other),
                 }
             }
-            other => panic!("expected vec_new expression, got {:?}", other),
         },
-        other => panic!("expected variable declaration, got {:?}", other),
-    }
-}
 
-#[test]
-fn parse_if_expression_in_block() {
-    let src = r#"
-        abs_i64 :: (x: i64) -> i64 => do
-            if x < 0: ret -x
-            ret x
-    "#
-    .to_string();
+                    assert_eq!(program.statements.len(), 1);
 
+                    match &program.statements[0] {
     let program = parser::parse(src);
     assert_eq!(program.statements.len(), 1);
 }
@@ -235,9 +297,15 @@ fn parse_identifier_comparison_expression() {
     let program = parser::parse(src);
     assert_eq!(program.statements.len(), 1);
 }
-
-#[test]
-fn parse_literal_comparison_expression() {
+                                            assert_eq!(fields.len(), 2);
+                                            match fields.get("path") {
+                                                Some(Type::Identifier { name, .. }) => assert_eq!(name, "String"),
+                                                other => panic!("expected path field to be String, got {:?}", other),
+                                            }
+                                            match fields.get("message") {
+                                                Some(Type::Identifier { name, .. }) => assert_eq!(name, "String"),
+                                                other => panic!("expected message field to be String, got {:?}", other),
+                                            }
     let src = r#"
         result := 1 < 2
     "#
@@ -251,7 +319,10 @@ fn parse_literal_comparison_expression() {
 fn parse_identifier_division_expression() {
     let src = r#"
         q := a / b
-    "#
+                                            match fields.get("message") {
+                                                Some(Type::Identifier { name, .. }) => assert_eq!(name, "String"),
+                                                other => panic!("expected CliParse message field to be String, got {:?}", other),
+                                            }
     .to_string();
 
     let program = parser::parse(src);

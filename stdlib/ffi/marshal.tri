@@ -9,7 +9,7 @@ string_to_cstr :: (s: String) -> *raw u8 => do
     len := String::len(&s)
     ptr := ffi::malloc(len + 1)
     ffi::memcpy(ptr, String::as_ptr(&s), len)
-    unsafe { *(ptr + len) = 0 }
+    unsafe: *(ptr + len) = 0
 
     ret ptr
 

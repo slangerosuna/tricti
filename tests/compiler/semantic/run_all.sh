@@ -26,6 +26,7 @@ TEST_FILES=(
     "arrays_slices.tri"
     "operators.tri"
     "control_flow.tri"
+    "composition.tri"
 )
 
 # Counters
