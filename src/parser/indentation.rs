@@ -129,6 +129,10 @@ fn looks_like_struct_literal_head(head: &str) -> bool {
         return false;
     }
 
+    if !trimmed.ends_with(':') {
+        return false;
+    }
+
     if !trimmed.contains(':') {
         return false;
     }
@@ -205,6 +209,11 @@ fn convert_do_segment(segment: &str) -> Option<String> {
 }
 
 fn convert_struct_like(segment: &str, keyword: &str) -> Option<String> {
+    let trimmed_start = segment.trim_start();
+    if trimmed_start.starts_with("use ") || trimmed_start.starts_with("pub use ") {
+        return None;
+    }
+
     let (core, trailing_ws) = strip_trailing(segment);
     let direct = format!(":: {}", keyword);
 
@@ -763,6 +772,24 @@ mod tests {
         assert!(output.contains("result := TripmBus {"));
         assert!(output.contains("build_requests: build_requests,"));
         assert!(output.contains("build_receiver: build_receiver,"));
+        assert!(output.contains("}"));
+    }
+
+    #[test]
+    fn converts_struct_literal_block_with_path() {
+        let input = "component := services::TripmBus:\n    build_requests: build_requests,\n";
+        let output = desugar_indentation(input);
+        assert!(output.contains("component := services::TripmBus {"));
+        assert!(output.contains("build_requests: build_requests,"));
+        assert!(output.contains("}"));
+    }
+
+    #[test]
+    fn converts_struct_literal_block_with_type_arguments() {
+        let input = "entry := Wrapper<TripmBus>:\n    inner: TripmBus::new(),\n";
+        let output = desugar_indentation(input);
+        assert!(output.contains("entry := Wrapper<TripmBus> {"));
+        assert!(output.contains("inner: TripmBus::new(),"));
         assert!(output.contains("}"));
     }
 

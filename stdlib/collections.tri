@@ -1,5 +1,5 @@
 # Collections namespace aggregator.
 # Ensures collection implementations are available via `use collections` or `use std::collections`.
 
-pub mod hashmap
-pub mod vec
+pub mod hashmap;
+pub mod vec;

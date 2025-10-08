@@ -3,7 +3,7 @@
 
 use core
 use core::traits
-mod marshal
+mod marshal;
 
 # C-compatible types
 CInt :: type = i32

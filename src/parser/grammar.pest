@@ -41,6 +41,7 @@ simple_statement = _{
     | continue_statement
     | ifdef_statement
     | conditional
+    | conditional_loop
     | enum
     | struct
     | trait_type
@@ -66,6 +67,7 @@ do_block = { keyword_do ~ WHITESPACE* ~ block }
 for_loop     = { "for" ~ WHITESPACE* ~ identifier ~ (WHITESPACE* ~ ":" ~ WHITESPACE* ~ type)? ~ WHITESPACE* ~ "in" ~ WHITESPACE* ~ expression ~ WHITESPACE* ~ block }
 loop         = { "loop" ~ WHITESPACE* ~ block }
 conditional  = { keyword_if ~ WHITESPACE* ~ expression_no_block ~ &(WHITESPACE* ~ "{") ~ WHITESPACE* ~ block ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ (block | conditional))? }
+conditional_loop = { keyword_if ~ WHITESPACE* ~ expression_no_block ~ WHITESPACE* ~ loop }
 inline_conditional = {
     keyword_if ~ WHITESPACE* ~ expression_no_block ~ WHITESPACE* ~ (
         "then" ~ WHITESPACE* ~ expression ~ (WHITESPACE* ~ keyword_else ~ WHITESPACE* ~ expression)?

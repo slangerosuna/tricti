@@ -748,11 +748,16 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::query_spec => Expression::Query(parse_query_spec(pair)),
         _ => {
             // For wrapped expressions, unwrap them
-            let inner = pair.into_inner().next();
+            let inner = pair.clone().into_inner().next();
             if let Some(inner_pair) = inner {
                 parse_expression(inner_pair)
             } else {
-                panic!("Unexpected expression rule: {:?}", rule)
+                let span = pair.as_span();
+                let (line, col) = span.start_pos().line_col();
+                panic!(
+                    "Unexpected expression rule: {:?} at line {}, column {}",
+                    rule, line, col
+                );
             }
         }
     }

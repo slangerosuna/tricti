@@ -43,7 +43,7 @@ impl String:
         ret String {
             data: data,
             len: 0,
-            capacity: 1,
+            capacity: 1
         }
 
     # Constructor: Create string from C string
@@ -62,7 +62,7 @@ impl String:
         ret String {
             data: data,
             len: len,
-            capacity: capacity,
+            capacity: capacity
         }
 
     # Constructor: Create string with pre-allocated capacity
@@ -76,7 +76,7 @@ impl String:
         ret String {
             data: data,
             len: 0,
-            capacity: cap,
+            capacity: cap
         }
 
     # Get length
@@ -323,82 +323,61 @@ impl String:
             if isspace(ch) == 0:
                 start = i
                 break
-        
-        if start == self.len {
-            ret String::new()
-        }
-        
-        end := self.len
-        i := 0
-        loop {
-            if i < self.len {
-                idx := self.len - 1 - i
-                if idx < start {
-                    break
-                }
-                ch := ptr_offset(self.data, idx)[0] as i32
-                if isspace(ch) == 0 {
-                    end = idx + 1
-                    break
-                }
-                i = i + 1
-            } else {
-                break
-            }
-        }
-        
-        if start >= end {
-            ret String::new()
-        }
-        
-        String::substring(self, start, end)
-    }
 
-    # Trim whitespace from start
-    trim_start :: (self: *String) -> String => {
-        if self.len == 0 {
+        if start == self.len:
             ret String::new()
-        }
-        
-        start := self.len
-    for i in 0..self.len {
-            ch := ptr_offset(self.data, i)[0] as i32
-            if isspace(ch) == 0 {
-                start = i
-                break
-            }
-        }
-        
-        if start == self.len {
-            ret String::new()
-        }
-        
-        String::substring(self, start, self.len)
-    }
 
-    # Trim whitespace from end
-    trim_end :: (self: *String) -> String => {
-        if self.len == 0 {
-            ret String::new()
-        }
-        
         end := self.len
-        i := 0
-        loop {
-            if i < self.len {
-                idx := self.len - 1 - i
-                ch := ptr_offset(self.data, idx)[0] as i32
-                if isspace(ch) == 0 {
-                    end = idx + 1
-                    break
-                }
-                i = i + 1
-            } else {
+        for offset in 0..self.len:
+            idx := self.len - 1 - offset
+            if idx < start:
+                break
+            ch := ptr_offset(self.data, idx)[0] as i32
+            if isspace(ch) == 0:
+                end = idx + 1
+                break
+            if idx == 0:
                 end = 0
                 break
-            }
-        }
-        
+
+        if start >= end:
+            ret String::new()
+
+        ret String::substring(self, start, end)
+
+    # Trim whitespace from start
+    trim_start :: (*self) -> String => do
+        if self.len == 0:
+            ret String::new()
+
+        start := self.len
+        for i in 0..self.len:
+            ch := ptr_offset(self.data, i)[0] as i32
+            if isspace(ch) == 0:
+                start = i
+                break
+
+        if start == self.len:
+            ret String::new()
+
+        ret String::substring(self, start, self.len)
+
+    # Trim whitespace from end
+    trim_end :: (*self) -> String => do
+        if self.len == 0:
+            ret String::new()
+
+        end := self.len
+        for offset in 0..self.len:
+            idx := self.len - 1 - offset
+            ch := ptr_offset(self.data, idx)[0] as i32
+            if isspace(ch) == 0:
+                end = idx + 1
+                break
+            if idx == 0:
+                end = 0
+                break
+
         ret String::substring(self, 0, end)
 
     # Concatenate strings
@@ -471,30 +450,11 @@ impl String:
 
     # Create string from u64 (without i64 cast to avoid overflow)
     from_u64 :: (value: u64) -> String => do
-        if value == 0:
-            ret String::from_cstr("0" as *u8)
+        buffer := malloc(32) as *u8
+        snprintf(buffer, 32, "%llu" as *u8, value)
 
-        result := String::new()
-        n := value
-        digits: [u8; 20] = [0 as u8; 20]
-        count := 0
-
-        loop:
-            if n > 0:
-                digits[count] = ((n % 10) as u8) + 48
-                n = n / 10
-                count = count + 1
-            else:
-                break
-
-        i := count
-        loop:
-            if i > 0:
-                i = i - 1
-                String::push_char(&result, digits[i])
-            else:
-                break
-
+        result := String::from_cstr(buffer)
+        free(buffer)
         ret result
 
     # Create string from f64
@@ -553,14 +513,9 @@ impl String:
             ret String::clone(self)
 
         result := String::with_capacity(self.len + 1)
-        i := 0
-        loop:
-            if i < self.len:
-                idx := self.len - 1 - i
-                String::push_char(&result, ptr_offset(self.data, idx)[0])
-                i = i + 1
-            else:
-                break
+        for i in 0..self.len:
+            idx := self.len - 1 - i
+            String::push_char(&result, ptr_offset(self.data, idx)[0])
         ret result
 
     # Parse string to i64
@@ -585,7 +540,7 @@ impl String:
         if start_idx >= trimmed.len:
             ret none
 
-        result: i64 = 0
+        result := 0 as i64
         for i in start_idx..trimmed.len:
             ch := ptr_offset(trimmed.data, i)[0]
             if ch < 48 or ch > 57:
@@ -620,13 +575,13 @@ impl String:
         first_char := ptr_offset(trimmed.data, 0)[0]
         if first_char == 43:
             start_idx = 1
-        elif first_char == 45:
+        if first_char == 45:
             ret none
 
         if start_idx >= trimmed.len:
             ret none
 
-        result: u64 = 0
+    result := 0 as u64
         for i in start_idx..trimmed.len:
             ch := ptr_offset(trimmed.data, i)[0]
             if ch < 48 or ch > 57:
@@ -686,7 +641,6 @@ impl String:
 
         if String::equals(&trimmed, &true_str):
             ret some true
-        elif String::equals(&trimmed, &false_str):
+        if String::equals(&trimmed, &false_str):
             ret some false
-        else:
-            ret none
+        ret none

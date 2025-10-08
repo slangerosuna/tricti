@@ -154,6 +154,41 @@ test_tryfrom_string_to_bool_false :: () -> bool => do
     result := bool::try_from(s)
     String::contains(&result.to_string(), &String::from_cstr("Ok" as *u8))
 
+test_tryfrom_string_to_bool_invalid :: () -> bool => do
+    s := String::from_cstr("yes" as *u8)
+    result := bool::try_from(s)
+    String::contains(&result.to_string(), &String::from_cstr("Err" as *u8))
+
+# ===== TRYINTO TESTS (4 tests) =====
+
+test_tryinto_u64_to_u8_success :: () -> bool => do
+    val: u64 := 120
+    result := val.try_into()
+    match result:
+        ok converted => converted == 120,
+        err _ => false
+
+test_tryinto_u64_to_u8_overflow :: () -> bool => do
+    val: u64 := 500
+    result := val.try_into()
+    match result:
+        ok _ => false,
+        err _ => true
+
+test_tryinto_string_to_i64_success :: () -> bool => do
+    text := String::from_cstr("256" as *u8)
+    result := text.try_into()
+    match result:
+        ok converted => converted == 256,
+        err _ => false
+
+test_tryinto_string_to_bool_invalid :: () -> bool => do
+    text := String::from_cstr("truthy" as *u8)
+    result := text.try_into()
+    match result:
+        ok _ => false,
+        err _ => true
+
 # Main test runner
 main :: () -> i64 => do
     println("========================================")
@@ -193,6 +228,14 @@ main :: () -> i64 => do
     run_test("String -> i64 (invalid)", test_tryfrom_string_to_i64_invalid)
     run_test("String -> bool (true)", test_tryfrom_string_to_bool_true)
     run_test("String -> bool (false)", test_tryfrom_string_to_bool_false)
+    run_test("String -> bool (invalid)", test_tryfrom_string_to_bool_invalid)
+
+    println("")
+    println("===== TRYINTO TESTS (4 tests) =====")
+    run_test("u64.try_into<u8>() (success)", test_tryinto_u64_to_u8_success)
+    run_test("u64.try_into<u8>() (overflow)", test_tryinto_u64_to_u8_overflow)
+    run_test("String.try_into<i64>() (success)", test_tryinto_string_to_i64_success)
+    run_test("String.try_into<bool>() (invalid)", test_tryinto_string_to_bool_invalid)
     
     println("")
     println("========================================")
