@@ -3338,6 +3338,54 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                 Ok(aggregate.as_basic_value_enum())
             }
+            Expression::StructLiteral { type_name, fields } => {
+                if let Some(struct_name) = type_name {
+                    if let Some((struct_ty, order)) = self.struct_types.get(struct_name) {
+                        let struct_ty_copy = *struct_ty;
+                        let field_order = order.clone();
+                        let struct_val = self.build_struct_literal_value(
+                            struct_name,
+                            fields,
+                            struct_ty_copy,
+                            &field_order,
+                        )?;
+                        Ok(struct_val)
+                    } else {
+                        Ok(self.context.i64_type().const_zero().into())
+                    }
+                } else {
+                    let mut candidate: Option<(String, StructType<'ctx>, Vec<String>)> = None;
+                    let mut ambiguous = false;
+                    for (struct_name, (struct_ty, order)) in &self.struct_types {
+                        if order.len() == fields.len()
+                            && order.iter().all(|field_name| fields.contains_key(field_name))
+                        {
+                            let entry = (
+                                struct_name.clone(),
+                                *struct_ty,
+                                order.clone(),
+                            );
+                            if candidate.is_some() {
+                                ambiguous = true;
+                                break;
+                            }
+                            candidate = Some(entry);
+                        }
+                    }
+                    if !ambiguous {
+                        if let Some((struct_name, struct_ty, field_order)) = candidate {
+                            let struct_val = self.build_struct_literal_value(
+                                &struct_name,
+                                fields,
+                                struct_ty,
+                                &field_order,
+                            )?;
+                            return Ok(struct_val);
+                        }
+                    }
+                    Ok(self.context.i64_type().const_zero().into())
+                }
+            }
             Expression::VecNew {
                 length,
                 fill,
@@ -4588,6 +4636,186 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             CodegenError::CompilationError(e.to_string())
                                         })?;
                                     return Ok(with_payload.as_basic_value_enum());
+                                }
+                            }
+                        }
+                    }
+
+                    if segments.len() == 2 && !arguments.is_empty() {
+                        let trait_name = &segments[0];
+                        let method_name = &segments[1];
+                        if let Some(first_arg) = arguments.get(0) {
+                            if let Expression::Identifier(var_name) = &first_arg.value {
+                                if let Some((base_ptr, base_ty)) = self.variables.get(var_name) {
+                                    if let BasicTypeEnum::StructType(st) = base_ty {
+                                        if let Some((struct_name, (_llvm_ty, _))) = self
+                                            .struct_types
+                                            .iter()
+                                            .find(|(_, (llvm_st, _))| *llvm_st == *st)
+                                        {
+                                            let mangled_trait =
+                                                format!("{}_{}_{}", trait_name, struct_name, method_name);
+                                            if let Some(function_val) =
+                                                self.functions.get(&mangled_trait).cloned()
+                                            {
+                                                let param_metas =
+                                                    function_val.get_type().get_param_types();
+                                                let mut arg_values: Vec<BasicMetadataValueEnum<'ctx>> =
+                                                    Vec::new();
+
+                                                if let Some(first_meta) = param_metas.get(0) {
+                                                    let recv_meta: BasicMetadataValueEnum<'ctx> =
+                                                        match first_meta {
+                                                            inkwell::types::BasicMetadataTypeEnum::PointerType(pt) => {
+                                                                let casted = self
+                                                                    .builder
+                                                                    .build_pointer_cast(
+                                                                        *base_ptr,
+                                                                        *pt,
+                                                                        "trait_path_self_ptr",
+                                                                    )
+                                                                    .map_err(|e| {
+                                                                        CodegenError::CompilationError(
+                                                                            e.to_string(),
+                                                                        )
+                                                                    })?;
+                                                                casted.into()
+                                                            }
+                                                            inkwell::types::BasicMetadataTypeEnum::StructType(_st_meta) => {
+                                                                let bte: BasicTypeEnum<'ctx> = (*st).into();
+                                                                let loaded = self
+                                                                    .builder
+                                                                    .build_load(
+                                                                        bte,
+                                                                        *base_ptr,
+                                                                        "trait_path_self_load",
+                                                                    )
+                                                                    .map_err(|e| {
+                                                                        CodegenError::CompilationError(
+                                                                            e.to_string(),
+                                                                        )
+                                                                    })?;
+                                                                loaded.into()
+                                                            }
+                                                            inkwell::types::BasicMetadataTypeEnum::IntType(it) => {
+                                                                let bte: BasicTypeEnum<'ctx> = (*st).into();
+                                                                let loaded = self
+                                                                    .builder
+                                                                    .build_load(
+                                                                        bte,
+                                                                        *base_ptr,
+                                                                        "trait_path_self_load",
+                                                                    )
+                                                                    .map_err(|e| {
+                                                                        CodegenError::CompilationError(
+                                                                            e.to_string(),
+                                                                        )
+                                                                    })?;
+                                                                self.cast_to_int(loaded, *it)?.into()
+                                                            }
+                                                            inkwell::types::BasicMetadataTypeEnum::FloatType(ft) => {
+                                                                let bte: BasicTypeEnum<'ctx> = (*st).into();
+                                                                let loaded = self
+                                                                    .builder
+                                                                    .build_load(
+                                                                        bte,
+                                                                        *base_ptr,
+                                                                        "trait_path_self_load",
+                                                                    )
+                                                                    .map_err(|e| {
+                                                                        CodegenError::CompilationError(
+                                                                            e.to_string(),
+                                                                        )
+                                                                    })?;
+                                                                self.cast_to_float(loaded, *ft)?.into()
+                                                            }
+                                                            _ => (*base_ptr).into(),
+                                                        };
+                                                    arg_values.push(recv_meta);
+                                                }
+
+                                                for (arg_index, arg) in arguments.iter().enumerate().skip(1) {
+                                                    let value = self.generate_expression(&arg.value)?;
+                                                    let param_meta_index = arg_index;
+                                                    let casted_meta: BasicMetadataValueEnum<'ctx> =
+                                                        if let Some(meta_ty) = param_metas.get(param_meta_index) {
+                                                            match meta_ty {
+                                                                inkwell::types::BasicMetadataTypeEnum::IntType(it) => {
+                                                                    self.cast_to_int(value, *it)?.into()
+                                                                }
+                                                                inkwell::types::BasicMetadataTypeEnum::FloatType(ft) => {
+                                                                    self.cast_to_float(value, *ft)?.into()
+                                                                }
+                                                                inkwell::types::BasicMetadataTypeEnum::PointerType(pt) => {
+                                                                    self.cast_to_ptr(value, *pt)?.into()
+                                                                }
+                                                                inkwell::types::BasicMetadataTypeEnum::StructType(st_meta) => {
+                                                                    if value.get_type() == (*st_meta).into() {
+                                                                        value.into()
+                                                                    } else {
+                                                                        let tmp_alloc = self
+                                                                            .create_entry_block_alloca(
+                                                                                "trait_path_struct_tmp",
+                                                                                (*st_meta).into(),
+                                                                            )?;
+                                                                        self.builder
+                                                                            .build_store(tmp_alloc, value)
+                                                                            .map_err(|e| {
+                                                                                CodegenError::CompilationError(
+                                                                                    e.to_string(),
+                                                                                )
+                                                                            })?;
+                                                                        self.builder
+                                                                            .build_load(
+                                                                                *st_meta,
+                                                                                tmp_alloc,
+                                                                                "trait_path_struct_load",
+                                                                            )
+                                                                            .map_err(|e| {
+                                                                                CodegenError::CompilationError(
+                                                                                    e.to_string(),
+                                                                                )
+                                                                            })?
+                                                                            .into()
+                                                                    }
+                                                                }
+                                                                _ => self
+                                                                    .cast_to_int(value, self.context.i64_type())?
+                                                                    .into(),
+                                                            }
+                                                        } else {
+                                                            self.cast_to_int(value, self.context.i64_type())?.into()
+                                                        };
+                                                    arg_values.push(casted_meta);
+                                                }
+
+                                                for pad_index in arguments.len()..param_metas.len() {
+                                                    let pad: BasicMetadataValueEnum<'ctx> = match param_metas[pad_index] {
+                                                        inkwell::types::BasicMetadataTypeEnum::IntType(it) => it.const_zero().into(),
+                                                        inkwell::types::BasicMetadataTypeEnum::FloatType(ft) => ft.const_zero().into(),
+                                                        inkwell::types::BasicMetadataTypeEnum::PointerType(pt) => pt.const_zero().into(),
+                                                        _ => self.context.i64_type().const_zero().into(),
+                                                    };
+                                                    arg_values.push(pad);
+                                                }
+
+                                                let result = self
+                                                    .builder
+                                                    .build_call(function_val, &arg_values, "trait_path_call")
+                                                    .map_err(|e| {
+                                                        CodegenError::CompilationError(e.to_string())
+                                                    })?;
+
+                                                return if let Some(value) =
+                                                    result.try_as_basic_value().left()
+                                                {
+                                                    Ok(value)
+                                                } else {
+                                                    Ok(self.context.i64_type().const_zero().into())
+                                                };
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -5907,6 +6135,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Method call lowering: expr.method(args) => Type_method(self, args)
                 // Only support when expr is an identifier bound to a known struct
                 if let Expression::Identifier(var_name) = object.as_ref() {
+                    eprintln!("method call {}.{}", var_name, field);
                     if let Some(vector_result) =
                         self.try_generate_vector_method_call(var_name, field, arguments)?
                     {
@@ -6369,12 +6598,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
                     }
                     if let Some((base_ptr, base_ty)) = self.variables.get(var_name) {
+                        eprintln!(
+                            "have variable {} with type {}",
+                            var_name,
+                            base_ty.print_to_string().to_string()
+                        );
                         if let BasicTypeEnum::StructType(st) = base_ty {
                             if let Some((struct_name, (_llvm_st, _))) = self
                                 .struct_types
                                 .iter()
                                 .find(|(_, (llvm_st, _))| llvm_st == st)
                             {
+                                eprintln!("struct name {}", struct_name);
                                 // Try inherent impl first
                                 let mangled_inherent = format!("{}_{}", struct_name, field);
                                 let mut selected_fn: Option<FunctionValue<'ctx>> =
@@ -6382,6 +6617,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                                 // If not found, try trait impls for this struct type deterministically
                                 if selected_fn.is_none() {
+                                    eprintln!("searching traits for {}", struct_name);
                                     // Collect candidate trait mangled names that have this method for this type
                                     let mut candidates: Vec<String> = Vec::new();
                                     for (trait_name, impls_for_trait) in &self.semantic.trait_impls
@@ -6395,8 +6631,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             }
                                         }
                                     }
+                                    eprintln!("candidates: {:?}", candidates);
                                     // Choose lexicographically smallest for determinism if multiple traits match
                                     if let Some(best) = candidates.into_iter().min() {
+                                        eprintln!("best candidate {}", best);
                                         if let Some(fv) = self.functions.get(&best).cloned() {
                                             selected_fn = Some(fv);
                                         }
@@ -6404,6 +6642,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 }
 
                                 if let Some(function_val) = selected_fn {
+                                    eprintln!(
+                                        "selected function {}",
+                                        function_val.get_name().to_string_lossy()
+                                    );
                                     if let Some(sig) =
                                         self.semantic.functions.get(&mangled_inherent)
                                     {
@@ -6511,6 +6753,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                                         return Ok(self.context.i64_type().const_zero().into());
                                     }
                                 }
+                                eprintln!("no function found for {}.{}", struct_name, field);
+                                let mut keys: Vec<String> = self
+                                    .functions
+                                    .keys()
+                                    .cloned()
+                                    .collect();
+                                keys.sort();
+                                eprintln!("available functions: {:?}", keys);
                             }
                         }
                     }
@@ -7355,6 +7605,169 @@ impl<'ctx> CodeGenerator<'ctx> {
                         self.builder
                             .build_call(printf_fn, &argsm, "printf_call")
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    } else if value.is_struct_value() {
+                        let mut handled_struct = false;
+                        if let Some(enum_ty) = self.enum_struct {
+                            let struct_val = value.into_struct_value();
+                            if struct_val.get_type() == enum_ty {
+                                handled_struct = true;
+
+                                let tag_val = self
+                                    .builder
+                                    .build_extract_value(struct_val, 0, "print_enum_tag")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                    .into_int_value();
+                                let payload_val = self
+                                    .builder
+                                    .build_extract_value(struct_val, 1, "print_enum_payload")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                    .into_int_value();
+
+                                let current_fn = self.current_function.ok_or_else(|| {
+                                    CodegenError::CompilationError(
+                                        "println enum printing requires current function"
+                                            .to_string(),
+                                    )
+                                })?;
+                                let check_none_bb = self
+                                    .context
+                                    .append_basic_block(current_fn, "printenum.check_none");
+                                let some_bb = self
+                                    .context
+                                    .append_basic_block(current_fn, "printenum.some");
+                                let none_bb = self
+                                    .context
+                                    .append_basic_block(current_fn, "printenum.none");
+                                let other_bb = self
+                                    .context
+                                    .append_basic_block(current_fn, "printenum.other");
+                                let cont_bb = self
+                                    .context
+                                    .append_basic_block(current_fn, "printenum.cont");
+
+                                let one = self.context.i64_type().const_int(1, false);
+                                let zero = self.context.i64_type().const_zero();
+
+                                let is_some = self
+                                    .builder
+                                    .build_int_compare(
+                                        IntPredicate::EQ,
+                                        tag_val,
+                                        one,
+                                        "printenum_is_some",
+                                    )
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                self.builder
+                                    .build_conditional_branch(is_some, some_bb, check_none_bb)
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                                self.builder.position_at_end(check_none_bb);
+                                let is_none = self
+                                    .builder
+                                    .build_int_compare(
+                                        IntPredicate::EQ,
+                                        tag_val,
+                                        zero,
+                                        "printenum_is_none",
+                                    )
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                self.builder
+                                    .build_conditional_branch(is_none, none_bb, other_bb)
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                                self.builder.position_at_end(some_bb);
+                                let fmt_some = self
+                                    .builder
+                                    .build_global_string_ptr("%s", "fmt_some")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                let some_str = self
+                                    .builder
+                                    .build_global_string_ptr("some ", "str_some")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                let args_some: Vec<BasicValueEnum<'ctx>> = vec![
+                                    fmt_some.as_pointer_value().into(),
+                                    some_str.as_pointer_value().into(),
+                                ];
+                                let args_some_meta: Vec<_> =
+                                    args_some.into_iter().map(|v| v.into()).collect();
+                                self.builder
+                                    .build_call(printf_fn, &args_some_meta, "printf_call")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                let fmt_payload = self
+                                    .builder
+                                    .build_global_string_ptr("%lld", "fmt_some_payload")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                let args_payload: Vec<BasicValueEnum<'ctx>> = vec![
+                                    fmt_payload.as_pointer_value().into(),
+                                    payload_val.into(),
+                                ];
+                                let args_payload_meta: Vec<_> =
+                                    args_payload.into_iter().map(|v| v.into()).collect();
+                                self.builder
+                                    .build_call(printf_fn, &args_payload_meta, "printf_call")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                self.builder
+                                    .build_unconditional_branch(cont_bb)
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                                self.builder.position_at_end(none_bb);
+                                let fmt_none = self
+                                    .builder
+                                    .build_global_string_ptr("%s", "fmt_none")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                let none_str = self
+                                    .builder
+                                    .build_global_string_ptr("none", "str_none")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                let args_none: Vec<BasicValueEnum<'ctx>> = vec![
+                                    fmt_none.as_pointer_value().into(),
+                                    none_str.as_pointer_value().into(),
+                                ];
+                                let args_none_meta: Vec<_> =
+                                    args_none.into_iter().map(|v| v.into()).collect();
+                                self.builder
+                                    .build_call(printf_fn, &args_none_meta, "printf_call")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                self.builder
+                                    .build_unconditional_branch(cont_bb)
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                                self.builder.position_at_end(other_bb);
+                                let fmt_tag = self
+                                    .builder
+                                    .build_global_string_ptr("%lld", "fmt_enum_tag")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                let args_tag: Vec<BasicValueEnum<'ctx>> = vec![
+                                    fmt_tag.as_pointer_value().into(),
+                                    tag_val.into(),
+                                ];
+                                let args_tag_meta: Vec<_> =
+                                    args_tag.into_iter().map(|v| v.into()).collect();
+                                self.builder
+                                    .build_call(printf_fn, &args_tag_meta, "printf_call")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                self.builder
+                                    .build_unconditional_branch(cont_bb)
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                                self.builder.position_at_end(cont_bb);
+                            }
+                        }
+
+                        if !handled_struct {
+                            let fmt = self
+                                .builder
+                                .build_global_string_ptr("%lld", "fmt_struct_fallback")
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let zero: BasicValueEnum<'ctx> =
+                                self.context.i64_type().const_zero().into();
+                            let args: Vec<BasicValueEnum<'ctx>> =
+                                vec![fmt.as_pointer_value().into(), zero];
+                            let argsm: Vec<_> = args.into_iter().map(|v| v.into()).collect();
+                            self.builder
+                                .build_call(printf_fn, &argsm, "printf_call")
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        }
                     } else if value.is_pointer_value() {
                         let ty_tmp = value.get_type().print_to_string();
                         let ty_str = ty_tmp.to_string_lossy();
@@ -7609,34 +8022,6 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                                 let args: Vec<BasicValueEnum<'ctx>> =
                                     vec![fmt.as_pointer_value().into(), value.into()];
-                                let argsm: Vec<_> = args.into_iter().map(|v| v.into()).collect();
-                                self.builder
-                                    .build_call(printf_fn, &argsm, "printf_call")
-                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                            } else if value.is_struct_value() {
-                                // Assume enum, print tag
-                                let struct_ty = self.enum_struct.unwrap();
-                                let temp_alloca =
-                                    self.create_entry_block_alloca("print_enum", struct_ty.into())?;
-                                self.builder
-                                    .build_store(temp_alloca, value)
-                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                                let tag_ptr = self
-                                    .builder
-                                    .build_struct_gep(struct_ty, temp_alloca, 0, "print_tag_ptr")
-                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                                let tag_val = self
-                                    .builder
-                                    .build_load(self.context.i64_type(), tag_ptr, "print_tag")
-                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                                let fmt = self
-                                    .builder
-                                    .build_global_string_ptr("%lld", "fmtenum")
-                                    .map_err(|e| {
-                                    CodegenError::CompilationError(e.to_string())
-                                })?;
-                                let args: Vec<BasicValueEnum<'ctx>> =
-                                    vec![fmt.as_pointer_value().into(), tag_val.into()];
                                 let argsm: Vec<_> = args.into_iter().map(|v| v.into()).collect();
                                 self.builder
                                     .build_call(printf_fn, &argsm, "printf_call")
@@ -8167,16 +8552,60 @@ impl<'ctx> CodeGenerator<'ctx> {
                     methods,
                 } => {
                     for m in methods {
-                        if let Statement::ConstDecl {
-                            name: mname, value, ..
-                        } = m
-                        {
-                            if let ConstValue::Expression(Expression::Function {
+                        match m {
+                            Statement::ConstDecl {
+                                name: mname,
+                                value,
+                                ..
+                            } => {
+                                if let ConstValue::Expression(Expression::Function {
+                                    parameters,
+                                    return_type,
+                                    ..
+                                }) = value
+                                {
+                                    let mangled = match trait_name {
+                                        Some(tn) => format!("{}_{}_{}", tn, type_name, mname),
+                                        None => format!("{}_{}", type_name, mname),
+                                    };
+                                    let ret_ty = return_type
+                                        .as_ref()
+                                        .and_then(|t| self.map_ast_type(t))
+                                        .unwrap_or(self.context.i64_type().into());
+                                    let mut param_tys_bte: Vec<BasicTypeEnum<'ctx>> = Vec::new();
+                                    param_tys_bte
+                                        .push(self.context.ptr_type(AddressSpace::default()).into());
+                                    param_tys_bte.extend(parameters.iter().map(|p| {
+                                        p.param_type
+                                            .as_ref()
+                                            .and_then(|t| self.map_ast_type(t))
+                                            .unwrap_or(self.context.i64_type().into())
+                                    }));
+                                    let param_meta: Vec<inkwell::types::BasicMetadataTypeEnum> =
+                                        param_tys_bte.iter().map(|t| (*t).into()).collect();
+                                    let fn_type = match ret_ty {
+                                        BasicTypeEnum::IntType(it) => it.fn_type(&param_meta, false),
+                                        BasicTypeEnum::FloatType(ft) => {
+                                            ft.fn_type(&param_meta, false)
+                                        }
+                                        BasicTypeEnum::PointerType(pt) => {
+                                            pt.fn_type(&param_meta, false)
+                                        }
+                                        BasicTypeEnum::StructType(st) => {
+                                            st.fn_type(&param_meta, false)
+                                        }
+                                        _ => self.context.i64_type().fn_type(&param_meta, false),
+                                    };
+                                    let f = self.module.add_function(&mangled, fn_type, None);
+                                    self.functions.insert(mangled, f);
+                                }
+                            }
+                            Statement::ImplMethod {
+                                name: mname,
                                 parameters,
                                 return_type,
                                 ..
-                            }) = value
-                            {
+                            } => {
                                 let mangled = match trait_name {
                                     Some(tn) => format!("{}_{}_{}", tn, type_name, mname),
                                     None => format!("{}_{}", type_name, mname),
@@ -8186,7 +8615,6 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     .and_then(|t| self.map_ast_type(t))
                                     .unwrap_or(self.context.i64_type().into());
                                 let mut param_tys_bte: Vec<BasicTypeEnum<'ctx>> = Vec::new();
-                                // Prepend receiver pointer parameter for methods
                                 param_tys_bte
                                     .push(self.context.ptr_type(AddressSpace::default()).into());
                                 param_tys_bte.extend(parameters.iter().map(|p| {
@@ -8209,6 +8637,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 let f = self.module.add_function(&mangled, fn_type, None);
                                 self.functions.insert(mangled, f);
                             }
+                            _ => {}
                         }
                     }
                 }
@@ -8618,168 +9047,180 @@ impl<'ctx> CodeGenerator<'ctx> {
                     methods,
                 } => {
                     for m in methods {
-                        if let Statement::ConstDecl {
-                            name: mname, value, ..
-                        } = m
-                        {
-                            if let ConstValue::Expression(Expression::Function {
-                                parameters,
-                                body,
-                                return_type,
-                                ..
-                            }) = value
-                            {
-                                let mangled = match trait_name {
-                                    Some(tn) => format!("{}_{}_{}", tn, type_name, mname),
-                                    None => format!("{}_{}", type_name, mname),
-                                };
-                                let f = match self.functions.get(&mangled) {
-                                    Some(f) => *f,
-                                    None => continue,
-                                };
-                                let entry = self.context.append_basic_block(f, "entry");
-                                self.builder.position_at_end(entry);
-                                let prev_fn = self.current_function;
-                                let prev_impl_struct = self.current_impl_struct.clone();
-                                let prev_vars = std::mem::take(&mut self.variables);
-                                self.current_function = Some(f);
-                                // Set current impl struct name for `self` handling
-                                self.current_impl_struct = Some(type_name.clone());
-
-                                // Bind params to allocas. For inherent methods, prepend implicit receiver `self` as &type_name.
-                                let mut param_index = 0usize;
-                                if trait_name.is_none() {
-                                    // Receiver is first param in LLVM function; bind as `self` with pointer type to struct
-                                    if let Some((_st, _)) = self.struct_types.get(type_name) {
-                                        if let Some(first_param) = f.get_param_iter().next() {
-                                            let p_ty = self
-                                                .context
-                                                .ptr_type(AddressSpace::default())
-                                                .into();
-                                            let alloca =
-                                                self.create_entry_block_alloca("self", p_ty)?;
-                                            self.builder.build_store(alloca, first_param).map_err(
-                                                |e| CodegenError::CompilationError(e.to_string()),
-                                            )?;
-                                            self.variables
-                                                .insert("self".to_string(), (alloca, p_ty));
-                                            self.local_types.insert(
-                                                "self".to_string(),
-                                                crate::ast::Type::Pointer {
-                                                    is_mutable: false,
-                                                    pointee: Box::new(self_type.clone()),
-                                                },
-                                            );
-                                            param_index = 1;
-                                        }
-                                    }
+                        let extracted = match m {
+                            Statement::ConstDecl { name, value, .. } => {
+                                if let ConstValue::Expression(Expression::Function {
+                                    parameters,
+                                    body,
+                                    return_type,
+                                    ..
+                                }) = value
+                                {
+                                    Some((
+                                        name.clone(),
+                                        parameters,
+                                        return_type,
+                                        body,
+                                    ))
+                                } else {
+                                    None
                                 }
-                                for (i, param) in f.get_param_iter().enumerate().skip(param_index) {
-                                    let p_name = parameters
-                                        .get(i - param_index)
-                                        .map(|p| p.name.clone())
-                                        .unwrap_or(format!("arg{}", i - param_index));
-                                    let p_ty = parameters
-                                        .get(i - param_index)
-                                        .and_then(|p| p.param_type.as_ref())
-                                        .and_then(|t| self.map_ast_type(t))
-                                        .unwrap_or(self.context.i64_type().into());
-                                    let alloca = self.create_entry_block_alloca(&p_name, p_ty)?;
-                                    self.builder.build_store(alloca, param).map_err(|e| {
+                            }
+                            Statement::ImplMethod {
+                                name,
+                                parameters,
+                                return_type,
+                                body,
+                                ..
+                            } => Some((name.clone(), parameters, return_type, body)),
+                            _ => None,
+                        };
+
+                        let Some((mname, parameters, return_type, body)) = extracted else {
+                            continue;
+                        };
+
+                        let mangled = match trait_name {
+                            Some(tn) => format!("{}_{}_{}", tn, type_name, mname),
+                            None => format!("{}_{}", type_name, mname),
+                        };
+                        let f = match self.functions.get(&mangled) {
+                            Some(f) => *f,
+                            None => continue,
+                        };
+                        let entry = self.context.append_basic_block(f, "entry");
+                        self.builder.position_at_end(entry);
+                        let prev_fn = self.current_function;
+                        let prev_impl_struct = self.current_impl_struct.clone();
+                        let prev_vars = std::mem::take(&mut self.variables);
+                        self.current_function = Some(f);
+                        self.current_impl_struct = Some(type_name.clone());
+
+                        let mut param_index = 0usize;
+                        if trait_name.is_none() {
+                            if let Some((_st, _)) = self.struct_types.get(type_name) {
+                                if let Some(first_param) = f.get_param_iter().next() {
+                                    let p_ty = self
+                                        .context
+                                        .ptr_type(AddressSpace::default())
+                                        .into();
+                                    let alloca =
+                                        self.create_entry_block_alloca("self", p_ty)?;
+                                    self.builder.build_store(alloca, first_param).map_err(|e| {
                                         CodegenError::CompilationError(e.to_string())
                                     })?;
-                                    self.variables.insert(p_name.clone(), (alloca, p_ty));
-                                    let ast_ty = parameters
-                                        .get(i - param_index)
-                                        .and_then(|p| p.param_type.clone())
-                                        .unwrap_or(crate::ast::Type::Identifier {
-                                            name: "i64".to_string(),
-                                            type_args: vec![],
-                                        });
-                                    self.record_unsigned_binding(&p_name, &ast_ty);
-                                    self.local_types.insert(p_name, ast_ty);
+                                    self.variables
+                                        .insert("self".to_string(), (alloca, p_ty));
+                                    self.local_types.insert(
+                                        "self".to_string(),
+                                        crate::ast::Type::Pointer {
+                                            is_mutable: false,
+                                            pointee: Box::new(self_type.clone()),
+                                        },
+                                    );
+                                    param_index = 1;
                                 }
-
-                                match body {
-                                    FunctionBody::Expression(expr) => {
-                                        let v = self.generate_expression(expr)?;
-                                        let ret_ty = return_type
-                                            .as_ref()
-                                            .and_then(|t| self.map_ast_type(t))
-                                            .unwrap_or(self.context.i64_type().into());
-                                        if mname == "get" {
-                                            let ty_str = ret_ty.print_to_string().to_string();
-                                            eprintln!(
-                                                "impl method {}::{} return type {}",
-                                                type_name, mname, ty_str
-                                            );
-                                        }
-                                        let casted = self.cast_basic_to_type(v, ret_ty)?;
-                                        self.builder.build_return(Some(&casted)).map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                    }
-                                    FunctionBody::Block(stmts) => {
-                                        let mut last_expr_value: Option<BasicValueEnum<'ctx>> =
-                                            None;
-                                        let slice: &[Statement] = &stmts[..];
-                                        if let Some((last, prefix)) = slice.split_last() {
-                                            for s in prefix {
-                                                let _ = self.generate_statement(s);
-                                            }
-                                            match last {
-                                                Statement::Expression(expr) => {
-                                                    let v = self.generate_expression(expr)?;
-                                                    last_expr_value = Some(v);
-                                                }
-                                                other => {
-                                                    let _ = self.generate_statement(other);
-                                                }
-                                            }
-                                        }
-                                        let ret_ty = return_type
-                                            .as_ref()
-                                            .and_then(|t| self.map_ast_type(t))
-                                            .unwrap_or(self.context.i64_type().into());
-                                        if mname == "get" {
-                                            let ty_str = ret_ty.print_to_string().to_string();
-                                            eprintln!(
-                                                "impl method {}::{} return type {}",
-                                                type_name, mname, ty_str
-                                            );
-                                        }
-                                        let ret_val: BasicValueEnum<'ctx> = if let Some(v) =
-                                            last_expr_value
-                                        {
-                                            self.cast_basic_to_type(v, ret_ty)?
-                                        } else {
-                                            match ret_ty {
-                                                BasicTypeEnum::IntType(it) => {
-                                                    it.const_zero().into()
-                                                }
-                                                BasicTypeEnum::FloatType(ft) => {
-                                                    ft.const_zero().into()
-                                                }
-                                                BasicTypeEnum::PointerType(pt) => {
-                                                    pt.const_zero().into()
-                                                }
-                                                _ => self.context.i64_type().const_zero().into(),
-                                            }
-                                        };
-                                        self.builder.build_return(Some(&ret_val)).map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                    }
-                                }
-
-                                // Restore state for next
-                                self.variables = prev_vars;
-                                self.local_types.clear();
-                                self.unsigned_variables.clear();
-                                self.current_function = prev_fn;
-                                self.current_impl_struct = prev_impl_struct;
                             }
                         }
+
+                        for (i, param) in f.get_param_iter().enumerate().skip(param_index) {
+                            let p_name = parameters
+                                .get(i - param_index)
+                                .map(|p| p.name.clone())
+                                .unwrap_or(format!("arg{}", i - param_index));
+                            let p_ty = parameters
+                                .get(i - param_index)
+                                .and_then(|p| p.param_type.as_ref())
+                                .and_then(|t| self.map_ast_type(t))
+                                .unwrap_or(self.context.i64_type().into());
+                            let alloca = self.create_entry_block_alloca(&p_name, p_ty)?;
+                            self.builder
+                                .build_store(alloca, param)
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            self.variables.insert(p_name.clone(), (alloca, p_ty));
+                            let ast_ty = parameters
+                                .get(i - param_index)
+                                .and_then(|p| p.param_type.clone())
+                                .unwrap_or(crate::ast::Type::Identifier {
+                                    name: "i64".to_string(),
+                                    type_args: vec![],
+                                });
+                            self.record_unsigned_binding(&p_name, &ast_ty);
+                            self.local_types.insert(p_name, ast_ty);
+                        }
+
+                        match body {
+                            FunctionBody::Expression(expr) => {
+                                let v = self.generate_expression(expr)?;
+                                let ret_ty = return_type
+                                    .as_ref()
+                                    .and_then(|t| self.map_ast_type(t))
+                                    .unwrap_or(self.context.i64_type().into());
+                                if mname == "get" {
+                                    let ty_str = ret_ty.print_to_string().to_string();
+                                    eprintln!(
+                                        "impl method {}::{} return type {}",
+                                        type_name, mname, ty_str
+                                    );
+                                }
+                                let casted = self.cast_basic_to_type(v, ret_ty)?;
+                                self.builder
+                                    .build_return(Some(&casted))
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            }
+                            FunctionBody::Block(stmts) => {
+                                let mut last_expr_value: Option<BasicValueEnum<'ctx>> = None;
+                                let slice: &[Statement] = &stmts[..];
+                                if let Some((last, prefix)) = slice.split_last() {
+                                    for s in prefix {
+                                        let _ = self.generate_statement(s);
+                                    }
+                                    match last {
+                                        Statement::Expression(expr) => {
+                                            let v = self.generate_expression(expr)?;
+                                            last_expr_value = Some(v);
+                                        }
+                                        other => {
+                                            let _ = self.generate_statement(other);
+                                        }
+                                    }
+                                }
+                                let ret_ty = return_type
+                                    .as_ref()
+                                    .and_then(|t| self.map_ast_type(t))
+                                    .unwrap_or(self.context.i64_type().into());
+                                if mname == "get" {
+                                    let ty_str = ret_ty.print_to_string().to_string();
+                                    eprintln!(
+                                        "impl method {}::{} return type {}",
+                                        type_name, mname, ty_str
+                                    );
+                                }
+                                let ret_val: BasicValueEnum<'ctx> = if let Some(v) =
+                                    last_expr_value
+                                {
+                                    self.cast_basic_to_type(v, ret_ty)?
+                                } else {
+                                    match ret_ty {
+                                        BasicTypeEnum::IntType(it) => it.const_zero().into(),
+                                        BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
+                                        BasicTypeEnum::PointerType(pt) => {
+                                            pt.const_zero().into()
+                                        }
+                                        _ => self.context.i64_type().const_zero().into(),
+                                    }
+                                };
+                                self.builder
+                                    .build_return(Some(&ret_val))
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            }
+                        }
+
+                        self.variables = prev_vars;
+                        self.local_types.clear();
+                        self.unsigned_variables.clear();
+                        self.current_function = prev_fn;
+                        self.current_impl_struct = prev_impl_struct;
                     }
                 }
                 _ => {}

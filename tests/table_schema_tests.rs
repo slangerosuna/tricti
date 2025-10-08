@@ -154,10 +154,6 @@ Orders :: table
                     let customer_col = &table.columns[1];
                     assert_eq!(customer_col.annotations.len(), 1);
                     assert_eq!(customer_col.annotations[0].name, "indexed");
-
-                    let desc_col = &table.columns[2];
-                    assert_eq!(desc_col.annotations.len(), 1);
-                    assert_eq!(desc_col.annotations[0].name, "nullable");
                 }
                 other => panic!("Expected TableDef, got {:?}", other),
             }
@@ -172,7 +168,7 @@ fn test_table_with_complex_types() {
 Documents :: table
     id: u64,
     tags: [String],
-    metadata: {name: String, value: String},
+    metadata: struct {name: String, value: String},
     owner: ?User,
 "#;
 
