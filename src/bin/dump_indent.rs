@@ -4,9 +4,7 @@ use std::path::Path;
 
 fn main() {
     let mut args = env::args().skip(1);
-    let input = args
-        .next()
-        .expect("usage: dump_indent <input> [output]");
+    let input = args.next().expect("usage: dump_indent <input> [output]");
     let output = args.next();
 
     if args.next().is_some() {

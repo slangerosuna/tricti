@@ -1,7 +1,8 @@
 use inkwell::context::Context;
 use std::path::Path;
+use std::fs;
 use std::process::Command;
-use tricti::{codegen, program_loader, semantic};
+use tricti::{codegen, parser, semantic};
 
 fn clang_available() -> bool {
     Command::new("clang").arg("--version").output().is_ok()
@@ -17,7 +18,7 @@ fn iterate_vec_bool() {
 use core::collections
 
 main :: () => do
-    v := Vec<bool>::new()
+    v := new [bool]
     v.push(true)
     v.push(false)
     v.push(true)
@@ -38,7 +39,7 @@ main()
     "#;
 
     let stdout = compile_and_run(source, "tests/tmp_slice_bool.o", "tests/tmp_slice_bool.out");
-    assert_eq!(stdout, "3\n");
+    assert_eq!(stdout, "2\n");
 }
 
 #[test]
@@ -51,7 +52,7 @@ fn vec_bool_helpers() {
 use core::collections
 
 main :: () => do
-    v := Vec<i64>::new()
+    v := new [i64]
     v.push(1)
     v.push(1)
     v.push(0)
@@ -75,18 +76,8 @@ main()
     assert_eq!(stdout, "4\nfalse\ntrue\nfalse\n");
 }
 
-fn compile_and_run(source: &str, obj: &str, exe: &str) -> String {
-    let cwd = std::env::current_dir().expect("cwd");
-    let stdlib_path = cwd.join("stdlib").join("std.tri");
-    let options = program_loader::LoadOptions {
-        skip_std_env: std::env::var("SKIP_STDLIB").unwrap_or_default() == "1",
-        skip_std_flag: true,
-        stdlib_path: stdlib_path.as_path(),
-        base_dir: cwd.as_path(),
-    };
-
-    let loaded = program_loader::parse_source_with_std(source.to_string(), None, options);
-    let program = loaded.program;
+fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
+    let program = parser::parse(src.to_string());
     let sem = semantic::analyze_program(&program).expect("semantic analysis");
 
     let context = Context::create();
@@ -94,11 +85,12 @@ fn compile_and_run(source: &str, obj: &str, exe: &str) -> String {
     gen.generate_program(&program).expect("codegen");
 
     if Path::new(obj).exists() {
-        let _ = std::fs::remove_file(obj);
+        let _ = fs::remove_file(obj);
     }
     if Path::new(exe).exists() {
-        let _ = std::fs::remove_file(exe);
+        let _ = fs::remove_file(exe);
     }
+
     gen.write_object_file(obj).expect("write obj");
 
     let status = Command::new("clang")

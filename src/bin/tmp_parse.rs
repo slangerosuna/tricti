@@ -230,6 +230,73 @@ fn main() {
         Ok(_) => eprintln!("cast_tail 'as ?*T' parsed successfully"),
         Err(err) => eprintln!("cast_tail 'as ?*T' failed: {:?}", err),
     }
+    match DebugParser::parse(Rule::r#type, "?u64") {
+        Ok(mut pairs) => {
+            eprintln!("type '?u64' parsed successfully");
+            while let Some(pair) = pairs.next() {
+                eprintln!("  type pair: {:?} -> {:?}", pair.as_rule(), pair.as_str());
+                for inner in pair.clone().into_inner() {
+                    eprintln!("    inner: {:?} -> {:?}", inner.as_rule(), inner.as_str());
+                }
+            }
+        }
+        Err(err) => eprintln!("type '?u64' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::identifier, "u64") {
+        Ok(_) => eprintln!("identifier 'u64' parsed successfully"),
+        Err(err) => eprintln!("identifier 'u64' failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::struct_fields, "request_id: ?u64,") {
+        Ok(mut pairs) => {
+            eprintln!("struct_fields parsed successfully");
+            while let Some(pair) = pairs.next() {
+                eprintln!(
+                    "  struct_field pair: {:?} -> {:?}",
+                    pair.as_rule(),
+                    pair.as_str()
+                );
+                for inner in pair.clone().into_inner() {
+                    eprintln!("    inner: {:?} -> {:?}", inner.as_rule(), inner.as_str());
+                    for deeper in inner.clone().into_inner() {
+                        eprintln!(
+                            "      deeper: {:?} -> {:?}",
+                            deeper.as_rule(),
+                            deeper.as_str()
+                        );
+                    }
+                }
+            }
+        }
+        Err(err) => eprintln!("struct_fields parse failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::struct_fields, "\n    request_id: ?u64,\n") {
+        Ok(mut pairs) => {
+            eprintln!("struct_fields with leading whitespace parsed successfully");
+            while let Some(pair) = pairs.next() {
+                eprintln!(
+                    "  struct_field pair: {:?} -> {:?}",
+                    pair.as_rule(),
+                    pair.as_str()
+                );
+                for inner in pair.clone().into_inner() {
+                    eprintln!("    inner: {:?} -> {:?}", inner.as_rule(), inner.as_str());
+                }
+            }
+        }
+        Err(err) => eprintln!("struct_fields with leading whitespace failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::r#struct, "struct {\n    request_id: ?u64,\n}") {
+        Ok(_) => eprintln!("struct snippet parsed successfully"),
+        Err(err) => eprintln!("struct snippet failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::const_decl, "Foo :: struct {\n    request_id: u64,\n}") {
+        Ok(_) => eprintln!("const_decl snippet parsed successfully"),
+        Err(err) => eprintln!("const_decl snippet failed: {:?}", err),
+    }
+    match DebugParser::parse(Rule::const_body, "struct {\n    request_id: ?u64,\n}") {
+        Ok(_) => eprintln!("const_body snippet parsed successfully"),
+        Err(err) => eprintln!("const_body snippet failed: {:?}", err),
+    }
     match DebugParser::parse(Rule::cast_tail, "as i32") {
         Ok(_) => eprintln!("cast_tail 'as i32' parsed successfully"),
         Err(err) => eprintln!("cast_tail 'as i32' failed: {:?}", err),
@@ -296,6 +363,11 @@ fn main() {
     match DebugParser::parse(Rule::program, "x := none as ?*raw T;") {
         Ok(_) => eprintln!("program snippet parsed successfully"),
         Err(err) => eprintln!("program snippet failed: {:?}", err),
+    }
+    let struct_prog = "Foo :: struct {\n    request_id: u64,\n}\n";
+    match DebugParser::parse(Rule::program, struct_prog) {
+        Ok(_) => eprintln!("program with optional struct parsed successfully"),
+        Err(err) => eprintln!("program with optional struct failed: {:?}", err),
     }
     let program = tricti::parser::parse(source);
     println!("parsed {} statements", program.statements.len());

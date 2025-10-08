@@ -99,6 +99,20 @@ fn parse_attributes(pair: pest::iterators::Pair<Rule>) -> Vec<Attribute> {
 pub fn parse(file: String) -> Program {
     let desugared = indentation::desugar_indentation(&file);
 
+    if let Ok(path) = std::env::var("TRICTI_DUMP_DESUGARED") {
+        let target = if path.is_empty() {
+            "tmp/desugared_dump.tri".to_string()
+        } else {
+            path
+        };
+        if let Err(err) = std::fs::write(&target, &desugared) {
+            eprintln!(
+                "warning: failed to write desugared source to {}: {}",
+                target, err
+            );
+        }
+    }
+
     let successful_parse = match PnParser::parse(Rule::program, &desugared) {
         Ok(p) => p,
         Err(e) => {
@@ -529,33 +543,52 @@ fn parse_variable_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
 }
 
 fn parse_const_decl(pair: pest::iterators::Pair<Rule>) -> Statement {
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().peekable();
 
     let mut extern_linkage = None;
     let mut attributes: Vec<Attribute> = Vec::new();
-    let mut first = inner
-        .next()
-        .expect("const declaration must have a name or attribute");
-    while first.as_rule() == Rule::attributes {
-        attributes.extend(parse_attributes(first));
-        first = inner
+
+    while matches!(inner.peek().map(|p| p.as_rule()), Some(Rule::attributes)) {
+        let attr_pair = inner
             .next()
-            .expect("const declaration must have a name after attributes");
+            .expect("attributes iterator advanced unexpectedly");
+        attributes.extend(parse_attributes(attr_pair));
     }
-    let name;
-    if first.as_str() == "extern" {
-        // Check if next is string
-        let next = inner.peek().unwrap();
-        if next.as_rule() == Rule::string {
-            let linkage = inner.next().unwrap().as_str().to_string();
-            extern_linkage = Some(linkage);
-        } else {
-            extern_linkage = None;
+
+    if inner.peek().is_none() {
+        panic!("const declaration missing name");
+    }
+
+    if inner.peek().map(|p| p.as_str()) == Some("extern") {
+        inner.next();
+        if let Some(next) = inner.peek() {
+            if next.as_rule() == Rule::string {
+                let linkage = inner.next().unwrap().as_str().to_string();
+                extern_linkage = Some(linkage);
+            } else {
+                extern_linkage = None;
+            }
         }
-        name = inner.next().unwrap().as_str().to_string();
-    } else {
-        name = first.as_str().to_string();
     }
+
+    let first_name_pair = inner
+        .next()
+        .expect("const declaration must have a name after attributes");
+    let mut name_segments = vec![first_name_pair.as_str().to_string()];
+    while matches!(
+        inner.peek().map(|p| p.as_rule()),
+        Some(Rule::const_name_segment)
+    ) {
+        let segment_pair = inner
+            .next()
+            .expect("const name segment should be available after peek");
+        let segment = segment_pair.as_str();
+        let identifier = segment
+            .strip_prefix("::")
+            .expect("const name segment must start with '::'");
+        name_segments.push(identifier.to_string());
+    }
+    let name = name_segments.join("::");
 
     let mut type_params = Vec::new();
     let mut type_annotation = None;
@@ -1199,6 +1232,7 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let value_pair = it.next().expect("match missing value expression");
     let value = parse_expression(value_pair);
     let mut arms: Vec<MatchArm> = Vec::new();
+    let trace_match_arms = false;
     for arm_pair in it {
         if arm_pair.as_rule() != Rule::match_arm {
             continue;
@@ -1210,13 +1244,49 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         let body_pair = arm_inner.next().expect("match arm missing body expression");
         let pattern = if pattern_pair.as_rule() == Rule::match_arm_pattern_text {
             let raw_pattern = pattern_pair.as_str();
-            let trimmed = raw_pattern.trim();
-            let mut parsed_pairs = PnParser::parse(Rule::pattern, trimmed).unwrap_or_else(|err| {
-                panic!(
-                    "failed to reparse match arm pattern '{}': {:?}",
-                    trimmed, err
-                )
-            });
+            if trace_match_arms {
+                eprintln!(
+                    "TRACE_MATCH_ARM raw pattern: {:?}",
+                    raw_pattern.replace('\n', "\\n")
+                );
+            }
+            let mut candidate = raw_pattern.trim();
+            let mut last_error: Option<String> = None;
+            let mut parsed_pairs = loop {
+                if candidate.is_empty() {
+                    if let Some(err) = last_error.take() {
+                        panic!(
+                            "failed to reparse match arm pattern '{}' (original '{}'): {:?}",
+                            candidate,
+                            raw_pattern.replace('\n', "\\n"),
+                            err
+                        );
+                    } else {
+                        panic!(
+                            "failed to reparse empty match arm pattern extracted from '{}'",
+                            raw_pattern.replace('\n', "\\n")
+                        );
+                    }
+                }
+                match PnParser::parse(Rule::pattern, candidate) {
+                    Ok(pairs) => break pairs,
+                    Err(err) => {
+                        last_error = Some(format!("{:?}", err));
+                        if let Some(idx) = candidate.rfind(|ch| ch == '\n' || ch == '\r') {
+                            candidate = candidate[idx + 1..].trim_start();
+                            continue;
+                        }
+                        let display = candidate.replace('\n', "\\n");
+                        let original = raw_pattern.replace('\n', "\\n");
+                        panic!(
+                            "failed to reparse match arm pattern '{}' (original '{}'): {:?}",
+                            display,
+                            original,
+                            last_error.take().unwrap()
+                        );
+                    }
+                }
+            };
             let parsed_pattern_pair = parsed_pairs
                 .next()
                 .expect("reparse of match arm pattern produced no pairs");
@@ -1337,6 +1407,12 @@ fn parse_match_arm_body(pair: pest::iterators::Pair<Rule>) -> Expression {
         }
         Rule::break_statement => {
             let stmt = parse_break_statement(body_pair);
+            Expression::Block {
+                statements: vec![stmt],
+            }
+        }
+        Rule::continue_statement => {
+            let stmt = parse_continue_statement(body_pair);
             Expression::Block {
                 statements: vec![stmt],
             }
@@ -1629,6 +1705,7 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
         }
     }
 
+    let rule_name = pair.as_rule();
     let src_text = pair.as_str().to_string();
     let mut it = pair.into_inner();
     if let Some(inner_pair) = it.next() {
@@ -1665,7 +1742,10 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
         if src_text == "none" {
             Type::None
         } else {
-            panic!("Unexpected empty type pair: {:?}", src_text)
+            panic!(
+                "Unexpected empty type pair: {:?} (rule {:?})",
+                src_text, rule_name
+            )
         }
     }
 }
@@ -2595,7 +2675,10 @@ fn parse_compose_node(pair: pest::iterators::Pair<Rule>) -> ComposeNode {
         Rule::tuple_chain => parse_tuple_chain(pair),
         Rule::compose_vector => parse_compose_vector(pair),
         Rule::compose_node => {
-            let inner = pair.into_inner().next().expect("compose node expected child");
+            let inner = pair
+                .into_inner()
+                .next()
+                .expect("compose node expected child");
             parse_compose_node(inner)
         }
         _ => ComposeNode::Single(pair.as_str().to_string()),

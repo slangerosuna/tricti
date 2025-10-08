@@ -53,7 +53,10 @@ fn parse_enum_with_struct_variants_using_double_colon() {
             assert_eq!(name, "PipelineError");
             match value {
                 ConstValue::Type(Type::Enum { variants, order }) => {
-                    assert_eq!(order, &vec!["ManifestLoad".to_string(), "CliParse".to_string()]);
+                    assert_eq!(
+                        order,
+                        &vec!["ManifestLoad".to_string(), "CliParse".to_string()]
+                    );
 
                     let manifest_variant = variants
                         .get("ManifestLoad")
@@ -67,7 +70,10 @@ fn parse_enum_with_struct_variants_using_double_colon() {
                             assert!(fields.contains_key("path"));
                             assert!(fields.contains_key("message"));
                         }
-                        other => panic!("expected ManifestLoad payload to be struct, got {:?}", other),
+                        other => panic!(
+                            "expected ManifestLoad payload to be struct, got {:?}",
+                            other
+                        ),
                     }
 
                     let cli_variant = variants
@@ -278,13 +284,10 @@ fn parse_new_vec_expression() {
                     other => panic!("expected integer literal dimension, got {:?}", other),
                 }
             }
+            _ => panic!("expected vec new expression, got {:?}", value),
         },
-
-                    assert_eq!(program.statements.len(), 1);
-
-                    match &program.statements[0] {
-    let program = parser::parse(src);
-    assert_eq!(program.statements.len(), 1);
+        other => panic!("expected variable declaration, got {:?}", other),
+    }
 }
 
 #[test]
@@ -297,32 +300,12 @@ fn parse_identifier_comparison_expression() {
     let program = parser::parse(src);
     assert_eq!(program.statements.len(), 1);
 }
-                                            assert_eq!(fields.len(), 2);
-                                            match fields.get("path") {
-                                                Some(Type::Identifier { name, .. }) => assert_eq!(name, "String"),
-                                                other => panic!("expected path field to be String, got {:?}", other),
-                                            }
-                                            match fields.get("message") {
-                                                Some(Type::Identifier { name, .. }) => assert_eq!(name, "String"),
-                                                other => panic!("expected message field to be String, got {:?}", other),
-                                            }
-    let src = r#"
-        result := 1 < 2
-    "#
-    .to_string();
-
-    let program = parser::parse(src);
-    assert_eq!(program.statements.len(), 1);
-}
 
 #[test]
 fn parse_identifier_division_expression() {
     let src = r#"
         q := a / b
-                                            match fields.get("message") {
-                                                Some(Type::Identifier { name, .. }) => assert_eq!(name, "String"),
-                                                other => panic!("expected CliParse message field to be String, got {:?}", other),
-                                            }
+    "#
     .to_string();
 
     let program = parser::parse(src);

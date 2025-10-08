@@ -56,7 +56,10 @@ fn split_block_colon(candidate: &str) -> Option<(&str, &str)> {
             b':' => {
                 let after = &candidate[idx + 1..];
                 let colon_ready = angle_depth == 0 && paren_depth == 0 && brace_depth == 0
-                    || (angle_depth > 0 && paren_depth == 0 && brace_depth == 0 && !after.contains('>'));
+                    || (angle_depth > 0
+                        && paren_depth == 0
+                        && brace_depth == 0
+                        && !after.contains('>'));
                 if !colon_ready {
                     idx += 1;
                     continue;
@@ -343,9 +346,9 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
 
     let (stripped, trailing_ws) = strip_trailing(segment);
     if let Some((head, tail)) = split_block_colon(stripped) {
+        let trimmed_head = head.trim_end();
         if leading_keyword_allows_block(head) {
             let inline_body = tail.trim_start();
-            let trimmed_head = head.trim_end();
             if inline_body.is_empty() {
                 let mut base = trimmed_head.to_string();
                 base.push_str(" {");
@@ -391,6 +394,35 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
             base.push_str(" }");
             base.push_str(trailing_ws);
             return ensure_arrow_block(base, false);
+        } else if let Some(arrow_idx) = trimmed_head.rfind("=>") {
+            let after_arrow = trimmed_head[arrow_idx + 2..].trim_start();
+            if leading_keyword_allows_block(after_arrow) {
+                let inline_body = tail.trim_start();
+                if inline_body.is_empty() {
+                    let mut base = trimmed_head.to_string();
+                    base.push_str(" {");
+                    base.push_str(trailing_ws);
+                    return (base, true);
+                }
+                if inline_body.starts_with('{') {
+                    let mut base = trimmed_head.to_string();
+                    base.push(' ');
+                    base.push_str(inline_body);
+                    base.push_str(trailing_ws);
+                    return (base, false);
+                }
+                let converted_inline = convert_inline_segment(inline_body);
+                let mut base = trimmed_head.to_string();
+                base.push_str(" {");
+                if !converted_inline.is_empty() {
+                    base.push(' ');
+                    base.push_str(&converted_inline);
+                    base.push(' ');
+                }
+                base.push('}');
+                base.push_str(trailing_ws);
+                return (base, false);
+            }
         }
     }
 
@@ -488,9 +520,7 @@ pub fn desugar_indentation(source: &str) -> String {
                         if trace {
                             eprintln!(
                                 "consumed leading close at indent {} (content {}) before line {:?}",
-                                block.brace_indent,
-                                block.content_indent,
-                                trimmed
+                                block.brace_indent, block.content_indent, trimmed
                             );
                         }
                         continue;
@@ -498,9 +528,7 @@ pub fn desugar_indentation(source: &str) -> String {
                     if trace {
                         eprintln!(
                             "closing block at indent {} (content {}) before line {:?}",
-                            block.brace_indent,
-                            block.content_indent,
-                            trimmed
+                            block.brace_indent, block.content_indent, trimmed
                         );
                     }
                     let mut close_line = String::new();
@@ -521,8 +549,7 @@ pub fn desugar_indentation(source: &str) -> String {
                     if trace {
                         eprintln!(
                             "opening block content indent {} brace {}",
-                            indent,
-                            block.opening_indent
+                            indent, block.opening_indent
                         );
                     }
                     open_blocks.push(OpenBlock {
@@ -606,7 +633,10 @@ pub fn desugar_indentation(source: &str) -> String {
 
     while let Some(block) = open_blocks.pop() {
         if trace {
-            eprintln!("final close block indent {} content {}", block.brace_indent, block.content_indent);
+            eprintln!(
+                "final close block indent {} content {}",
+                block.brace_indent, block.content_indent
+            );
         }
         let mut close_line = String::new();
         close_line.push_str(&" ".repeat(block.brace_indent));
@@ -637,11 +667,13 @@ mod tests {
     fn converts_for_inline_unsafe_block() {
         let input = "for i in 0..self.len: unsafe: *(new_data + i) = *(self.data + i)\n";
         let output = desugar_indentation(input);
-        let (converted, _) = convert_block_leader("for i in 0..self.len: unsafe: *(new_data + i) = *(self.data + i)");
+        let (converted, _) = convert_block_leader(
+            "for i in 0..self.len: unsafe: *(new_data + i) = *(self.data + i)",
+        );
         assert!(output.contains("for i in 0..self.len { unsafe {"));
         assert!(!output.contains(": unsafe"));
     }
-    
+
     #[test]
     fn converts_else_without_colon() {
         let input = "if index >= self.len: ret none\nelse some unsafe { *(self.data + index) }\n";
@@ -670,6 +702,15 @@ mod tests {
         assert!(output.contains("if ch >= 0 {"));
         assert!(output.contains("} else if ch == 1 {"));
         assert!(output.contains("} else {"));
+    }
+
+    #[test]
+    fn converts_arrow_match_block() {
+        let input = "fmt :: () => match value:\n    some item => do\n        ret item\n    none => do\n        ret none\n";
+        let output = desugar_indentation(input);
+        assert!(output.contains("=> match value {"));
+        assert!(output.contains("some item =>"));
+        assert!(output.contains("none =>"));
     }
 
     #[test]

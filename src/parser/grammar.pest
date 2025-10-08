@@ -80,12 +80,16 @@ const_decl = {
     attributes? ~
     WHITESPACE* ~
     ("extern" ~ string?)? ~
-    identifier ~ type_params? ~
+    identifier ~ (const_name_segment)* ~ type_params? ~
     (
         WHITESPACE* ~ "::" ~ WHITESPACE* ~ const_body
         | WHITESPACE* ~ ":" ~ type ~ WHITESPACE* ~ "::" ~ WHITESPACE* ~ const_body
     )
 }
+
+const_body_keyword = _{ "struct" | "enum" | "table" | "db" | "compose" | "sys" }
+
+const_name_segment = @{ "::" ~ !const_body_keyword ~ identifier }
 
 const_body = { attributes? ~ const_body_inner }
 
@@ -168,10 +172,10 @@ primary_struct = { identifier ~ type_args ~ struct_literal | identifier ~ struct
 primary       = { conditional | inline_conditional | unsafe_block | do_block | block | number | loop | match | function | literal | vec_new | vec_literal | matrix | shader | tuple_expr | path_struct | static_path | primary_struct | identifier | "(" ~ expression ~ ")" }
 primary_no_block = { conditional | inline_conditional | unsafe_block | do_block | number | loop | match | function | literal_no_struct | vec_new | vec_literal | matrix | shader | tuple_expr | static_path | identifier | "(" ~ expression ~ ")" }
 path_struct    = { identifier ~ ("::" ~ identifier)+ ~ struct_literal }
-static_path    = { identifier ~ type_args? ~ ("::" ~ identifier)+ }
+static_path    = { identifier ~ (&"<" ~ type_args)? ~ ("::" ~ identifier)+ }
 
 call_suffix   = { type_args ~ "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" | "(" ~ (argument ~ ("," ~ argument)* ~ ","?)? ~ ")" }
-argument      = { (identifier ~ ":")? ~ expression }
+argument      = { (identifier ~ ":" ~ !":" ~ WHITESPACE*)? ~ expression }
 literal       = { integer | float | string | boolean | char | struct_literal }
 literal_no_struct = { integer | float | string | boolean | char }
 
@@ -195,9 +199,9 @@ ref_pattern   = { "ref" ~ WHITESPACE+ ~ ref_payload_pattern }
 pattern       = { option_pattern | ref_pattern | basic_pattern }
 
 match         = { "match" ~ expression ~ "{" ~ WHITESPACE* ~ match_arm ~ (WHITESPACE* ~ !"}" ~ match_arm)* ~ WHITESPACE* ~ "}" }
-match_arm_pattern_text = { (!"=>" ~ ANY)+ }
+match_arm_pattern_text = { (!("=>" | "\n" | "\r") ~ ANY)+ }
 match_arm     = { WHITESPACE* ~ match_arm_pattern_text ~ WHITESPACE* ~ "=>" ~ match_body ~ ("," ~ WHITESPACE*)? }
-match_body    = { block | return_statement | break_statement | expression }
+match_body    = { block | return_statement | break_statement | continue_statement | expression }
 
 vec_new       = { "new" ~ "[" ~ type ~ (";" ~ expression ~ ("," ~ expression)* ~ ","?)? ~ "]" }
 matrix        = { "[" ~ (row ~ ";")* ~ row ~ ";"? ~ "]" }
@@ -207,7 +211,7 @@ row           = { (expression ~ ","?)+ }
 type_params   = { "<" ~ type_param ~ ("," ~ type_param)* ~ ">" }
 type_param    = { identifier ~ trait_bounds? }
 trait_bounds  = { ":" ~ type ~ ("+" ~ type)* }
-type_args     = { !(" " | "\t" | "\n" | "\r") ~ "<" ~ type ~ ("," ~ type)* ~ ">" }
+type_args     = { "<" ~ type ~ ("," ~ type)* ~ ">" }
 function      = { attributes? ~ "async"? ~ type_params? ~ "(" ~ function_params? ~ ")" ~ return_type? ~ "=>" ~ function_body }
 function_params = { (function_param | variadic_param | ("self" | "&self" | "&mut self" | "*self")) ~ ("," ~ (function_param | variadic_param))* ~ ","? }
 function_param = { identifier ~ (":" ~ type)? ~ ("=" ~ expression)? }
@@ -230,7 +234,7 @@ shader_field  = { identifier ~ ":" ~ type ~ ","? }
 tuple_type    = { "(" ~ type ~ ("," ~ type)+ ~ ","? ~ ")" }
 matrix_type   = { "[" ~ type ~ (";" ~ (integer | identifier ~ ","?)* )? ~ "]" }
 type          = { optional | result | pointer | reference_type | base_type }
-base_type     = _{ struct | enum | trait_type | matrix_type | function_type | tuple_type | "none" | identifier ~ type_args? }
+base_type     = _{ struct | enum | trait_type | matrix_type | function_type | tuple_type | "none" | identifier ~ (&"<" ~ type_args)? }
 reference_type = { ("&mut" | "&") ~ type }
 trait_type    = { "trait" ~ "{" ~ trait_items ~ "}" }
 trait_items   = _{ (trait_assoc | trait_method)* }
@@ -246,7 +250,7 @@ function_type_params = { (function_type_param | variadic_param) ~ ("," ~ WHITESP
 function_type = { "(" ~ WHITESPACE* ~ function_type_params? ~ ")" ~ return_type ~ !"=>" }
 
 enum          = { "enum" ~ "{" ~ (enum_variant ~ (WHITESPACE* ~ enum_variant)*)? ~ WHITESPACE* ~ "}" }
-enum_variant  = { identifier ~ ((":" | "::") ~ type)? ~ ","? }
+enum_variant  = { identifier ~ (("::" | ":") ~ type)? ~ ","? }
 struct        = { "struct" ~ WHITESPACE* ~ "{" ~ struct_fields? ~ "}" }
 struct_fields = _{ (identifier ~ ":" ~ type) ~ ("," ~ identifier ~ ":" ~ type)* ~ ","? }
 
