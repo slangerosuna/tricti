@@ -277,9 +277,11 @@ impl SemanticContext {
                         type_args: vec![],
                     },
                 ],
-                return_type: Type::Identifier {
-                    name: "i64".to_string(),
-                    type_args: vec![],
+                return_type: Type::Optional {
+                    inner: Box::new(Type::Identifier {
+                        name: "i64".to_string(),
+                        type_args: vec![],
+                    }),
                 },
                 is_async: false,
             },
@@ -327,9 +329,11 @@ impl SemanticContext {
                         type_args: vec![],
                     },
                 ],
-                return_type: Type::Identifier {
-                    name: "bool".to_string(),
-                    type_args: vec![],
+                return_type: Type::Optional {
+                    inner: Box::new(Type::Identifier {
+                        name: "bool".to_string(),
+                        type_args: vec![],
+                    }),
                 },
                 is_async: false,
             },
@@ -1651,6 +1655,18 @@ fn infer_expression_type(
                                 }
                             }
                         }
+                    }
+                    if name == "some" {
+                        if arguments.len() != 1 {
+                            return Err(SemanticError::ArgumentCountMismatch {
+                                expected: 1,
+                                found: arguments.len(),
+                            });
+                        }
+                        let arg_ty = infer_expression_type(&arguments[0].value, context)?;
+                        return Ok(Type::Optional {
+                            inner: Box::new(arg_ty),
+                        });
                     }
                     if name == "println" {
                         // Special handling for println - it's variadic, but still analyze args

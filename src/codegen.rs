@@ -95,7 +95,10 @@ pub struct CodeGenerator<'ctx> {
     unsigned_variables: HashSet<String>,
     // Struct type for enum representation { tag: i64, payload: i64 }
     enum_struct: Option<StructType<'ctx>>,
+    // Cached struct type for Vec values (data: i64*, len: i64, capacity: i64)
+    vector_struct_type: Option<StructType<'ctx>>,
     loop_stack: Vec<LoopContext<'ctx>>,
+    current_binary_context: Option<String>,
 }
 
 impl<'ctx> CodeGenerator<'ctx> {
@@ -121,7 +124,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             local_types: HashMap::new(),
             unsigned_variables: HashSet::new(),
             enum_struct: None,
+            vector_struct_type: None,
             loop_stack: Vec::new(),
+            current_binary_context: None,
         };
 
         generator.declare_external_functions()?;
@@ -294,6 +299,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 st.set_body(&llvm_fields, false);
                 self.struct_types.insert(name.clone(), (st, order));
+                eprintln!("registered struct type {}", name);
             }
         }
         // Create enum representation struct { tag: i64, payload: i64 }
@@ -340,7 +346,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Some(self.context.ptr_type(AddressSpace::default()).into())
             }
             AstType::Optional { .. } | AstType::Result { .. } => {
-                Some(self.context.i64_type().into())
+                self.enum_struct.map(|st| st.into())
             }
             AstType::Tuple(elems) => {
                 let element_types: Vec<BasicTypeEnum<'ctx>> = elems
@@ -359,12 +365,20 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             AstType::Struct { .. } | AstType::Trait { .. } | AstType::Function { .. } => None,
             AstType::Enum { .. } => Some(self.enum_struct.unwrap().into()),
-            AstType::Matrix { .. } => Some(
-                self.context
-                    .i64_type()
-                    .ptr_type(AddressSpace::default())
-                    .into(),
-            ),
+            AstType::Matrix { .. } => {
+                if let Some(st) = self.vector_struct_type {
+                    Some(st.into())
+                } else if let Some((st, _)) = self.struct_types.get("Vec") {
+                    Some((*st).into())
+                } else {
+                    Some(
+                        self.context
+                            .i64_type()
+                            .ptr_type(AddressSpace::default())
+                            .into(),
+                    )
+                }
+            }
             AstType::None => Some(self.context.i64_type().into()),
         }
     }
@@ -381,6 +395,505 @@ impl<'ctx> CodeGenerator<'ctx> {
             BasicTypeEnum::PointerType(pt) => self.cast_to_ptr(v, pt)?.into(),
             _ => v,
         })
+    }
+
+    fn ensure_vector_struct_type(&mut self) -> Result<StructType<'ctx>, CodegenError> {
+        if let Some(st) = self.vector_struct_type {
+            return Ok(st);
+        }
+
+        if let Some((st, _)) = self.struct_types.get("Vec") {
+            let st = *st;
+            self.vector_struct_type = Some(st);
+            return Ok(st);
+        }
+
+        let st = self.context.opaque_struct_type("Vec");
+        st.set_body(
+            &[
+                self.context
+                    .i64_type()
+                    .ptr_type(AddressSpace::default())
+                    .into(),
+                self.context.i64_type().into(),
+                self.context.i64_type().into(),
+            ],
+            false,
+        );
+        self.struct_types.insert(
+            "Vec".to_string(),
+            (
+                st,
+                vec![
+                    "data".to_string(),
+                    "len".to_string(),
+                    "capacity".to_string(),
+                ],
+            ),
+        );
+        self.vector_struct_type = Some(st);
+        Ok(st)
+    }
+
+    fn vector_field_indices(&mut self) -> Result<(StructType<'ctx>, u32, u32, u32), CodegenError> {
+        let st = self.ensure_vector_struct_type()?;
+        let order = self
+            .struct_types
+            .get("Vec")
+            .map(|(_, order)| order.clone())
+            .ok_or_else(|| {
+                CodegenError::InvalidOperation("Vec struct type not registered".to_string())
+            })?;
+        let data_idx = order
+            .iter()
+            .position(|n| n == "data")
+            .ok_or_else(|| {
+                CodegenError::InvalidOperation("Vec struct missing data field".to_string())
+            })? as u32;
+        let len_idx = order
+            .iter()
+            .position(|n| n == "len")
+            .ok_or_else(|| {
+                CodegenError::InvalidOperation("Vec struct missing len field".to_string())
+            })? as u32;
+        let cap_idx = order
+            .iter()
+            .position(|n| n == "capacity")
+            .ok_or_else(|| {
+                CodegenError::InvalidOperation("Vec struct missing capacity field".to_string())
+            })? as u32;
+        Ok((st, data_idx, len_idx, cap_idx))
+    }
+
+    fn try_generate_vector_method_call(
+        &mut self,
+        var_name: &str,
+        field: &str,
+        arguments: &[Argument],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        let (alloca, stored_ty) = match self.variables.get(var_name) {
+            Some((alloca, stored_ty)) => (*alloca, *stored_ty),
+            None => return Ok(None),
+        };
+
+        let i64_ty = self.context.i64_type();
+        let zero_i64 = i64_ty.const_zero();
+        let (vec_struct, data_idx, len_idx, cap_idx) = self.vector_field_indices()?;
+
+        let stored_struct = match stored_ty {
+            BasicTypeEnum::StructType(st) => st,
+            _ => return Ok(None),
+        };
+
+        if stored_struct != vec_struct {
+            return Ok(None);
+        }
+
+        let data_field_ptr = self
+            .builder
+            .build_struct_gep(vec_struct, alloca, data_idx, "vec_data_ptr")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let len_ptr = self
+            .builder
+            .build_struct_gep(vec_struct, alloca, len_idx, "vec_len_ptr")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let cap_ptr = self
+            .builder
+            .build_struct_gep(vec_struct, alloca, cap_idx, "vec_cap_ptr")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        let elem_ptr_ty = self
+            .context
+            .i64_type()
+            .ptr_type(AddressSpace::default());
+        let data_ptr = self
+            .builder
+            .build_load(elem_ptr_ty, data_field_ptr, "vec_data_load")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+            .into_pointer_value();
+
+        match field {
+            "len" if arguments.is_empty() => {
+                let len_val = self
+                    .builder
+                    .build_load(i64_ty, len_ptr, "vec_len")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                Ok(Some(len_val))
+            }
+            "is_empty" if arguments.is_empty() => {
+                let len_val = self
+                    .builder
+                    .build_load(i64_ty, len_ptr, "vec_len")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+                let is_empty = self
+                    .builder
+                    .build_int_compare(IntPredicate::EQ, len_val, zero_i64, "vec_is_empty")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                Ok(Some(is_empty.into()))
+            }
+            "push" if arguments.len() == 1 => {
+                let elem_raw = self.generate_expression(&arguments[0].value)?;
+                let elem_i64 = self.cast_to_int(elem_raw, i64_ty)?;
+
+                let len_val_initial = self
+                    .builder
+                    .build_load(i64_ty, len_ptr, "vec_len")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+                let cap_val_initial = self
+                    .builder
+                    .build_load(i64_ty, cap_ptr, "vec_cap")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+                let needs_grow = self
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::UGE,
+                        len_val_initial,
+                        cap_val_initial,
+                        "vec_need_grow",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let current_fn = self.current_function.ok_or_else(|| {
+                    CodegenError::CompilationError(
+                        "vector method called outside of function".to_string(),
+                    )
+                })?;
+                let grow_bb = self.context.append_basic_block(current_fn, "vec.push.grow");
+                let push_cont_bb = self
+                    .context
+                    .append_basic_block(current_fn, "vec.push.cont");
+
+                self.builder
+                    .build_conditional_branch(needs_grow, grow_bb, push_cont_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                // Grow block
+                self.builder.position_at_end(grow_bb);
+                let cap_is_zero = self
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        cap_val_initial,
+                        zero_i64,
+                        "vec_cap_is_zero",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let double_cap = self
+                    .builder
+                    .build_int_mul(
+                        cap_val_initial,
+                        i64_ty.const_int(2, false),
+                        "vec_double_cap",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let base_cap = self
+                    .builder
+                    .build_select::<BasicValueEnum, IntValue>(
+                        cap_is_zero,
+                        i64_ty.const_int(4, false).into(),
+                        double_cap.into(),
+                        "vec_new_cap",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+                let len_plus_one = self
+                    .builder
+                    .build_int_add(
+                        len_val_initial,
+                        i64_ty.const_int(1, false),
+                        "vec_len_plus_one",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let cap_too_small = self
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::ULT,
+                        base_cap,
+                        len_plus_one,
+                        "vec_cap_too_small",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let adjusted_cap = self
+                    .builder
+                    .build_select::<BasicValueEnum, IntValue>(
+                        cap_too_small,
+                        len_plus_one.into(),
+                        base_cap.into(),
+                        "vec_cap_adjusted",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+
+                let elem_size = i64_ty.const_int(8, false);
+                let size_bytes = self
+                    .builder
+                    .build_int_mul(adjusted_cap, elem_size, "vec_realloc_size")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let alloc_fn = self
+                    .functions
+                    .get("alloc")
+                    .cloned()
+                    .ok_or_else(|| CodegenError::UndefinedFunction("alloc".to_string()))?;
+                let new_call = self
+                    .builder
+                    .build_call(alloc_fn, &[size_bytes.into()], "vec_realloc")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let new_raw_ptr = new_call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| {
+                        CodegenError::InvalidOperation(
+                            "alloc returned void when pointer expected".to_string(),
+                        )
+                    })?
+                    .into_pointer_value();
+
+                let new_data_ptr = self
+                    .builder
+                    .build_pointer_cast(new_raw_ptr, elem_ptr_ty, "vec_realloc_cast")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                // Copy existing elements
+                let copy_idx_alloca =
+                    self.create_entry_block_alloca("vec_copy_idx", i64_ty.into())?;
+                self.builder
+                    .build_store(copy_idx_alloca, zero_i64)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let copy_cond_bb =
+                    self.context.append_basic_block(current_fn, "vec.push.copy.cond");
+                let copy_body_bb =
+                    self.context.append_basic_block(current_fn, "vec.push.copy.body");
+                let copy_inc_bb =
+                    self.context.append_basic_block(current_fn, "vec.push.copy.inc");
+                let copy_end_bb =
+                    self.context.append_basic_block(current_fn, "vec.push.copy.end");
+
+                self.builder
+                    .build_unconditional_branch(copy_cond_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                self.builder.position_at_end(copy_cond_bb);
+                let copy_idx = self
+                    .builder
+                    .build_load(i64_ty, copy_idx_alloca, "vec_copy_idx")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+                let copy_cmp = self
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::ULT,
+                        copy_idx,
+                        len_val_initial,
+                        "vec_copy_cmp",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_conditional_branch(copy_cmp, copy_body_bb, copy_end_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                self.builder.position_at_end(copy_body_bb);
+                    let src_ptr = unsafe {
+                        self.builder.build_in_bounds_gep(
+                            i64_ty,
+                            data_ptr,
+                            &[copy_idx],
+                            "vec_copy_src",
+                        )
+                    }
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let src_val = self
+                    .builder
+                    .build_load(i64_ty, src_ptr, "vec_copy_val")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let dst_ptr = unsafe {
+                    self.builder.build_in_bounds_gep(
+                        i64_ty,
+                        new_data_ptr,
+                        &[copy_idx],
+                        "vec_copy_dst",
+                    )
+                }
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_store(dst_ptr, src_val)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_unconditional_branch(copy_inc_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                self.builder.position_at_end(copy_inc_bb);
+                let next_idx = self
+                    .builder
+                    .build_int_add(
+                        copy_idx,
+                        i64_ty.const_int(1, false),
+                        "vec_copy_next",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_store(copy_idx_alloca, next_idx)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_unconditional_branch(copy_cond_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                self.builder.position_at_end(copy_end_bb);
+                self.builder
+                    .build_store(data_field_ptr, new_data_ptr)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_store(cap_ptr, adjusted_cap)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_unconditional_branch(push_cont_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                // Continue block after optional growth
+                self.builder.position_at_end(push_cont_bb);
+                let data_ptr_after = self
+                    .builder
+                    .build_load(elem_ptr_ty, data_field_ptr, "vec_data_after")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_pointer_value();
+                let len_val = self
+                    .builder
+                    .build_load(i64_ty, len_ptr, "vec_len_after")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+
+                let elem_ptr = unsafe {
+                    self.builder.build_in_bounds_gep(
+                        i64_ty,
+                        data_ptr_after,
+                        &[len_val],
+                        "vec_push_slot",
+                    )
+                }
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_store(elem_ptr, elem_i64)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let len_next = self
+                    .builder
+                    .build_int_add(
+                        len_val,
+                        i64_ty.const_int(1, false),
+                        "vec_len_next",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_store(len_ptr, len_next)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                Ok(Some(zero_i64.into()))
+            }
+            "get" if arguments.len() == 1 => {
+                let enum_ty = self.enum_struct.ok_or_else(|| {
+                    CodegenError::InvalidOperation(
+                        "Optional enum representation unavailable".to_string(),
+                    )
+                })?;
+
+                let idx_raw = self.generate_expression(&arguments[0].value)?;
+                let idx_i64 = self.cast_to_int(idx_raw, i64_ty)?;
+
+                let len_val = self
+                    .builder
+                    .build_load(i64_ty, len_ptr, "vec_len")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+
+                let result_alloca =
+                    self.create_entry_block_alloca("vec_get_res", enum_ty.into())?;
+
+                let idx_ge_len = self
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::UGE,
+                        idx_i64,
+                        len_val,
+                        "vec_get_oob",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let current_fn = self.current_function.ok_or_else(|| {
+                    CodegenError::CompilationError(
+                        "vector method called outside of function".to_string(),
+                    )
+                })?;
+                let none_bb = self.context.append_basic_block(current_fn, "vec.get.none");
+                let some_bb = self.context.append_basic_block(current_fn, "vec.get.some");
+                let merge_bb = self.context.append_basic_block(current_fn, "vec.get.merge");
+
+                self.builder
+                    .build_conditional_branch(idx_ge_len, none_bb, some_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                self.builder.position_at_end(none_bb);
+                let none_struct = enum_ty.const_named_struct(&[
+                    zero_i64.into(),
+                    zero_i64.into(),
+                ]);
+                self.builder
+                    .build_store(result_alloca, none_struct)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_unconditional_branch(merge_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let none_end_bb = self.builder.get_insert_block().unwrap();
+
+                self.builder.position_at_end(some_bb);
+                let elem_ptr = unsafe {
+                    self.builder.build_in_bounds_gep(
+                        i64_ty,
+                        data_ptr,
+                        &[idx_i64],
+                        "vec_get_ptr",
+                    )
+                }
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let elem_val = self
+                    .builder
+                    .build_load(i64_ty, elem_ptr, "vec_get_val")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+                let tagged = self
+                    .builder
+                    .build_insert_value(
+                        enum_ty.get_undef(),
+                        i64_ty.const_int(1, false),
+                        0,
+                        "vec_get_tag",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+                let with_payload = self
+                    .builder
+                    .build_insert_value(tagged, elem_val, 1, "vec_get_payload")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+                self.builder
+                    .build_store(result_alloca, with_payload)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                self.builder
+                    .build_unconditional_branch(merge_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let some_end_bb = self.builder.get_insert_block().unwrap();
+
+                self.builder.position_at_end(merge_bb);
+                let loaded = self
+                    .builder
+                    .build_load(enum_ty, result_alloca, "vec_get_result")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                Ok(Some(loaded))
+            }
+            _ => Ok(None),
+        }
     }
 
     fn int_type_for_width(&self, bits: u32) -> IntType<'ctx> {
@@ -1345,6 +1858,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
         }
 
+        for (name, func) in &self.functions {
+            if name.contains("get") {
+                eprintln!(
+                    "function {} type {}",
+                    name,
+                    func.get_type().print_to_string().to_string()
+                );
+            }
+        }
+
         Ok(())
     }
 
@@ -1834,177 +2357,27 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }
                         }
                     } else if let Some((alloca, var_bte)) = self.variables.get(name) {
-                        // Prefer local variable typing: if it's a slice_i64 struct, iterate it
                         if let BasicTypeEnum::StructType(st_local) = var_bte {
-                            if let Some((st_known, order)) = self.struct_types.get("slice_i64") {
-                                if st_local == st_known {
-                                    let ptr_idx =
-                                        order.iter().position(|n| n == "ptr").unwrap_or(0) as u32;
-                                    let len_idx =
-                                        order.iter().position(|n| n == "len").unwrap_or(1) as u32;
-                                    let ptr_gep = self
-                                        .builder
-                                        .build_struct_gep(*st_local, *alloca, ptr_idx, "slice.ptr")
-                                        .map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                    let len_gep = self
-                                        .builder
-                                        .build_struct_gep(*st_local, *alloca, len_idx, "slice.len")
-                                        .map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                    let ptr_bte = st_local
-                                        .get_field_type_at_index(ptr_idx)
-                                        .ok_or_else(|| {
-                                            CodegenError::InvalidOperation(
-                                                "slice_i64.ptr type".to_string(),
-                                            )
-                                        })?;
-                                    let len_bte = st_local
-                                        .get_field_type_at_index(len_idx)
-                                        .ok_or_else(|| {
-                                            CodegenError::InvalidOperation(
-                                                "slice_i64.len type".to_string(),
-                                            )
-                                        })?;
-                                    let base = self
-                                        .builder
-                                        .build_load(ptr_bte, ptr_gep, "slice.ptrv")
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
-                                        .into_pointer_value();
-                                    let lenv = self
-                                        .builder
-                                        .build_load(len_bte, len_gep, "slice.lenv")
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
-                                        .into_int_value();
-
-                                    // Standard for 0..len loop
-                                    let idx_allo = self.create_entry_block_alloca(
-                                        "idx",
-                                        self.context.i64_type().into(),
-                                    )?;
-                                    self.builder
-                                        .build_store(idx_allo, self.context.i64_type().const_zero())
-                                        .map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                    let elem_allo = self.create_entry_block_alloca(
-                                        variable,
-                                        self.context.i64_type().into(),
-                                    )?;
-                                    let prev = self.variables.insert(
-                                        variable.clone(),
-                                        (elem_allo, self.context.i64_type().into()),
-                                    );
-
-                                    let current_fn = self.current_function.ok_or_else(|| {
-                                        CodegenError::CompilationError(
-                                            "No current function".to_string(),
-                                        )
-                                    })?;
-                                    let cond_bb =
-                                        self.context.append_basic_block(current_fn, "for.cond");
-                                    let body_bb =
-                                        self.context.append_basic_block(current_fn, "for.body");
-                                    let inc_bb =
-                                        self.context.append_basic_block(current_fn, "for.inc");
-                                    let end_bb =
-                                        self.context.append_basic_block(current_fn, "for.end");
-
-                                    self.builder.build_unconditional_branch(cond_bb).map_err(
-                                        |e| CodegenError::CompilationError(e.to_string()),
-                                    )?;
-                                    // cond
-                                    self.builder.position_at_end(cond_bb);
-                                    let i64_bte3: BasicTypeEnum<'ctx> =
-                                        self.context.i64_type().into();
-                                    let idx_cur = self
-                                        .builder
-                                        .build_load(i64_bte3, idx_allo, "idx")
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
-                                        .into_int_value();
-                                    let cmp = self
-                                        .builder
-                                        .build_int_compare(
-                                            IntPredicate::SLT,
-                                            idx_cur,
-                                            lenv,
-                                            "forcmp",
-                                        )
-                                        .map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                    self.builder
-                                        .build_conditional_branch(cmp, body_bb, end_bb)
-                                        .map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                    // body
-                                    self.builder.position_at_end(body_bb);
-                                    let elem_ptr = unsafe {
-                                        self.builder.build_in_bounds_gep(
-                                            self.context.i64_type(),
-                                            base,
-                                            &[idx_cur],
-                                            "idx",
-                                        )
+                            let candidate_slices: [(&str, BasicTypeEnum<'ctx>); 2] = [
+                                ("slice_i64", self.context.i64_type().into()),
+                                ("slice_bool", self.context.bool_type().into()),
+                            ];
+                            for (struct_name, elem_ty) in candidate_slices {
+                                if let Some((st_known, order)) = self.struct_types.get(struct_name)
+                                {
+                                    if st_local == st_known {
+                                        let order_vec = order.clone();
+                                        self.generate_for_loop_over_slice(
+                                            variable,
+                                            body,
+                                            *alloca,
+                                            *st_local,
+                                            order_vec,
+                                            struct_name,
+                                            elem_ty,
+                                        )?;
+                                        return Ok(());
                                     }
-                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                                    let loaded_elem = self
-                                        .builder
-                                        .build_load(self.context.i64_type(), elem_ptr, "elem")
-                                        .map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                    self.builder.build_store(elem_allo, loaded_elem).map_err(
-                                        |e| CodegenError::CompilationError(e.to_string()),
-                                    )?;
-                                    for s in body {
-                                        let _ = self.generate_statement(s);
-                                    }
-                                    if let Some(current_block) = self.builder.get_insert_block() {
-                                        if current_block.get_terminator().is_none() {
-                                            self.builder
-                                                .build_unconditional_branch(inc_bb)
-                                                .map_err(|e| {
-                                                    CodegenError::CompilationError(e.to_string())
-                                                })?;
-                                        }
-                                    }
-                                    // inc
-                                    self.builder.position_at_end(inc_bb);
-                                    let i64_bte4: BasicTypeEnum<'ctx> =
-                                        self.context.i64_type().into();
-                                    let idx_cur2 = self
-                                        .builder
-                                        .build_load(i64_bte4, idx_allo, "idx")
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
-                                        .into_int_value();
-                                    let next = self
-                                        .builder
-                                        .build_int_add(
-                                            idx_cur2,
-                                            self.context.i64_type().const_int(1, false),
-                                            "inc",
-                                        )
-                                        .map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                    self.builder.build_store(idx_allo, next).map_err(|e| {
-                                        CodegenError::CompilationError(e.to_string())
-                                    })?;
-                                    self.builder.build_unconditional_branch(cond_bb).map_err(
-                                        |e| CodegenError::CompilationError(e.to_string()),
-                                    )?;
-                                    // end
-                                    self.builder.position_at_end(end_bb);
-                                    if let Some(prev_binding) = prev {
-                                        self.variables.insert(variable.clone(), prev_binding);
-                                    } else {
-                                        self.variables.remove(variable);
-                                    }
-                                    return Ok(());
                                 }
                             }
                         }
@@ -2014,197 +2387,29 @@ impl<'ctx> CodeGenerator<'ctx> {
                         type_args: _,
                     }) = self.semantic.get_variable_type(name)
                     {
-                        // Support built-in slice_i64 iteration
-                        if tn == "slice_i64" {
-                            // Expect variable is a struct value with fields ptr: &i64, len: i64
-                            // Load the alloca for this variable and then GEP fields by layout in struct_types
-                            if let Some((alloca, var_bte)) = self.variables.get(name) {
-                                if let BasicTypeEnum::StructType(st) = var_bte {
-                                    // Find field order from registry for stable indices
-                                    if let Some((_st, order)) = self.struct_types.get("slice_i64") {
-                                        let ptr_idx =
-                                            order.iter().position(|n| n == "ptr").unwrap_or(0)
-                                                as u32;
-                                        let len_idx =
-                                            order.iter().position(|n| n == "len").unwrap_or(1)
-                                                as u32;
-                                        // Use the variable alloca directly; it points to the struct value
-                                        let ptr_gep = self
-                                            .builder
-                                            .build_struct_gep(*st, *alloca, ptr_idx, "slice.ptr")
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?;
-                                        let len_gep = self
-                                            .builder
-                                            .build_struct_gep(*st, *alloca, len_idx, "slice.len")
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?;
-                                        let ptr_bte = st
-                                            .get_field_type_at_index(ptr_idx)
-                                            .ok_or_else(|| {
-                                                CodegenError::InvalidOperation(
-                                                    "slice_i64.ptr type".to_string(),
-                                                )
-                                            })?;
-                                        let len_bte = st
-                                            .get_field_type_at_index(len_idx)
-                                            .ok_or_else(|| {
-                                                CodegenError::InvalidOperation(
-                                                    "slice_i64.len type".to_string(),
-                                                )
-                                            })?;
-                                        let base = self
-                                            .builder
-                                            .build_load(ptr_bte, ptr_gep, "slice.ptrv")
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?
-                                            .into_pointer_value();
-                                        let lenv = self
-                                            .builder
-                                            .build_load(len_bte, len_gep, "slice.lenv")
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?
-                                            .into_int_value();
-
-                                        // Standard i from 0..len loop body
-                                        let idx_allo = self.create_entry_block_alloca(
-                                            "idx",
-                                            self.context.i64_type().into(),
-                                        )?;
-                                        self.builder
-                                            .build_store(
-                                                idx_allo,
-                                                self.context.i64_type().const_zero(),
-                                            )
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?;
-                                        let elem_allo = self.create_entry_block_alloca(
-                                            variable,
-                                            self.context.i64_type().into(),
-                                        )?;
-                                        let prev = self.variables.insert(
-                                            variable.clone(),
-                                            (elem_allo, self.context.i64_type().into()),
-                                        );
-
-                                        let current_fn =
-                                            self.current_function.ok_or_else(|| {
-                                                CodegenError::CompilationError(
-                                                    "No current function".to_string(),
-                                                )
-                                            })?;
-                                        let cond_bb =
-                                            self.context.append_basic_block(current_fn, "for.cond");
-                                        let body_bb =
-                                            self.context.append_basic_block(current_fn, "for.body");
-                                        let inc_bb =
-                                            self.context.append_basic_block(current_fn, "for.inc");
-                                        let end_bb =
-                                            self.context.append_basic_block(current_fn, "for.end");
-
-                                        self.builder.build_unconditional_branch(cond_bb).map_err(
-                                            |e| CodegenError::CompilationError(e.to_string()),
-                                        )?;
-                                        // cond
-                                        self.builder.position_at_end(cond_bb);
-                                        let i64_bte3: BasicTypeEnum<'ctx> =
-                                            self.context.i64_type().into();
-                                        let idx_cur = self
-                                            .builder
-                                            .build_load(i64_bte3, idx_allo, "idx")
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?
-                                            .into_int_value();
-                                        let cmp = self
-                                            .builder
-                                            .build_int_compare(
-                                                IntPredicate::SLT,
-                                                idx_cur,
-                                                lenv,
-                                                "forcmp",
-                                            )
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?;
-                                        self.builder
-                                            .build_conditional_branch(cmp, body_bb, end_bb)
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?;
-                                        // body
-                                        self.builder.position_at_end(body_bb);
-                                        let elem_ptr = unsafe {
-                                            self.builder.build_in_bounds_gep(
-                                                self.context.i64_type(),
-                                                base,
-                                                &[idx_cur],
-                                                "idx",
-                                            )
-                                        }
-                                        .map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                        let loaded_elem = self
-                                            .builder
-                                            .build_load(self.context.i64_type(), elem_ptr, "elem")
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?;
-                                        self.builder.build_store(elem_allo, loaded_elem).map_err(
-                                            |e| CodegenError::CompilationError(e.to_string()),
-                                        )?;
+                        let candidate_slices: [(&str, BasicTypeEnum<'ctx>); 2] = [
+                            ("slice_i64", self.context.i64_type().into()),
+                            ("slice_bool", self.context.bool_type().into()),
+                        ];
+                        for (struct_name, elem_ty) in candidate_slices {
+                            if tn == struct_name {
+                                if let Some((alloca, var_bte)) = self.variables.get(name) {
+                                    if let BasicTypeEnum::StructType(st) = var_bte {
+                                        if let Some((_st_known, order)) =
+                                            self.struct_types.get(struct_name)
                                         {
-                                            let _loop_scope = LoopScope::new(
-                                                &mut self.loop_stack,
-                                                inc_bb,
-                                                end_bb,
-                                            );
-                                            for s in body {
-                                                let _ = self.generate_statement(s);
-                                            }
-                                            self.branch_to(inc_bb)?;
+                                            let order_vec = order.clone();
+                                            self.generate_for_loop_over_slice(
+                                                variable,
+                                                body,
+                                                *alloca,
+                                                *st,
+                                                order_vec,
+                                                struct_name,
+                                                elem_ty,
+                                            )?;
+                                            return Ok(());
                                         }
-                                        // inc
-                                        self.builder.position_at_end(inc_bb);
-                                        let i64_bte4: BasicTypeEnum<'ctx> =
-                                            self.context.i64_type().into();
-                                        let idx_cur2 = self
-                                            .builder
-                                            .build_load(i64_bte4, idx_allo, "idx")
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?
-                                            .into_int_value();
-                                        let next = self
-                                            .builder
-                                            .build_int_add(
-                                                idx_cur2,
-                                                self.context.i64_type().const_int(1, false),
-                                                "inc",
-                                            )
-                                            .map_err(|e| {
-                                                CodegenError::CompilationError(e.to_string())
-                                            })?;
-                                        self.builder.build_store(idx_allo, next).map_err(|e| {
-                                            CodegenError::CompilationError(e.to_string())
-                                        })?;
-                                        self.builder.build_unconditional_branch(cond_bb).map_err(
-                                            |e| CodegenError::CompilationError(e.to_string()),
-                                        )?;
-                                        // end
-                                        self.builder.position_at_end(end_bb);
-                                        if let Some(prev_binding) = prev {
-                                            self.variables.insert(variable.clone(), prev_binding);
-                                        } else {
-                                            self.variables.remove(variable);
-                                        }
-                                        return Ok(());
                                     }
                                 }
                             }
@@ -2871,7 +3076,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 additional_dimensions,
                 ..
             } => {
+                let (vec_struct, data_idx, len_idx, cap_idx) = self.vector_field_indices()?;
                 let i64_ty = self.context.i64_type();
+                let ptr_ty = i64_ty.ptr_type(AddressSpace::default());
+
                 let mut total_len: Option<IntValue<'ctx>> = None;
                 if let Some(len_expr) = length.as_ref() {
                     let dim_val = self.generate_expression(len_expr.as_ref())?;
@@ -2889,148 +3097,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                         None => dim_i64,
                     });
                 }
+
                 let len_value = total_len.unwrap_or_else(|| i64_ty.const_zero());
-                let len_plus_one = self
+                let capacity_extra = i64_ty.const_int(4, false);
+                let capacity_value = self
                     .builder
-                    .build_int_add(len_value, i64_ty.const_int(1, false), "array_len_plus_one")
+                    .build_int_add(len_value, capacity_extra, "vec_capacity_init")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                // bytes = (len + 1) * 8 (store logical length in slot 0, data follows)
+
                 let elem_size = i64_ty.const_int(8, false);
                 let size_bytes = self
                     .builder
-                    .build_int_mul(len_plus_one, elem_size, "array_size_bytes")
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                let alloc_fn = self
-                    .functions
-                    .get("alloc")
-                    .cloned()
-                    .ok_or_else(|| CodegenError::UndefinedFunction("alloc".to_string()))?;
-                let call = self
-                    .builder
-                    .build_call(alloc_fn, &[size_bytes.into()], "array_alloc")
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                let raw_ptr = call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| {
-                        CodegenError::InvalidOperation(
-                            "alloc returned void when pointer expected".to_string(),
-                        )
-                    })?
-                    .into_pointer_value();
-                let i64_ptr_ty = self.context.i64_type().ptr_type(AddressSpace::default());
-                let cast_ptr = self
-                    .builder
-                    .build_pointer_cast(raw_ptr, i64_ptr_ty, "array_ptr")
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                // Store logical length at slot 0
-                self.builder
-                    .build_store(cast_ptr, len_value)
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                // Return pointer to first element (after header)
-                let one = i64_ty.const_int(1, false);
-                let data_ptr = unsafe {
-                    self.builder.build_in_bounds_gep(
-                        self.context.i64_type(),
-                        cast_ptr,
-                        &[one],
-                        "array_data_ptr",
-                    )
-                }
-                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                if let Some(fill_expr) = fill.as_ref() {
-                    let _ = self.generate_expression(fill_expr.as_ref())?;
-                }
-
-                Ok(data_ptr.into())
-            }
-            Expression::VecLiteral { elements } => {
-                let i64_ty = self.context.i64_type();
-                let i64_ptr_ty = i64_ty.ptr_type(AddressSpace::default());
-                let n = elements.len();
-                let len_val = i64_ty.const_int(n as u64, false);
-                let elems_plus_header = i64_ty.const_int((n as u64).saturating_add(1), false);
-                let elem_size = i64_ty.const_int(8, false);
-                let size_bytes = self
-                    .builder
-                    .build_int_mul(elems_plus_header, elem_size, "vec_literal_bytes")
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                let alloc_fn = self
-                    .functions
-                    .get("alloc")
-                    .cloned()
-                    .ok_or_else(|| CodegenError::UndefinedFunction("alloc".to_string()))?;
-                let call = self
-                    .builder
-                    .build_call(alloc_fn, &[size_bytes.into()], "vec_literal_alloc")
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                let raw_ptr = call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| {
-                        CodegenError::InvalidOperation(
-                            "alloc returned void when pointer expected".to_string(),
-                        )
-                    })?
-                    .into_pointer_value();
-                let cast_ptr = self
-                    .builder
-                    .build_pointer_cast(raw_ptr, i64_ptr_ty, "vec_literal_ptr")
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                self.builder
-                    .build_store(cast_ptr, len_val)
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                let one = i64_ty.const_int(1, false);
-                let data_ptr = unsafe {
-                    self.builder
-                        .build_in_bounds_gep(i64_ty, cast_ptr, &[one], "vec_literal_data")
-                }
-                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                for (i, expr) in elements.iter().enumerate() {
-                    let v = self.generate_expression(expr)?;
-                    let iv = self.cast_to_int(v, i64_ty)?;
-                    let offset = i64_ty.const_int((i + 1) as u64, false);
-                    let elem_ptr = unsafe {
-                        self.builder.build_in_bounds_gep(
-                            i64_ty,
-                            cast_ptr,
-                            &[offset],
-                            "vec_lit_elem",
-                        )
-                    }
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                    self.builder
-                        .build_store(elem_ptr, iv)
-                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                }
-
-                Ok(data_ptr.into())
-            }
-            Expression::Matrix { rows } => {
-                // Only support 1D vectors concretely; for multi-dim, return a null i64* placeholder to avoid invalid IR.
-                let i64_ty = self.context.i64_type();
-                let i64_ptr_ty = i64_ty.ptr_type(AddressSpace::default());
-                if rows.len() > 1 {
-                    // Multi-dimensional literal not yet lowered: return null pointer (printing uses placeholder path)
-                    return Ok(i64_ptr_ty.const_null().into());
-                }
-                let empty: [Expression; 0] = [];
-                let row0: &[Expression] = rows.get(0).map(|v| v.as_slice()).unwrap_or(&empty);
-                let n = row0.len();
-                let len_val = i64_ty.const_int(n as u64, false);
-                let elems_plus_header = i64_ty.const_int((n as u64).saturating_add(1), false);
-                let elem_size = i64_ty.const_int(8, false);
-                let size_bytes = self
-                    .builder
-                    .build_int_mul(elems_plus_header, elem_size, "vec_bytes")
+                    .build_int_mul(capacity_value, elem_size, "vec_size_bytes")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
                 let alloc_fn = self
@@ -3051,31 +3129,157 @@ impl<'ctx> CodeGenerator<'ctx> {
                         )
                     })?
                     .into_pointer_value();
-                let cast_ptr = self
+                let data_ptr = self
                     .builder
-                    .build_pointer_cast(raw_ptr, i64_ptr_ty, "vec_ptr")
+                    .build_pointer_cast(raw_ptr, ptr_ty, "vec_data_ptr")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
-                // Store logical length at header slot 0
-                self.builder
-                    .build_store(cast_ptr, len_val)
-                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let mut vec_value = vec_struct.get_undef();
+                vec_value = self
+                    .builder
+                    .build_insert_value(vec_value, data_ptr, data_idx, "vec_set_data")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+                vec_value = self
+                    .builder
+                    .build_insert_value(vec_value, len_value, len_idx, "vec_set_len")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+                vec_value = self
+                    .builder
+                    .build_insert_value(vec_value, capacity_value, cap_idx, "vec_set_cap")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
 
-                let one = i64_ty.const_int(1, false);
-                let data_ptr = unsafe {
+                if let Some(fill_expr) = fill.as_ref() {
+                    let fill_val = self.generate_expression(fill_expr.as_ref())?;
+                    let fill_i64 = self.cast_to_int(fill_val, i64_ty)?;
+
+                    let current_fn = self.current_function.ok_or_else(|| {
+                        CodegenError::CompilationError(
+                            "Vec::new fill used outside of function".to_string(),
+                        )
+                    })?;
+                    let idx_alloca =
+                        self.create_entry_block_alloca("vec_fill_idx", i64_ty.into())?;
                     self.builder
-                        .build_in_bounds_gep(i64_ty, cast_ptr, &[one], "vec_data")
-                }
-                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        .build_store(idx_alloca, i64_ty.const_zero())
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
-                // initialize each element
-                for (i, expr) in row0.iter().enumerate() {
+                    let cond_bb =
+                        self.context.append_basic_block(current_fn, "vec_fill.cond");
+                    let body_bb =
+                        self.context.append_basic_block(current_fn, "vec_fill.body");
+                    let inc_bb = self.context.append_basic_block(current_fn, "vec_fill.inc");
+                    let end_bb = self.context.append_basic_block(current_fn, "vec_fill.end");
+
+                    self.builder
+                        .build_unconditional_branch(cond_bb)
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                    self.builder.position_at_end(cond_bb);
+                    let idx_cur = self
+                        .builder
+                        .build_load(i64_ty, idx_alloca, "vec_fill_idx")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                        .into_int_value();
+                    let cmp = self
+                        .builder
+                        .build_int_compare(IntPredicate::ULT, idx_cur, len_value, "vec_fill_cmp")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    self.builder
+                        .build_conditional_branch(cmp, body_bb, end_bb)
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                    self.builder.position_at_end(body_bb);
+                    let elem_ptr = unsafe {
+                        self.builder.build_in_bounds_gep(
+                            i64_ty,
+                            data_ptr,
+                            &[idx_cur],
+                            "vec_fill_ptr",
+                        )
+                    }
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    self.builder
+                        .build_store(elem_ptr, fill_i64)
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    self.builder
+                        .build_unconditional_branch(inc_bb)
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                    self.builder.position_at_end(inc_bb);
+                    let next = self
+                        .builder
+                        .build_int_add(
+                            idx_cur,
+                            i64_ty.const_int(1, false),
+                            "vec_fill_inc",
+                        )
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    self.builder
+                        .build_store(idx_alloca, next)
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    self.builder
+                        .build_unconditional_branch(cond_bb)
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                    self.builder.position_at_end(end_bb);
+                }
+
+                Ok(vec_value.into())
+            }
+            Expression::VecLiteral { elements } => {
+                let (vec_struct, data_idx, len_idx, cap_idx) = self.vector_field_indices()?;
+                let i64_ty = self.context.i64_type();
+                let ptr_ty = i64_ty.ptr_type(AddressSpace::default());
+                let n = elements.len();
+                let len_val = i64_ty.const_int(n as u64, false);
+                let capacity_val = if n == 0 {
+                    i64_ty.const_int(4, false)
+                } else {
+                    len_val
+                };
+                let elem_size = i64_ty.const_int(8, false);
+                let size_bytes = self
+                    .builder
+                    .build_int_mul(capacity_val, elem_size, "vec_literal_bytes")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let alloc_fn = self
+                    .functions
+                    .get("alloc")
+                    .cloned()
+                    .ok_or_else(|| CodegenError::UndefinedFunction("alloc".to_string()))?;
+                let call = self
+                    .builder
+                    .build_call(alloc_fn, &[size_bytes.into()], "vec_literal_alloc")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let raw_ptr = call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| {
+                        CodegenError::InvalidOperation(
+                            "alloc returned void when pointer expected".to_string(),
+                        )
+                    })?
+                    .into_pointer_value();
+                let data_ptr = self
+                    .builder
+                    .build_pointer_cast(raw_ptr, ptr_ty, "vec_literal_ptr")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                for (i, expr) in elements.iter().enumerate() {
                     let v = self.generate_expression(expr)?;
                     let iv = self.cast_to_int(v, i64_ty)?;
-                    let offset = i64_ty.const_int((i + 1) as u64, false);
+                    let offset = i64_ty.const_int(i as u64, false);
                     let elem_ptr = unsafe {
-                        self.builder
-                            .build_in_bounds_gep(i64_ty, cast_ptr, &[offset], "elemp")
+                        self.builder.build_in_bounds_gep(
+                            i64_ty,
+                            data_ptr,
+                            &[offset],
+                            "vec_lit_elem",
+                        )
                     }
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     self.builder
@@ -3083,36 +3287,184 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 }
 
-                Ok(data_ptr.into())
+                let mut vec_value = vec_struct.get_undef();
+                vec_value = self
+                    .builder
+                    .build_insert_value(vec_value, data_ptr, data_idx, "vec_lit_data")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+                vec_value = self
+                    .builder
+                    .build_insert_value(vec_value, len_val, len_idx, "vec_lit_len")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+                vec_value = self
+                    .builder
+                    .build_insert_value(vec_value, capacity_val, cap_idx, "vec_lit_cap")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+
+                Ok(vec_value.into())
             }
-            Expression::Index { object, indices } => {
-                // Only support object being a 1D vector pointer and a single index
-                let base = self.generate_expression(object)?;
-                if base.is_pointer_value() {
-                    let idx_val = if let Some(ix) = indices.get(0) {
-                        self.generate_expression(ix)?
-                    } else {
-                        self.context.i64_type().const_zero().into()
+            Expression::Matrix { rows } => {
+                let (vec_struct, data_idx, len_idx, cap_idx) = self.vector_field_indices()?;
+                let i64_ty = self.context.i64_type();
+                let ptr_ty = i64_ty.ptr_type(AddressSpace::default());
+                if rows.len() > 1 {
+                    let null_vec = {
+                        let null_ptr = ptr_ty.const_null();
+                        let zero = i64_ty.const_zero();
+                        let mut vec_value = vec_struct.get_undef();
+                        vec_value = self
+                            .builder
+                            .build_insert_value(vec_value, null_ptr, data_idx, "mat_null_data")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_struct_value();
+                        vec_value = self
+                            .builder
+                            .build_insert_value(vec_value, zero, len_idx, "mat_null_len")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_struct_value();
+                        self
+                            .builder
+                            .build_insert_value(vec_value, zero, cap_idx, "mat_null_cap")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_struct_value()
                     };
-                    let idx_i64 = self.cast_to_int(idx_val, self.context.i64_type())?;
-                    let base_ptr = base.into_pointer_value();
-                    let elem_ptr = unsafe {
-                        self.builder.build_in_bounds_gep(
-                            self.context.i64_type(),
-                            base_ptr,
-                            &[idx_i64],
-                            "idx",
+                    return Ok(null_vec.into());
+                }
+                let empty: [Expression; 0] = [];
+                let row0: &[Expression] = rows.get(0).map(|v| v.as_slice()).unwrap_or(&empty);
+                let n = row0.len();
+                let len_val = i64_ty.const_int(n as u64, false);
+                let capacity_val = if n == 0 {
+                    i64_ty.const_int(4, false)
+                } else {
+                    len_val
+                };
+                let elem_size = i64_ty.const_int(8, false);
+                let size_bytes = self
+                    .builder
+                    .build_int_mul(capacity_val, elem_size, "vec_matrix_bytes")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let alloc_fn = self
+                    .functions
+                    .get("alloc")
+                    .cloned()
+                    .ok_or_else(|| CodegenError::UndefinedFunction("alloc".to_string()))?;
+                let call = self
+                    .builder
+                    .build_call(alloc_fn, &[size_bytes.into()], "vec_matrix_alloc")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let raw_ptr = call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| {
+                        CodegenError::InvalidOperation(
+                            "alloc returned void when pointer expected".to_string(),
                         )
+                    })?
+                    .into_pointer_value();
+                let data_ptr = self
+                    .builder
+                    .build_pointer_cast(raw_ptr, ptr_ty, "vec_matrix_ptr")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                for (i, expr) in row0.iter().enumerate() {
+                    let v = self.generate_expression(expr)?;
+                    let iv = self.cast_to_int(v, i64_ty)?;
+                    let offset = i64_ty.const_int(i as u64, false);
+                    let elem_ptr = unsafe {
+                        self.builder
+                            .build_in_bounds_gep(i64_ty, data_ptr, &[offset], "mat_elem")
                     }
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                    let loaded = self
-                        .builder
-                        .build_load(self.context.i64_type(), elem_ptr, "loadidx")
+                    self.builder
+                        .build_store(elem_ptr, iv)
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                    Ok(loaded)
-                } else {
-                    Ok(self.context.i64_type().const_zero().into())
                 }
+
+                let mut vec_value = vec_struct.get_undef();
+                vec_value = self
+                    .builder
+                    .build_insert_value(vec_value, data_ptr, data_idx, "mat_data")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+                vec_value = self
+                    .builder
+                    .build_insert_value(vec_value, len_val, len_idx, "mat_len")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+                vec_value = self
+                    .builder
+                    .build_insert_value(vec_value, capacity_val, cap_idx, "mat_cap")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+
+                Ok(vec_value.into())
+            }
+            Expression::Index { object, indices } => {
+                let idx_val = if let Some(ix) = indices.get(0) {
+                    self.generate_expression(ix)?
+                } else {
+                    self.context.i64_type().const_zero().into()
+                };
+                let idx_i64 = self.cast_to_int(idx_val, self.context.i64_type())?;
+
+                let (vec_struct, data_idx, _, _) = self.vector_field_indices()?;
+                let data_ptr_opt = if let Expression::Identifier(var_name) = object.as_ref() {
+                    if let Some((alloca, stored_ty)) = self.variables.get(var_name) {
+                        if let BasicTypeEnum::StructType(st) = stored_ty {
+                            if *st == vec_struct {
+                                let vec_val = self
+                                    .builder
+                                    .build_load(*stored_ty, *alloca, "vec_index_load")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                    .into_struct_value();
+                                let data_field = self
+                                    .builder
+                                    .build_extract_value(vec_val, data_idx, "vec_index_data")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                Some(data_field.into_pointer_value())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let data_ptr = if let Some(ptr) = data_ptr_opt {
+                    ptr
+                } else {
+                    let base = self.generate_expression(object)?;
+                    if base.is_pointer_value() {
+                        base.into_pointer_value()
+                    } else {
+                        return Ok(self.context.i64_type().const_zero().into());
+                    }
+                };
+
+                let elem_ptr = unsafe {
+                    self.builder.build_in_bounds_gep(
+                        self.context.i64_type(),
+                        data_ptr,
+                        &[idx_i64],
+                        "idx",
+                    )
+                }
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let loaded = self
+                    .builder
+                    .build_load(self.context.i64_type(), elem_ptr, "loadidx")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                Ok(loaded)
             }
 
             Expression::Identifier(name) => {
@@ -3137,7 +3489,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 if name == "none" {
-                    return Ok(self.context.i64_type().const_zero().into());
+                    if let Some(_enum_ty) = self.enum_struct {
+                        let tag = self.context.i64_type().const_zero();
+                        let payload = self.context.i64_type().const_zero();
+                        let struct_val = self
+                            .context
+                            .const_struct(&[tag.into(), payload.into()], false);
+                        return Ok(struct_val.into());
+                    } else {
+                        return Ok(self.context.i64_type().const_zero().into());
+                    }
                 }
                 let (ptr, ty) = self
                     .variables
@@ -3861,11 +4222,26 @@ impl<'ctx> CodeGenerator<'ctx> {
                 operator,
                 right,
             } => {
+                let prev_ctx = self.current_binary_context.take();
+                if matches!(operator, BinaryOperator::Equal | BinaryOperator::NotEqual) {
+                    self.current_binary_context =
+                        Some(format!("{:?} {:?} {:?}", left, operator, right));
+                }
                 let left_val = self.generate_expression(left)?;
                 let right_val = self.generate_expression(right)?;
+                if matches!(operator, BinaryOperator::Equal | BinaryOperator::NotEqual) {
+                    eprintln!(
+                        "binary operands types: {} vs {}",
+                        left_val.get_type().print_to_string().to_string(),
+                        right_val.get_type().print_to_string().to_string()
+                    );
+                }
                 let operands_unsigned =
                     self.expression_is_unsigned(left) && self.expression_is_unsigned(right);
-                self.generate_binary_op(left_val, operator, right_val, operands_unsigned)
+                let result =
+                    self.generate_binary_op(left_val, operator, right_val, operands_unsigned);
+                self.current_binary_context = prev_ctx;
+                result
             }
 
             Expression::UnaryOp { operator, operand } => {
@@ -3944,6 +4320,36 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     return Ok(with_payload.as_basic_value_enum());
                                 }
                             }
+                        }
+                    }
+                    if name == "some" {
+                        if arguments.len() != 1 {
+                            return Err(CodegenError::InvalidOperation(
+                                "some expects exactly one argument".to_string(),
+                            ));
+                        }
+                        let arg_val = self.generate_expression(&arguments[0].value)?;
+                        let payload = self.cast_to_int(arg_val, self.context.i64_type())?;
+                        if let Some(enum_ty) = self.enum_struct {
+                            let undef = enum_ty.get_undef();
+                            let tagged = self
+                                .builder
+                                .build_insert_value(
+                                    undef,
+                                    self.context.i64_type().const_int(1, false),
+                                    0,
+                                    "some_tag",
+                                )
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                .into_struct_value();
+                            let with_payload = self
+                                .builder
+                                .build_insert_value(tagged, payload, 1, "some_payload")
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                .into_struct_value();
+                            return Ok(with_payload.as_basic_value_enum());
+                        } else {
+                            return Ok(self.context.i64_type().const_int(1, false).into());
                         }
                     }
                 }
@@ -4246,6 +4652,76 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
 
             BinaryOperator::Equal => {
+                if let Some(enum_ty) = self.enum_struct {
+                    let coerce = |val: BasicValueEnum<'ctx>, label: &str|
+                        -> Result<Option<StructValue<'ctx>>, CodegenError> {
+                        if val.is_struct_value() {
+                            let sv = val.into_struct_value();
+                            if sv.get_type() == enum_ty {
+                                return Ok(Some(sv));
+                            }
+                        } else if val.is_pointer_value() {
+                            let pv = val.into_pointer_value();
+                            let enum_ptr = enum_ty.ptr_type(AddressSpace::default());
+                            let casted = self
+                                .builder
+                                .build_pointer_cast(pv, enum_ptr, &format!("{}_enum_cast", label))
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let loaded = self
+                                .builder
+                                .build_load(enum_ty, casted, &format!("{}_enum_load", label))
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                .into_struct_value();
+                            return Ok(Some(loaded));
+                        }
+                        Ok(None)
+                    };
+
+                    let left_sv = coerce(left, "lhs")?;
+                    let right_sv = coerce(right, "rhs")?;
+                    if let (Some(left_sv), Some(right_sv)) = (left_sv, right_sv) {
+                        let l_tag = self
+                            .builder
+                            .build_extract_value(left_sv, 0, "enum_ltag")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_int_value();
+                        let r_tag = self
+                            .builder
+                            .build_extract_value(right_sv, 0, "enum_rtag")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_int_value();
+                        let tag_eq = self
+                            .builder
+                            .build_int_compare(IntPredicate::EQ, l_tag, r_tag, "enum_tag_eq")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                        let l_payload = self
+                            .builder
+                            .build_extract_value(left_sv, 1, "enum_lpayload")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_int_value();
+                        let r_payload = self
+                            .builder
+                            .build_extract_value(right_sv, 1, "enum_rpayload")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_int_value();
+                        let payload_eq = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::EQ,
+                                l_payload,
+                                r_payload,
+                                "enum_payload_eq",
+                            )
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                        let both = self
+                            .builder
+                            .build_and(tag_eq, payload_eq, "enum_eq")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        return Ok(both.into());
+                    }
+                }
                 if left.is_int_value() && right.is_int_value() {
                     let (l, r, _ty) = self.unify_ints(left, right)?;
                     let result = self
@@ -4264,13 +4740,106 @@ impl<'ctx> CodeGenerator<'ctx> {
                         )
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     Ok(result.into())
+                } else if left.is_pointer_value() && right.is_pointer_value() {
+                    let l_ptr = left.into_pointer_value();
+                    let r_ptr = right.into_pointer_value();
+                    let l_int = self
+                        .builder
+                        .build_ptr_to_int(l_ptr, self.context.i64_type(), "lhs_ptrint")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    let r_int = self
+                        .builder
+                        .build_ptr_to_int(r_ptr, self.context.i64_type(), "rhs_ptrint")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    let result = self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, l_int, r_int, "ptr_eq")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    Ok(result.into())
                 } else {
-                    Err(CodegenError::InvalidOperation(
-                        "Invalid types for equality comparison".to_string(),
-                    ))
+                    let l_ty = left.get_type().print_to_string().to_string();
+                    let r_ty = right.get_type().print_to_string().to_string();
+                    let ctx = self
+                        .current_binary_context
+                        .as_deref()
+                        .unwrap_or("<unknown expression>");
+                    Err(CodegenError::InvalidOperation(format!(
+                        "Invalid types for equality comparison: {} vs {} in {}",
+                        l_ty, r_ty, ctx
+                    )))
                 }
             }
             BinaryOperator::NotEqual => {
+                if let Some(enum_ty) = self.enum_struct {
+                    let coerce = |val: BasicValueEnum<'ctx>, label: &str|
+                        -> Result<Option<StructValue<'ctx>>, CodegenError> {
+                        if val.is_struct_value() {
+                            let sv = val.into_struct_value();
+                            if sv.get_type() == enum_ty {
+                                return Ok(Some(sv));
+                            }
+                        } else if val.is_pointer_value() {
+                            let pv = val.into_pointer_value();
+                            let enum_ptr = enum_ty.ptr_type(AddressSpace::default());
+                            let casted = self
+                                .builder
+                                .build_pointer_cast(pv, enum_ptr, &format!("{}_enum_cast", label))
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                            let loaded = self
+                                .builder
+                                .build_load(enum_ty, casted, &format!("{}_enum_load", label))
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                .into_struct_value();
+                            return Ok(Some(loaded));
+                        }
+                        Ok(None)
+                    };
+
+                    let left_sv = coerce(left, "lhs")?;
+                    let right_sv = coerce(right, "rhs")?;
+                    if let (Some(left_sv), Some(right_sv)) = (left_sv, right_sv) {
+                        let l_tag = self
+                            .builder
+                            .build_extract_value(left_sv, 0, "enum_ltag")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_int_value();
+                        let r_tag = self
+                            .builder
+                            .build_extract_value(right_sv, 0, "enum_rtag")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_int_value();
+                        let tag_ne = self
+                            .builder
+                            .build_int_compare(IntPredicate::NE, l_tag, r_tag, "enum_tag_ne")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                        let l_payload = self
+                            .builder
+                            .build_extract_value(left_sv, 1, "enum_lpayload")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_int_value();
+                        let r_payload = self
+                            .builder
+                            .build_extract_value(right_sv, 1, "enum_rpayload")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_int_value();
+                        let payload_ne = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::NE,
+                                l_payload,
+                                r_payload,
+                                "enum_payload_ne",
+                            )
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                        let combined = self
+                            .builder
+                            .build_or(tag_ne, payload_ne, "enum_ne")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        return Ok(combined.into());
+                    }
+                }
                 if left.is_int_value() && right.is_int_value() {
                     let (l, r, _ty) = self.unify_ints(left, right)?;
                     let result = self
@@ -4289,10 +4858,33 @@ impl<'ctx> CodeGenerator<'ctx> {
                         )
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     Ok(result.into())
+                } else if left.is_pointer_value() && right.is_pointer_value() {
+                    let l_ptr = left.into_pointer_value();
+                    let r_ptr = right.into_pointer_value();
+                    let l_int = self
+                        .builder
+                        .build_ptr_to_int(l_ptr, self.context.i64_type(), "lhs_ptrint")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    let r_int = self
+                        .builder
+                        .build_ptr_to_int(r_ptr, self.context.i64_type(), "rhs_ptrint")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    let result = self
+                        .builder
+                        .build_int_compare(IntPredicate::NE, l_int, r_int, "ptr_ne")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    Ok(result.into())
                 } else {
-                    Err(CodegenError::InvalidOperation(
-                        "Invalid types for inequality comparison".to_string(),
-                    ))
+                    let l_ty = left.get_type().print_to_string().to_string();
+                    let r_ty = right.get_type().print_to_string().to_string();
+                    let ctx = self
+                        .current_binary_context
+                        .as_deref()
+                        .unwrap_or("<unknown expression>");
+                    Err(CodegenError::InvalidOperation(format!(
+                        "Invalid types for inequality comparison: {} vs {} in {}",
+                        l_ty, r_ty, ctx
+                    )))
                 }
             }
 
@@ -4602,75 +5194,20 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
 
                         let arg_val = self.generate_expression(&first.value)?;
-                        if arg_val.is_pointer_value() {
-                            let ptr = arg_val.into_pointer_value();
-                            let is_null = self
-                                .builder
-                                .build_is_null(ptr, "len_is_null")
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                            let current_fn = self.current_function.ok_or_else(|| {
-                                CodegenError::CompilationError(
-                                    "len called outside of function".to_string(),
-                                )
-                            })?;
-                            let before_bb = self.builder.get_insert_block().unwrap();
-                            let non_null_bb =
-                                self.context.append_basic_block(current_fn, "len_non_null");
-                            let merge_bb = self.context.append_basic_block(current_fn, "len_merge");
-                            self.builder
-                                .build_conditional_branch(is_null, merge_bb, non_null_bb)
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                            // Non-null path: load length header stored immediately before data pointer
-                            self.builder.position_at_end(non_null_bb);
-                            let ptr_int = self
-                                .builder
-                                .build_ptr_to_int(ptr, self.context.i64_type(), "len_ptr_int")
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                            let header_offset = self.context.i64_type().const_int(8, false);
-                            let header_addr = self
-                                .builder
-                                .build_int_sub(ptr_int, header_offset, "len_header_int")
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                            let header_ptr = self
-                                .builder
-                                .build_int_to_ptr(
-                                    header_addr,
-                                    self.context.i64_type().ptr_type(AddressSpace::default()),
-                                    "len_header_ptr",
-                                )
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                            let len_loaded = self
-                                .builder
-                                .build_load(self.context.i64_type(), header_ptr, "len_load")
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                            self.builder
-                                .build_unconditional_branch(merge_bb)
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                            let non_null_end = self.builder.get_insert_block().unwrap();
-
-                            // Merge block with phi selecting 0 for null pointers
-                            self.builder.position_at_end(merge_bb);
-                            let phi = self
-                                .builder
-                                .build_phi(self.context.i64_type(), "len_phi")
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                            let zero_basic: BasicValueEnum<'ctx> =
-                                self.context.i64_type().const_zero().into();
-                            let len_basic: BasicValueEnum<'ctx> = len_loaded;
-                            phi.add_incoming(&[
-                                (
-                                    &zero_basic as &dyn inkwell::values::BasicValue<'ctx>,
-                                    before_bb,
-                                ),
-                                (
-                                    &len_basic as &dyn inkwell::values::BasicValue<'ctx>,
-                                    non_null_end,
-                                ),
-                            ]);
-                            return Ok(phi.as_basic_value());
+                        let (vec_struct, _, len_idx, _) = self.vector_field_indices()?;
+                        if let BasicValueEnum::StructValue(vec_val) = arg_val {
+                            if vec_val.get_type() == vec_struct {
+                                let len_val = self
+                                    .builder
+                                    .build_extract_value(
+                                        vec_val,
+                                        len_idx,
+                                        "vec_len_extract",
+                                    )
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                return Ok(len_val);
+                            }
                         }
-
                         // Fallback when not a pointer/string: return zero
                         return Ok(self.context.i64_type().const_zero().into());
                     }
@@ -4678,23 +5215,33 @@ impl<'ctx> CodeGenerator<'ctx> {
                     return Ok(self.context.i64_type().const_zero().into());
                 }
 
-                // Built-in slice helpers: slice_len(s: slice_i64) -> i64; slice_is_empty(s) -> bool
-                if func_name == "slice_len" || func_name == "slice_is_empty" {
-                    // Expect one argument
+                // Built-in slice helpers (i64/bool variants)
+                if matches!(
+                    func_name.as_str(),
+                    "slice_len" | "slice_is_empty" | "slice_len_bool" | "slice_is_empty_bool"
+                ) {
+                    let (struct_key, returns_len, returns_bool) = match func_name.as_str() {
+                        "slice_len" => ("slice_i64", true, false),
+                        "slice_is_empty" => ("slice_i64", false, true),
+                        "slice_len_bool" => ("slice_bool", true, false),
+                        "slice_is_empty_bool" => ("slice_bool", false, true),
+                        _ => unreachable!(),
+                    };
+
+                    let default = if returns_bool {
+                        self.context.bool_type().const_zero().into()
+                    } else {
+                        self.context.i64_type().const_zero().into()
+                    };
+
                     if let Some(first) = arguments.get(0) {
-                        // Resolve struct layout for slice_i64 without keeping an active borrow
                         let (mut use_st, order_vec) =
-                            if let Some((st_ref, order)) = self.struct_types.get("slice_i64") {
+                            if let Some((st_ref, order)) = self.struct_types.get(struct_key) {
                                 (*st_ref, order.clone())
                             } else {
-                                // Fallbacks when layout missing
-                                return Ok(if func_name == "slice_len" {
-                                    self.context.i64_type().const_zero().into()
-                                } else {
-                                    self.context.bool_type().const_zero().into()
-                                });
+                                return Ok(default);
                             };
-                        // Try to use the variable alloca if arg is an identifier
+
                         let sptr_opt: Option<PointerValue<'ctx>> = match &first.value {
                             Expression::Identifier(var) => {
                                 if let Some((alloca, bte)) = self.variables.get(var) {
@@ -4710,20 +5257,24 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }
                             _ => None,
                         };
-                        let sptr: PointerValue<'ctx> = if let Some(p) = sptr_opt {
+
+                        let sptr = if let Some(p) = sptr_opt {
                             p
                         } else {
-                            // Evaluate value, store into a temp alloca of slice_i64 type
                             let av = self.generate_expression(&first.value)?;
-                            let alloca = self.create_entry_block_alloca("sarg", use_st.into())?;
+                            let alloca = self.create_entry_block_alloca(
+                                &format!("{}_tmp", struct_key),
+                                use_st.into(),
+                            )?;
                             self.builder
                                 .build_store(alloca, av)
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                             alloca
                         };
+
                         let len_idx = order_vec.iter().position(|n| n == "len").unwrap_or(0) as u32;
                         let len_ty = use_st.get_field_type_at_index(len_idx).ok_or_else(|| {
-                            CodegenError::InvalidOperation("slice_i64.len type".to_string())
+                            CodegenError::InvalidOperation(format!("{}.len type", struct_key))
                         })?;
                         let len_ptr = self
                             .builder
@@ -4734,7 +5285,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                             .build_load(len_ty, len_ptr, "slenv")
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                             .into_int_value();
-                        if func_name == "slice_len" {
+
+                        if returns_len {
                             return Ok(len_val.into());
                         } else {
                             let is_empty = self
@@ -4749,29 +5301,38 @@ impl<'ctx> CodeGenerator<'ctx> {
                             return Ok(is_empty.into());
                         }
                     }
-                    // Fallbacks when argument missing
-                    return Ok(if func_name == "slice_len" {
-                        self.context.i64_type().const_zero().into()
-                    } else {
-                        self.context.bool_type().const_zero().into()
-                    });
+
+                    return Ok(default);
                 }
 
-                // Built-in slice_get(s: slice_i64, idx: i64) -> i64
-                if func_name == "slice_get" {
-                    // Expect two args: slice and index
+                if matches!(func_name.as_str(), "slice_get" | "slice_get_bool") {
+                    let enum_ty = self.enum_struct.ok_or_else(|| {
+                        CodegenError::InvalidOperation(
+                            "Optional enum representation unavailable".to_string(),
+                        )
+                    })?;
+                    let (struct_key, elem_ty) = match func_name.as_str() {
+                        "slice_get" => ("slice_i64", self.context.i64_type().into()),
+                        "slice_get_bool" => ("slice_bool", self.context.bool_type().into()),
+                        _ => unreachable!(),
+                    };
+                    let none_struct = enum_ty.const_named_struct(&[
+                        self.context.i64_type().const_zero().into(),
+                        self.context.i64_type().const_zero().into(),
+                    ]);
+                    let default = none_struct.as_basic_value_enum();
+
                     if arguments.len() >= 2 {
                         let first = &arguments[0];
                         let second = &arguments[1];
-                        // Resolve struct layout for slice_i64
+
                         let (mut use_st, order_vec) =
-                            if let Some((st_ref, order)) = self.struct_types.get("slice_i64") {
+                            if let Some((st_ref, order)) = self.struct_types.get(struct_key) {
                                 (*st_ref, order.clone())
                             } else {
-                                // Missing layout -> return 0
-                                return Ok(self.context.i64_type().const_zero().into());
+                                return Ok(default);
                             };
-                        // Obtain pointer to slice struct (alloca)
+
                         let sptr_opt: Option<PointerValue<'ctx>> = match &first.value {
                             Expression::Identifier(var) => {
                                 if let Some((alloca, bte)) = self.variables.get(var) {
@@ -4787,24 +5348,28 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }
                             _ => None,
                         };
+
                         let sptr = if let Some(p) = sptr_opt {
                             p
                         } else {
                             let av = self.generate_expression(&first.value)?;
-                            let alloca = self.create_entry_block_alloca("sarg", use_st.into())?;
+                            let alloca = self.create_entry_block_alloca(
+                                &format!("{}_tmp", struct_key),
+                                use_st.into(),
+                            )?;
                             self.builder
                                 .build_store(alloca, av)
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                             alloca
                         };
-                        // Load ptr and len fields
+
                         let ptr_idx = order_vec.iter().position(|n| n == "ptr").unwrap_or(0) as u32;
                         let len_idx = order_vec.iter().position(|n| n == "len").unwrap_or(1) as u32;
                         let ptr_ty = use_st.get_field_type_at_index(ptr_idx).ok_or_else(|| {
-                            CodegenError::InvalidOperation("slice_i64.ptr type".to_string())
+                            CodegenError::InvalidOperation("slice ptr field type".to_string())
                         })?;
                         let len_ty = use_st.get_field_type_at_index(len_idx).ok_or_else(|| {
-                            CodegenError::InvalidOperation("slice_i64.len type".to_string())
+                            CodegenError::InvalidOperation("slice len field type".to_string())
                         })?;
                         let ptr_ptr = self
                             .builder
@@ -4824,13 +5389,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                             .build_load(len_ty, len_ptr, "len")
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                             .into_int_value();
-                        // Compute index value
+
                         let idx_val_raw = self.generate_expression(&second.value)?;
                         let idx_val = match idx_val_raw {
                             BasicValueEnum::IntValue(iv) => iv,
                             _ => self.cast_to_int(idx_val_raw, self.context.i64_type())?,
                         };
-                        // Bounds check
+
                         let cmp = self
                             .builder
                             .build_int_compare(IntPredicate::UGE, idx_val, lenv, "out_of_bounds")
@@ -4840,48 +5405,100 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 "No current function for slice_get".to_string(),
                             )
                         })?;
-                        let panic_bb = self.context.append_basic_block(current_fn, "panic_bb");
-                        let ok_bb = self.context.append_basic_block(current_fn, "ok_bb");
+
+                        let result_alloca =
+                            self.create_entry_block_alloca("slice_get_res", enum_ty.into())?;
+                        let none_bb = self
+                            .context
+                            .append_basic_block(current_fn, "slice_get.none");
+                        let some_bb = self
+                            .context
+                            .append_basic_block(current_fn, "slice_get.some");
+                        let merge_bb = self
+                            .context
+                            .append_basic_block(current_fn, "slice_get.merge");
+
                         self.builder
-                            .build_conditional_branch(cmp, panic_bb, ok_bb)
+                            .build_conditional_branch(cmp, none_bb, some_bb)
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                        self.builder.position_at_end(panic_bb);
-                        if let Some(panic_func) = self.functions.get("panic") {
-                            let msg_const = self
-                                .context
-                                .const_string(b"slice index out of bounds", false);
-                            let msg_ty = msg_const.get_type();
-                            let msg_alloca =
-                                self.create_entry_block_alloca("panic_msg", msg_ty.into())?;
-                            self.builder
-                                .build_store(msg_alloca, msg_const)
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                            let args = vec![BasicMetadataValueEnum::PointerValue(msg_alloca)];
-                            self.builder
-                                .build_call(*panic_func, &args, "panic_call")
-                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                        }
+
+                        self.builder.position_at_end(none_bb);
                         self.builder
-                            .build_unreachable()
+                            .build_store(result_alloca, none_struct)
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                        self.builder.position_at_end(ok_bb);
-                        // GEP to element and load i64
-                        let elem_ptr = unsafe {
-                            self.builder.build_in_bounds_gep(
-                                self.context.i64_type(),
-                                base_ptr,
-                                &[idx_val],
-                                "elt",
-                            )
-                        }
-                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                        let elem = self
+                        self.builder
+                            .build_unconditional_branch(merge_bb)
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                        self.builder.position_at_end(some_bb);
+                        let elem_val = match elem_ty {
+                            BasicTypeEnum::IntType(it) => {
+                                let ptr = unsafe {
+                                    self.builder.build_in_bounds_gep(
+                                        it,
+                                        base_ptr,
+                                        &[idx_val],
+                                        "elt",
+                                    )
+                                }
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                self.builder
+                                    .build_load(it, ptr, "load")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            }
+                            BasicTypeEnum::PointerType(pt) => {
+                                let ptr = unsafe {
+                                    self.builder.build_in_bounds_gep(
+                                        pt,
+                                        base_ptr,
+                                        &[idx_val],
+                                        "elt",
+                                    )
+                                }
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                self.builder
+                                    .build_load(pt, ptr, "load")
+                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            }
+                            _ => {
+                                return Err(CodegenError::InvalidOperation(
+                                    "Unsupported slice element type for optional result"
+                                        .to_string(),
+                                ))
+                            }
+                        };
+                        let payload = self.cast_to_int(elem_val, self.context.i64_type())?;
+                        let tagged = self
                             .builder
-                            .build_load(self.context.i64_type(), elem_ptr, "load")
+                            .build_insert_value(
+                                enum_ty.get_undef(),
+                                self.context.i64_type().const_int(1, false),
+                                0,
+                                "slice_get_tag",
+                            )
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_struct_value();
+                        let with_payload = self
+                            .builder
+                            .build_insert_value(tagged, payload, 1, "slice_get_payload")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_struct_value();
+                        self.builder
+                            .build_store(result_alloca, with_payload)
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                        return Ok(elem);
+                        self.builder
+                            .build_unconditional_branch(merge_bb)
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                        self.builder.position_at_end(merge_bb);
+                        let loaded = self
+                            .builder
+                            .build_load(enum_ty, result_alloca, "slice_get_result")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        return Ok(loaded);
                     }
-                    return Ok(self.context.i64_type().const_zero().into());
+
+                    return Ok(default);
                 }
 
                 // Built-in sizeof<T>() -> u64
@@ -5026,23 +5643,39 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
 
                     let value = self.generate_expression(&arg.value)?;
-                    let casted_meta: BasicMetadataValueEnum<'ctx> =
-                        if let Some(meta_ty) = param_metas.get(i) {
-                            match meta_ty {
-                                inkwell::types::BasicMetadataTypeEnum::IntType(it) => {
-                                    self.cast_to_int(value, *it)?.into()
-                                }
-                                inkwell::types::BasicMetadataTypeEnum::FloatType(ft) => {
-                                    self.cast_to_float(value, *ft)?.into()
-                                }
-                                inkwell::types::BasicMetadataTypeEnum::PointerType(pt) => {
-                                    self.cast_to_ptr(value, *pt)?.into()
-                                }
-                                _ => self.cast_to_int(value, self.context.i64_type())?.into(),
+                    let casted_meta: BasicMetadataValueEnum<'ctx> = if let Some(meta_ty) =
+                        param_metas.get(i)
+                    {
+                        match meta_ty {
+                            inkwell::types::BasicMetadataTypeEnum::IntType(it) => {
+                                self.cast_to_int(value, *it)?.into()
                             }
-                        } else {
-                            self.cast_to_int(value, self.context.i64_type())?.into()
-                        };
+                            inkwell::types::BasicMetadataTypeEnum::FloatType(ft) => {
+                                self.cast_to_float(value, *ft)?.into()
+                            }
+                            inkwell::types::BasicMetadataTypeEnum::PointerType(pt) => {
+                                self.cast_to_ptr(value, *pt)?.into()
+                            }
+                            inkwell::types::BasicMetadataTypeEnum::StructType(st) => {
+                                if value.get_type() == (*st).into() {
+                                    value.into()
+                                } else {
+                                    let tmp_alloc =
+                                        self.create_entry_block_alloca("struct_tmp", (*st).into())?;
+                                    self.builder.build_store(tmp_alloc, value).map_err(|e| {
+                                        CodegenError::CompilationError(e.to_string())
+                                    })?;
+                                    self.builder
+                                        .build_load(*st, tmp_alloc, "struct_arg")
+                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                                        .into()
+                                }
+                            }
+                            _ => self.cast_to_int(value, self.context.i64_type())?.into(),
+                        }
+                    } else {
+                        self.cast_to_int(value, self.context.i64_type())?.into()
+                    };
                     arg_values.push(casted_meta);
                 }
                 // pad with zeros/nulls for missing args
@@ -5070,6 +5703,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if let Some(value) = result.try_as_basic_value().left() {
                     Ok(value)
                 } else {
+                    eprintln!(
+                        "call {} produced no direct value; fn type {}",
+                        func_name,
+                        function_val.get_type().print_to_string().to_string()
+                    );
                     // Void function
                     Ok(self.context.i64_type().const_zero().into())
                 }
@@ -5078,6 +5716,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Method call lowering: expr.method(args) => Type_method(self, args)
                 // Only support when expr is an identifier bound to a known struct
                 if let Expression::Identifier(var_name) = object.as_ref() {
+                    if let Some(vector_result) =
+                        self.try_generate_vector_method_call(var_name, field, arguments)?
+                    {
+                        return Ok(vector_result);
+                    }
                     // no-op here; real reduce implementation below handles both semantic and tracked lengths
                     // Special-case: 1D vector methods like reduce over arrays
                     if let Some(Type::Matrix {
@@ -5570,6 +6213,24 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 }
 
                                 if let Some(function_val) = selected_fn {
+                                    if let Some(sig) =
+                                        self.semantic.functions.get(&mangled_inherent)
+                                    {
+                                        eprintln!(
+                                            "semantic function {} return {:?}",
+                                            mangled_inherent, sig.return_type
+                                        );
+                                    }
+                                    if let Some(impl_info) =
+                                        self.semantic.inherent_impls.get(struct_name)
+                                    {
+                                        if let Some(sig) = impl_info.methods.get(field) {
+                                            eprintln!(
+                                                "semantic method {}.{} return {:?}",
+                                                struct_name, field, sig.return_type
+                                            );
+                                        }
+                                    }
                                     // Prepare args: first receiver, then others cast to param types
                                     let param_metas = function_val.get_type().get_param_types();
                                     let mut arg_values: Vec<BasicMetadataValueEnum<'ctx>> =
@@ -6846,6 +7507,185 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(self.context.i32_type().const_int(0, false).into())
     }
 
+    fn generate_for_loop_over_slice(
+        &mut self,
+        variable: &str,
+        body: &[Statement],
+        slice_alloca: PointerValue<'ctx>,
+        slice_struct_ty: StructType<'ctx>,
+        field_order: Vec<String>,
+        struct_name: &str,
+        element_ty: BasicTypeEnum<'ctx>,
+    ) -> Result<(), CodegenError> {
+        let ptr_idx = field_order.iter().position(|n| n == "ptr").ok_or_else(|| {
+            CodegenError::InvalidOperation(format!(
+                "{}.ptr field missing for slice iteration",
+                struct_name
+            ))
+        })? as u32;
+        let len_idx = field_order.iter().position(|n| n == "len").ok_or_else(|| {
+            CodegenError::InvalidOperation(format!(
+                "{}.len field missing for slice iteration",
+                struct_name
+            ))
+        })? as u32;
+
+        let ptr_field_ty = slice_struct_ty
+            .get_field_type_at_index(ptr_idx)
+            .ok_or_else(|| {
+                CodegenError::InvalidOperation(format!(
+                    "{}.ptr type missing for slice iteration",
+                    struct_name
+                ))
+            })?;
+        let len_field_ty = slice_struct_ty
+            .get_field_type_at_index(len_idx)
+            .ok_or_else(|| {
+                CodegenError::InvalidOperation(format!(
+                    "{}.len type missing for slice iteration",
+                    struct_name
+                ))
+            })?;
+
+        let ptr_gep = self
+            .builder
+            .build_struct_gep(slice_struct_ty, slice_alloca, ptr_idx, "slice.ptr")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let len_gep = self
+            .builder
+            .build_struct_gep(slice_struct_ty, slice_alloca, len_idx, "slice.len")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        let base_ptr_val = self
+            .builder
+            .build_load(ptr_field_ty, ptr_gep, "slice.ptrv")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let len_val = self
+            .builder
+            .build_load(len_field_ty, len_gep, "slice.lenv")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+            .into_int_value();
+
+        let base_ptr = base_ptr_val.into_pointer_value();
+
+        let idx_alloca = self.create_entry_block_alloca("idx", self.context.i64_type().into())?;
+        self.builder
+            .build_store(idx_alloca, self.context.i64_type().const_zero())
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let elem_alloca = self.create_entry_block_alloca(variable, element_ty)?;
+        let prev_binding = self
+            .variables
+            .insert(variable.to_string(), (elem_alloca, element_ty));
+
+        let current_fn = self
+            .current_function
+            .ok_or_else(|| CodegenError::CompilationError("No current function".to_string()))?;
+        let cond_bb = self.context.append_basic_block(current_fn, "for.cond");
+        let body_bb = self.context.append_basic_block(current_fn, "for.body");
+        let inc_bb = self.context.append_basic_block(current_fn, "for.inc");
+        let end_bb = self.context.append_basic_block(current_fn, "for.end");
+
+        self.builder
+            .build_unconditional_branch(cond_bb)
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        // cond block
+        self.builder.position_at_end(cond_bb);
+        let i64_bte: BasicTypeEnum<'ctx> = self.context.i64_type().into();
+        let idx_cur = self
+            .builder
+            .build_load(i64_bte, idx_alloca, "idx")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+            .into_int_value();
+        let cmp = self
+            .builder
+            .build_int_compare(IntPredicate::SLT, idx_cur, len_val, "forcmp")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        self.builder
+            .build_conditional_branch(cmp, body_bb, end_bb)
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        // body block
+        self.builder.position_at_end(body_bb);
+        let elem_ptr = unsafe {
+            match element_ty {
+                BasicTypeEnum::IntType(it) => {
+                    self.builder
+                        .build_in_bounds_gep(it, base_ptr, &[idx_cur], "slice.idx")
+                }
+                BasicTypeEnum::FloatType(ft) => {
+                    self.builder
+                        .build_in_bounds_gep(ft, base_ptr, &[idx_cur], "slice.idx")
+                }
+                BasicTypeEnum::PointerType(pt) => {
+                    self.builder
+                        .build_in_bounds_gep(pt, base_ptr, &[idx_cur], "slice.idx")
+                }
+                BasicTypeEnum::StructType(st) => {
+                    self.builder
+                        .build_in_bounds_gep(st, base_ptr, &[idx_cur], "slice.idx")
+                }
+                BasicTypeEnum::ArrayType(at) => {
+                    self.builder
+                        .build_in_bounds_gep(at, base_ptr, &[idx_cur], "slice.idx")
+                }
+                BasicTypeEnum::VectorType(vt) => {
+                    self.builder
+                        .build_in_bounds_gep(vt, base_ptr, &[idx_cur], "slice.idx")
+                }
+                BasicTypeEnum::ScalableVectorType(_) => {
+                    return Err(CodegenError::InvalidOperation(
+                        "Unsupported scalable vector slice element".to_string(),
+                    ))
+                }
+            }
+        }
+        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let loaded_elem = self
+            .builder
+            .build_load(element_ty, elem_ptr, "slice.elem")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        self.builder
+            .build_store(elem_alloca, loaded_elem)
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        {
+            let _loop_scope = LoopScope::new(&mut self.loop_stack, inc_bb, end_bb);
+            for stmt in body {
+                self.generate_statement(stmt)?;
+            }
+            self.branch_to(inc_bb)?;
+        }
+
+        // inc block
+        self.builder.position_at_end(inc_bb);
+        let idx_cur2 = self
+            .builder
+            .build_load(i64_bte, idx_alloca, "idx")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+            .into_int_value();
+        let next = self
+            .builder
+            .build_int_add(idx_cur2, self.context.i64_type().const_int(1, false), "inc")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        self.builder
+            .build_store(idx_alloca, next)
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        self.builder
+            .build_unconditional_branch(cond_bb)
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        // end block
+        self.builder.position_at_end(end_bb);
+        if let Some(prev) = prev_binding {
+            self.variables.insert(variable.to_string(), prev);
+        } else {
+            self.variables.remove(variable);
+        }
+
+        Ok(())
+    }
+
     fn create_entry_block_alloca(
         &self,
         name: &str,
@@ -7038,6 +7878,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .as_ref()
                         .and_then(|t| self.map_ast_type(t))
                         .unwrap_or(self.context.i64_type().into());
+                    if name == "get" {
+                        let ty_str = ret_ty.print_to_string().to_string();
+                        eprintln!("declaring method {} return type {}", name, ty_str);
+                    }
                     let mut param_tys_bte: Vec<BasicTypeEnum<'ctx>> = Vec::new();
                     // Prepend receiver pointer parameter for methods
                     param_tys_bte.push(self.context.ptr_type(AddressSpace::default()).into());
@@ -7058,6 +7902,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                         _ => self.context.i64_type().fn_type(&param_meta, false),
                     };
                     let function = self.module.add_function(&mangled, fn_type, None);
+                    if name == "get" {
+                        eprintln!(
+                            "declaring method {} fn_type {}",
+                            mangled,
+                            fn_type.print_to_string().to_string()
+                        );
+                    }
                     self.functions.insert(mangled.clone(), function);
 
                     // Define the function body
@@ -7665,6 +8516,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             .as_ref()
                                             .and_then(|t| self.map_ast_type(t))
                                             .unwrap_or(self.context.i64_type().into());
+                                        if mname == "get" {
+                                            let ty_str = ret_ty.print_to_string().to_string();
+                                            eprintln!(
+                                                "impl method {}::{} return type {}",
+                                                type_name, mname, ty_str
+                                            );
+                                        }
                                         let casted = self.cast_basic_to_type(v, ret_ty)?;
                                         self.builder.build_return(Some(&casted)).map_err(|e| {
                                             CodegenError::CompilationError(e.to_string())
@@ -7692,6 +8550,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             .as_ref()
                                             .and_then(|t| self.map_ast_type(t))
                                             .unwrap_or(self.context.i64_type().into());
+                                        if mname == "get" {
+                                            let ty_str = ret_ty.print_to_string().to_string();
+                                            eprintln!(
+                                                "impl method {}::{} return type {}",
+                                                type_name, mname, ty_str
+                                            );
+                                        }
                                         let ret_val: BasicValueEnum<'ctx> = if let Some(v) =
                                             last_expr_value
                                         {

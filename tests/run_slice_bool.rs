@@ -1,6 +1,6 @@
 use inkwell::context::Context;
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 use tricti::{codegen, parser, semantic};
 
@@ -83,6 +83,7 @@ fn compile_and_run(src: &str, obj: &str, exe: &str) -> String {
     let context = Context::create();
     let mut gen = codegen::CodeGenerator::new(&context, sem).expect("codegen ctx");
     gen.generate_program(&program).expect("codegen");
+    gen.print_ir();
 
     if Path::new(obj).exists() {
         let _ = fs::remove_file(obj);
