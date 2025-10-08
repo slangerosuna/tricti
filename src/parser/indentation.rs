@@ -123,6 +123,44 @@ fn leading_keyword_allows_block(head: &str) -> bool {
         .any(|token| matches!(token, "match"))
 }
 
+fn looks_like_struct_literal_head(head: &str) -> bool {
+    let trimmed = head.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    if !trimmed.contains(':') {
+        return false;
+    }
+    if trimmed.contains("=>") {
+        return false;
+    }
+
+    let mut chars = trimmed.chars();
+    let first = match chars.next() {
+        Some(ch) => ch,
+        None => return false,
+    };
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+
+    for ch in chars {
+        if ch.is_ascii_alphanumeric() {
+            continue;
+        }
+        if matches!(
+            ch,
+            '_' | ':' | '<' | '>' | ',' | ' ' | '[' | ']' | '.' | ';' | '\'' | '&' | '*' | '?' | '='
+        ) {
+            continue;
+        }
+        return false;
+    }
+
+    true
+}
+
 fn convert_do_segment(segment: &str) -> Option<String> {
     if let Some(pos) = segment.find("=> do") {
         let before = &segment[..pos];
@@ -394,6 +432,11 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
             base.push_str(" }");
             base.push_str(trailing_ws);
             return ensure_arrow_block(base, false);
+        } else if tail.trim().is_empty() && looks_like_struct_literal_head(trimmed_head) {
+            let mut base = trimmed_head.to_string();
+            base.push_str(" {");
+            base.push_str(trailing_ws);
+            return ensure_arrow_block(base, true);
         } else if let Some(arrow_idx) = trimmed_head.rfind("=>") {
             let after_arrow = trimmed_head[arrow_idx + 2..].trim_start();
             if leading_keyword_allows_block(after_arrow) {
@@ -711,6 +754,16 @@ mod tests {
         assert!(output.contains("=> match value {"));
         assert!(output.contains("some item =>"));
         assert!(output.contains("none =>"));
+    }
+
+    #[test]
+    fn converts_struct_literal_block() {
+        let input = "result := TripmBus:\n    build_requests: build_requests,\n    build_sender: build_sender,\n    build_receiver: build_receiver,\n";
+        let output = desugar_indentation(input);
+        assert!(output.contains("result := TripmBus {"));
+        assert!(output.contains("build_requests: build_requests,"));
+        assert!(output.contains("build_receiver: build_receiver,"));
+        assert!(output.contains("}"));
     }
 
     #[test]
