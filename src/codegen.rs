@@ -4130,85 +4130,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Evaluate scrutinee once
                 let raw = self.generate_expression(value)?;
 
-                // Tuple-specialized handling: single arm with pattern `(a, b, ...)`
-                if arms.len() == 1 {
-                    if let Expression::Tuple(pattern_items) = &arms[0].pattern {
-                        if let Some(struct_val) = if raw.is_struct_value() {
-                            Some(raw.into_struct_value())
-                        } else {
-                            None
-                        } {
-                            let tuple_ty = struct_val.get_type();
-                            if tuple_ty.count_fields() as usize != pattern_items.len() {
-                                return Err(CodegenError::InvalidOperation(
-                                    "tuple pattern arity mismatch".to_string(),
-                                ));
-                            }
-
-                            let mut saved_bindings: Vec<(
-                                String,
-                                Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
-                            )> = Vec::new();
-
-                            for (idx, pat) in pattern_items.iter().enumerate() {
-                                let element_val = self
-                                    .builder
-                                    .build_extract_value(
-                                        struct_val,
-                                        idx as u32,
-                                        &format!("tuple_extract{}", idx),
-                                    )
-                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-
-                                match pat {
-                                    Expression::Identifier(name) if name == "_" => {}
-                                    Expression::Identifier(name) => {
-                                        let field_ty = tuple_ty
-                                            .get_field_type_at_index(idx as u32)
-                                            .ok_or_else(|| {
-                                                CodegenError::InvalidOperation(
-                                                    "tuple field index out of range".to_string(),
-                                                )
-                                            })?;
-                                        let alloca =
-                                            self.create_entry_block_alloca(name, field_ty)?;
-                                        self.builder.build_store(alloca, element_val).map_err(
-                                            |e| CodegenError::CompilationError(e.to_string()),
-                                        )?;
-                                        let previous =
-                                            self.variables.insert(name.clone(), (alloca, field_ty));
-                                        saved_bindings.push((name.clone(), previous));
-                                    }
-                                    _ => {
-                                        return Err(CodegenError::InvalidOperation(
-                                            "unsupported tuple pattern element".to_string(),
-                                        ));
-                                    }
-                                }
-                            }
-
-                            let body_val_raw = self.generate_expression(&arms[0].body)?;
-                            let body_val: BasicValueEnum<'ctx> = if body_val_raw.is_int_value() {
-                                body_val_raw
-                            } else {
-                                self.cast_to_int(body_val_raw, self.context.i64_type())?
-                                    .into()
-                            };
-
-                            for (name, previous) in saved_bindings.into_iter().rev() {
-                                match previous {
-                                    Some(binding) => {
-                                        self.variables.insert(name, binding);
-                                    }
-                                    None => {
-                                        self.variables.remove(&name);
-                                    }
-                                }
-                            }
-
-                            return Ok(body_val);
-                        }
-                    }
+                if arms.iter().any(|arm| matches!(arm.pattern, Expression::Tuple(_))) {
+                    return self.generate_tuple_match(raw, arms);
                 }
 
                 // Evaluate scrutinee and extract tag as i64 for comparisons (enum/default path)
