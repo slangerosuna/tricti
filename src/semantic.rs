@@ -926,11 +926,10 @@ fn collect_definitions(
 
             // Scan methods: register mangled function signatures so later expression calls can resolve
             for m in methods {
-                if let Statement::ConstDecl {
-                    name: mname, value, ..
-                } = m
-                {
-                    match value {
+                match m {
+                    Statement::ConstDecl {
+                        name: mname, value, ..
+                    } => match value {
                         ConstValue::Expression(Expression::Function {
                             parameters,
                             return_type,
@@ -978,7 +977,33 @@ fn collect_definitions(
                         ConstValue::ComposeDef(_) | ConstValue::DatabaseDef(_) => {
                             // TODO: Add validation for compose and database definitions
                         }
+                    },
+                    Statement::ImplMethod {
+                        name: mname,
+                        parameters,
+                        return_type,
+                        ..
+                    } => {
+                        let sig = FunctionSignature {
+                            parameters: parameters
+                                .iter()
+                                .map(|p| {
+                                    p.param_type.clone().unwrap_or(Type::Identifier {
+                                        name: "i64".to_string(),
+                                        type_args: vec![],
+                                    })
+                                })
+                                .collect(),
+                            return_type: return_type.clone().unwrap_or(Type::Identifier {
+                                name: "i64".to_string(),
+                                type_args: vec![],
+                            }),
+                            is_async: false,
+                        };
+                        let mangled = mangle_method_name(trait_name.as_deref(), type_name, mname);
+                        context.define_function(mangled, sig);
                     }
+                    _ => {}
                 }
             }
         }
@@ -1270,8 +1295,8 @@ fn analyze_statement(
                 let mut provided_methods: HashMap<String, FunctionSignature> = HashMap::new();
                 let mut provided_assoc: HashMap<String, Type> = HashMap::new();
                 for item in methods {
-                    if let Statement::ConstDecl { name, value, .. } = item {
-                        match value {
+                    match item {
+                        Statement::ConstDecl { name, value, .. } => match value {
                             ConstValue::Type(ty) => {
                                 provided_assoc.insert(name.clone(), ty.clone());
                             }
@@ -1310,7 +1335,32 @@ fn analyze_statement(
                             ConstValue::ComposeDef(_) | ConstValue::DatabaseDef(_) => {
                                 // TODO: Add validation for compose and database definitions
                             }
+                        },
+                        Statement::ImplMethod {
+                            name,
+                            parameters,
+                            return_type,
+                            ..
+                        } => {
+                            let sig = FunctionSignature {
+                                parameters: parameters
+                                    .iter()
+                                    .map(|p| {
+                                        p.param_type.clone().unwrap_or(Type::Identifier {
+                                            name: "i64".to_string(),
+                                            type_args: vec![],
+                                        })
+                                    })
+                                    .collect(),
+                                return_type: return_type.clone().unwrap_or(Type::Identifier {
+                                    name: "i64".to_string(),
+                                    type_args: vec![],
+                                }),
+                                is_async: false,
+                            };
+                            provided_methods.insert(name.clone(), sig);
                         }
+                        _ => {}
                     }
                 }
 
@@ -1380,13 +1430,39 @@ fn analyze_statement(
                 // Inherent impl: accept all method function consts
                 let mut info = context.inherent_impls.remove(type_name).unwrap_or_default();
                 for item in methods {
-                    if let Statement::ConstDecl { name, value, .. } = item {
-                        if let ConstValue::Expression(Expression::Function {
+                    match item {
+                        Statement::ConstDecl { name, value, .. } => {
+                            if let ConstValue::Expression(Expression::Function {
+                                parameters,
+                                return_type,
+                                ..
+                            }) = value
+                            {
+                                let sig = FunctionSignature {
+                                    parameters: parameters
+                                        .iter()
+                                        .map(|p| {
+                                            p.param_type.clone().unwrap_or(Type::Identifier {
+                                                name: "i64".to_string(),
+                                                type_args: vec![],
+                                            })
+                                        })
+                                        .collect(),
+                                    return_type: return_type.clone().unwrap_or(Type::Identifier {
+                                        name: "i64".to_string(),
+                                        type_args: vec![],
+                                    }),
+                                    is_async: false,
+                                };
+                                info.methods.insert(name.clone(), sig);
+                            }
+                        }
+                        Statement::ImplMethod {
+                            name,
                             parameters,
                             return_type,
                             ..
-                        }) = value
-                        {
+                        } => {
                             let sig = FunctionSignature {
                                 parameters: parameters
                                     .iter()
@@ -1405,6 +1481,7 @@ fn analyze_statement(
                             };
                             info.methods.insert(name.clone(), sig);
                         }
+                        _ => {}
                     }
                 }
                 context.inherent_impls.insert(type_name.clone(), info);
@@ -1879,6 +1956,41 @@ fn infer_expression_type(
                                     // Constructors evaluate to enum struct
                                     return Ok(Type::Enum { variants, order });
                                 }
+                            }
+                        }
+                    }
+
+                    // Trait static dispatch: Trait::method(arg, ...)
+                    if segments.len() >= 2 && !arguments.is_empty() {
+                        let trait_name = &segments[0];
+                        let method_name = &segments[1];
+                        let self_arg_ty = infer_expression_type(&arguments[0].value, context)?;
+                        if let Some(base_type_name) = peel_to_identifier_name(&self_arg_ty) {
+                            let method_sig = context
+                                .trait_impls
+                                .get(trait_name)
+                                .and_then(|impls_for_trait| impls_for_trait.get(&base_type_name))
+                                .and_then(|impl_info| impl_info.methods.get(method_name))
+                                .cloned();
+                            if let Some(method_sig) = method_sig {
+                                if arguments.len() != method_sig.parameters.len() {
+                                    return Err(SemanticError::ArgumentCountMismatch {
+                                        expected: method_sig.parameters.len(),
+                                        found: arguments.len(),
+                                    });
+                                }
+                                for (arg, expected_type) in
+                                    arguments.iter().zip(&method_sig.parameters)
+                                {
+                                    let arg_ty = infer_expression_type(&arg.value, context)?;
+                                    if !types_compatible(expected_type, &arg_ty) {
+                                        return Err(SemanticError::TypeMismatch {
+                                            expected: expected_type.clone(),
+                                            found: arg_ty,
+                                        });
+                                    }
+                                }
+                                return Ok(method_sig.return_type.clone());
                             }
                         }
                     }
@@ -2639,6 +2751,25 @@ fn analyze_pattern(
             // Otherwise treat as variable binding
             context.define_variable(name.clone(), scrutinee_type.clone());
             Ok(())
+        }
+        Expression::Tuple(elements) => {
+            if let Type::Tuple(component_types) = &resolved_scrutinee {
+                if elements.len() != component_types.len() {
+                    return Err(SemanticError::ArgumentCountMismatch {
+                        expected: component_types.len(),
+                        found: elements.len(),
+                    });
+                }
+                for (elem_pattern, elem_type) in elements.iter().zip(component_types.iter()) {
+                    analyze_pattern(elem_pattern, context, elem_type)?;
+                }
+                Ok(())
+            } else {
+                Err(SemanticError::TypeMismatch {
+                    expected: Type::Tuple(Vec::new()),
+                    found: scrutinee_type.clone(),
+                })
+            }
         }
         Expression::Call {
             function,

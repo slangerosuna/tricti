@@ -1,6 +1,6 @@
 use crate::ast::{
     Argument, BinaryOperator, BindingPattern, ConstValue, Expression, FunctionBody, IntegerLiteral,
-    Literal, Program, ResourceAccess, Statement, SystemParameter, Type, UnaryOperator,
+    Literal, MatchArm, Program, ResourceAccess, Statement, SystemParameter, Type, UnaryOperator,
 };
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
@@ -3024,6 +3024,274 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
         Ok(())
+    }
+
+    fn generate_tuple_match(
+        &mut self,
+        scrutinee: BasicValueEnum<'ctx>,
+        arms: &[MatchArm],
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        if !scrutinee.is_struct_value() {
+            return Err(CodegenError::InvalidOperation(
+                "tuple match requires tuple value".to_string(),
+            ));
+        }
+
+        let tuple_val = scrutinee.into_struct_value();
+        let tuple_ty = tuple_val.get_type();
+        let tuple_alloca =
+            self.create_entry_block_alloca("match_tuple", tuple_ty.as_basic_type_enum())?;
+        self.builder
+            .build_store(tuple_alloca, tuple_val.as_basic_value_enum())
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        let current_fn = self.current_function.ok_or_else(|| {
+            CodegenError::CompilationError("No current function".to_string())
+        })?;
+
+        let mut arm_blocks: Vec<BasicBlock<'ctx>> = Vec::with_capacity(arms.len());
+        let mut binding_records: Vec<Vec<(String, Vec<u32>, BasicTypeEnum<'ctx>)>> =
+            vec![Vec::new(); arms.len()];
+        for i in 0..arms.len() {
+            let bb = self
+                .context
+                .append_basic_block(current_fn, &format!("match.arm{}", i));
+            arm_blocks.push(bb);
+        }
+        let default_bb = self.context.append_basic_block(current_fn, "match.default");
+        let cont_bb = self.context.append_basic_block(current_fn, "match.cont");
+
+        let mut next_cmp_block: Option<BasicBlock<'ctx>> = None;
+        for (i, arm) in arms.iter().enumerate() {
+            let cmp_block = match next_cmp_block {
+                Some(bb) => bb,
+                None => self
+                    .builder
+                    .get_insert_block()
+                    .ok_or_else(|| {
+                        CodegenError::CompilationError(
+                            "missing insertion block for tuple match".to_string(),
+                        )
+                    })?,
+            };
+            self.builder.position_at_end(cmp_block);
+
+            let next_cmp_bb = if i + 1 < arms.len() {
+                self.context
+                    .append_basic_block(current_fn, &format!("match.cmp{}", i + 1))
+            } else {
+                default_bb
+            };
+
+            let cond_value = match &arm.pattern {
+                Expression::Identifier(name) if name == "_" => {
+                    self.context.bool_type().const_int(1, false)
+                }
+                Expression::Identifier(name) => {
+                    binding_records[i].push((name.clone(), Vec::new(), tuple_ty.into()));
+                    self.context.bool_type().const_int(1, false)
+                }
+                Expression::Tuple(items) => {
+                    let loaded = self
+                        .builder
+                        .build_load(
+                            tuple_ty,
+                            tuple_alloca,
+                            &format!("match_tuple_cmp{}_load", i),
+                        )
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                        .into_struct_value();
+                    let mut conds: Vec<IntValue<'ctx>> = Vec::new();
+                    let mut bindings: Vec<(String, Vec<u32>, BasicTypeEnum<'ctx>)> = Vec::new();
+                    self.evaluate_tuple_pattern_inner(
+                        loaded,
+                        tuple_ty,
+                        items,
+                        &[],
+                        &mut conds,
+                        &mut bindings,
+                    )?;
+                    binding_records[i] = bindings;
+                    if conds.is_empty() {
+                        self.context.bool_type().const_int(1, false)
+                    } else {
+                        let mut iter = conds.into_iter();
+                        let mut current = iter.next().unwrap();
+                        for (and_idx, cond) in iter.enumerate() {
+                            current = self
+                                .builder
+                                .build_and(
+                                    current,
+                                    cond,
+                                    &format!("tuple_match_and{}_{}", i, and_idx),
+                                )
+                                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        }
+                        current
+                    }
+                }
+                _ => {
+                    return Err(CodegenError::InvalidOperation(
+                        "unsupported pattern in tuple match".to_string(),
+                    ));
+                }
+            };
+
+            self.builder
+                .build_conditional_branch(cond_value, arm_blocks[i], next_cmp_bb)
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+            next_cmp_block = Some(next_cmp_bb);
+        }
+
+        let mut incoming: Vec<(BasicValueEnum<'ctx>, BasicBlock<'ctx>)> = Vec::new();
+        for (i, arm) in arms.iter().enumerate() {
+            self.builder.position_at_end(arm_blocks[i]);
+            let mut saved_bindings: Vec<(
+                String,
+                Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
+            )> = Vec::new();
+
+            if !binding_records[i].is_empty() {
+                let loaded = self
+                    .builder
+                    .build_load(
+                        tuple_ty,
+                        tuple_alloca,
+                        &format!("match_tuple_arm{}_load", i),
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_struct_value();
+                for (binding_idx, (name, path, field_ty)) in binding_records[i]
+                    .iter()
+                    .enumerate()
+                {
+                    let value = self.extract_tuple_path_value(
+                        loaded,
+                        path,
+                        &format!("tuple_bind{}_{}", i, binding_idx),
+                    )?;
+                    let alloca = self.create_entry_block_alloca(name, *field_ty)?;
+                    self.builder
+                        .build_store(alloca, value)
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    let previous = self.variables.insert(name.clone(), (alloca, *field_ty));
+                    saved_bindings.push((name.clone(), previous));
+                }
+            }
+
+            let body_val_raw = self.generate_expression(&arm.body)?;
+            let body_val = if body_val_raw.is_int_value() {
+                let int_val = body_val_raw.into_int_value();
+                if int_val.get_type() == self.context.i64_type() {
+                    int_val.into()
+                } else {
+                    self.builder
+                        .build_int_cast(
+                            int_val,
+                            self.context.i64_type(),
+                            &format!("match_arm_cast{}", i),
+                        )
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                        .into()
+                }
+            } else {
+                self.cast_to_int(body_val_raw, self.context.i64_type())?.into()
+            };
+
+            let arm_block = self
+                .builder
+                .get_insert_block()
+                .ok_or_else(|| {
+                    CodegenError::CompilationError(
+                        "missing arm block after tuple match arm".to_string(),
+                    )
+                })?;
+            let mut flows_to_cont = false;
+            if arm_block.get_terminator().is_none() {
+                self.builder
+                    .build_unconditional_branch(cont_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                flows_to_cont = true;
+            }
+            if flows_to_cont {
+                incoming.push((body_val, arm_block));
+            }
+
+            for (name, previous) in saved_bindings.into_iter().rev() {
+                if let Some(binding) = previous {
+                    self.variables.insert(name, binding);
+                } else {
+                    self.variables.remove(&name);
+                }
+            }
+        }
+
+        self.builder.position_at_end(default_bb);
+        let default_val: BasicValueEnum<'ctx> = self.context.i64_type().const_zero().into();
+        let default_block = self.builder.get_insert_block().unwrap();
+        let mut default_flows = false;
+        if default_block.get_terminator().is_none() {
+            self.builder
+                .build_unconditional_branch(cont_bb)
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+            default_flows = true;
+        }
+        if default_flows {
+            incoming.push((default_val, default_block));
+        }
+
+        self.builder.position_at_end(cont_bb);
+        if incoming.is_empty() {
+            Ok(self.context.i64_type().const_zero().into())
+        } else {
+            let phi = self
+                .builder
+                .build_phi(self.context.i64_type(), "matchtmp")
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+            let incoming_dyn: Vec<(&dyn BasicValue<'ctx>, BasicBlock<'ctx>)> = incoming
+                .iter()
+                .map(|(v, bb)| (v as &dyn BasicValue<'ctx>, *bb))
+                .collect();
+            phi.add_incoming(&incoming_dyn);
+            Ok(phi.as_basic_value())
+        }
+    }
+
+    fn extract_tuple_path_value(
+        &mut self,
+        tuple_val: StructValue<'ctx>,
+        path: &[u32],
+        base_name: &str,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        if path.is_empty() {
+            return Ok(tuple_val.as_basic_value_enum());
+        }
+
+        let mut current = tuple_val;
+        for (depth, index) in path.iter().enumerate() {
+            let extracted = self
+                .builder
+                .build_extract_value(
+                    current,
+                    *index,
+                    &format!("{}_{}_{}", base_name, depth, index),
+                )
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+            if depth + 1 == path.len() {
+                return Ok(extracted);
+            }
+            if extracted.is_struct_value() {
+                current = extracted.into_struct_value();
+            } else {
+                return Err(CodegenError::InvalidOperation(
+                    "tuple binding path does not resolve to tuple".to_string(),
+                ));
+            }
+        }
+
+        Err(CodegenError::InvalidOperation(
+            "invalid tuple binding path".to_string(),
+        ))
     }
 
     fn generate_expression(

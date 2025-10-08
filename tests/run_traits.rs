@@ -145,6 +145,7 @@ fn trait_static_path_call_e2e() {
 fn ambiguous_trait_method_errors() {
     let src = r#"
         T :: struct
+            x: i64
         TA :: trait
             foo :: (&T) -> i64,
         TB :: trait
@@ -154,7 +155,7 @@ fn ambiguous_trait_method_errors() {
         impl TB for T:
             foo :: (self: &T) -> i64 => 2
         main :: () -> i64 =>
-            t: T := { }
+            t: T := { x: 5 }
             println(t.foo())
             0
     "#

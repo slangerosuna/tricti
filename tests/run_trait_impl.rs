@@ -18,19 +18,21 @@ fn trait_impl_static_dispatch_runs() {
             T :: i32,
             next :: (self: &mut my_struct) -> ?i32 => some 5
 
-        call_next :: () -> i64 => 5
         main :: () -> i64 =>
-            println(call_next())
+            my_var := my_struct { x: 10 }
+            println(my_var.next())
             ret 0
     "#
     .to_string();
 
     let program = parser::parse(src);
+    println!("AST: {:#?}", program);
     let sema = analyze_program(&program).expect("sema");
 
     let context = Context::create();
     let mut gen = CodeGenerator::new(&context, sema).expect("cg");
     gen.generate_program(&program).expect("gen");
+    gen.print_ir();
 
     // try object + clang + run
     let obj = "/tmp/bplang_traits_test.o";

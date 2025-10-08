@@ -44,18 +44,22 @@ fn tuple_literal_and_match_runs() {
     let src = r#"
         main :: () => do
             pair := (40, 2)
-            println(match pair:
-                (a, b) => a
-                _ => -1
-            )
-            println(match pair:
-                (a, b) => b
-                _ => -1
-            )
-            println(match pair:
-                (a, b) => a + b
-                _ => -1
-            )
+            match pair:
+                (a, b) => do
+                    println(a)
+                _ => do
+                    println(-1)
+            match pair:
+                (a, b) => do
+                    println(b)
+                _ => do
+                    println(-1)
+            match pair:
+                (a, b) => do
+                    println(a + b)
+                _ => do
+                    println(-1)
+            ret 0
     "#;
     let stdout = compile_and_run(src, "tests/tmp_tuple_basic.o", "tests/tmp_tuple_basic.out");
     assert_eq!(stdout, "40\n2\n42\n");
