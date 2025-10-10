@@ -129,21 +129,18 @@ impl<T> Signal<T>:
     new :: (name: String, topology: SignalTopology, 
             buffering: BufferingStrategy) -> Signal<T> => do
         buffer := match buffering:
-            BufferingStrategy::FIFO { capacity } =>
-                SignalBuffer::FIFO {
-                    queue: RingBuffer::new(capacity),
-                    capacity: capacity,
-                },
-            BufferingStrategy::Overwrite { capacity } =>
-                SignalBuffer::Overwrite {
-                    queue: RingBuffer::new(capacity),
-                    capacity: capacity,
-                },
-            BufferingStrategy::Unbounded =>
-                SignalBuffer::Unbounded { queue: [] },
+            BufferingStrategy::FIFO { capacity } => SignalBuffer::FIFO {
+                queue: RingBuffer::new(capacity),
+                capacity: capacity,
+            },
+            BufferingStrategy::Overwrite { capacity } => SignalBuffer::Overwrite {
+                queue: RingBuffer::new(capacity),
+                capacity: capacity,
+            },
+            BufferingStrategy::Unbounded => SignalBuffer::Unbounded { queue: [] },
             _ => SignalBuffer::Unbounded { queue: [] },
-        
-        ret Signal<T> {
+
+        ret Signal<T>:
             name: name,
             topology: topology,
             buffering: buffering,
@@ -153,7 +150,6 @@ impl<T> Signal<T>:
             messages_sent: 0,
             messages_received: 0,
             messages_dropped: 0,
-        }
 
     # Register a sender
     register_sender :: (&mut self) -> !SenderId => do
@@ -164,7 +160,7 @@ impl<T> Signal<T>:
                     ret err StdError::InvalidArgument {
                         parameter: "sender",
                         message: "Signal topology allows only one sender",
-                    },
+                    }
             _ => {},
         
         sender_id := self.senders.len()
@@ -181,7 +177,7 @@ impl<T> Signal<T>:
                     ret err StdError::InvalidArgument {
                         parameter: "receiver",
                         message: "Signal topology allows only one receiver",
-                    },
+                    }
             _ => {},
         
         receiver_id := self.receivers.len()
@@ -214,11 +210,11 @@ impl<T> Signal<T>:
                 queue.push(message)
                 ok none
             _ => ok none,
-        match sucess
+        match sucess:
             ok => do
                 self.messages_sent += 1
                 ret ok value
-            err err_ => ret err err_,
+            err err_ => ret err err_
 
     # Receive a message (blocking)
     receive :: (&mut self, receiver_id: ReceiverId) -> !T => do
@@ -236,13 +232,13 @@ impl<T> Signal<T>:
             SignalBuffer::Unbounded { queue } =>
                 if queue.is_empty():
                     err StdError::Message { message: "No messages available" }
-                else: ok queue.remove(0)?,
+                else: ok queue.remove(0)?
             _ => err StdError::Message { message: "Receive not supported" },
         match sucess:
             ok value => do
                 self.messages_received += 1
                 ret ok value
-            err error => ret err error,
+            err error => ret err error
 
     # Try receive (non-blocking)
     try_receive :: (&mut self, receiver_id: ReceiverId) -> ?T =>
@@ -262,7 +258,7 @@ impl<T> Signal<T>:
         }
 
     buffer_size :: (&self) -> u64 =>
-        match &self.buffer
+        match &self.buffer:
             SignalBuffer::FIFO { queue, .. } => queue.len(),
             SignalBuffer::Overwrite { queue, .. } => queue.len(),
             SignalBuffer::Unbounded { queue } => queue.len(),

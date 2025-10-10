@@ -90,7 +90,6 @@ fn trait_static_dispatch_e2e() {
         .expect("clang link");
     assert!(output.status.success(), "clang failed: {:?}", output);
 
-
     let run = Command::new(bin).output().expect("run");
     assert!(run.status.success());
     let stdout = String::from_utf8(run.stdout).unwrap();

@@ -275,7 +275,7 @@ mod tests {
             stdlib_path: &stdlib_path,
             base_dir: &current_dir,
         };
-        let loaded = parse_source_with_std("main :: () => {}".to_string(), None, options);
+        let loaded = parse_source_with_std("main :: () => do {}".to_string(), None, options);
         assert_eq!(loaded.stdlib_status, StdlibStatus::Included);
         assert!(loaded.program.statements.len() > 1);
     }

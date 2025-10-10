@@ -129,15 +129,29 @@ fn looks_like_struct_literal_head(head: &str) -> bool {
         return false;
     }
 
-    if !trimmed.ends_with(':') {
+    if trimmed.contains("=>") {
         return false;
     }
 
-    if !trimmed.contains(':') {
+    let (has_assign, after_assign) = if let Some((_, rhs)) = trimmed.split_once(":=") {
+        (true, rhs.trim_start())
+    } else if let Some((_, rhs)) = trimmed.split_once('=') {
+        (true, rhs.trim_start())
+    } else {
+        (false, "")
+    };
+
+    if !has_assign {
         return false;
     }
-    if trimmed.contains("=>") {
-        return false;
+
+    if let Some(keyword) = after_assign.split_whitespace().next() {
+        if matches!(
+            keyword,
+            "match" | "if" | "for" | "while" | "loop" | "unsafe" | "do"
+        ) {
+            return false;
+        }
     }
 
     let mut chars = trimmed.chars();
@@ -155,7 +169,20 @@ fn looks_like_struct_literal_head(head: &str) -> bool {
         }
         if matches!(
             ch,
-            '_' | ':' | '<' | '>' | ',' | ' ' | '[' | ']' | '.' | ';' | '\'' | '&' | '*' | '?' | '='
+            '_' | ':'
+                | '<'
+                | '>'
+                | ','
+                | ' '
+                | '['
+                | ']'
+                | '.'
+                | ';'
+                | '\''
+                | '&'
+                | '*'
+                | '?'
+                | '='
         ) {
             continue;
         }
@@ -375,6 +402,10 @@ fn convert_inline_segment(segment: &str) -> String {
 }
 
 fn convert_block_leader(segment: &str) -> (String, bool) {
+    let trace_question_else = std::env::var("TRACE_QUESTION_ELSE").is_ok();
+    if trace_question_else && segment.contains("? else") {
+        eprintln!("TRACE segment: {:?}", segment);
+    }
     if let Some(converted) = convert_do_segment(segment) {
         let opens_block =
             converted.trim_end().ends_with("{") && segment.trim_end().ends_with("=> do");
@@ -441,6 +472,44 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
             base.push_str(" }");
             base.push_str(trailing_ws);
             return ensure_arrow_block(base, false);
+        } else if trimmed_head.ends_with("? else") {
+            if trace_question_else {
+                eprintln!("TRACE matched question_else: head={:?} tail={:?}", trimmed_head, tail);
+            }
+            let inline_body = tail.trim_start();
+            if inline_body.is_empty() {
+                let mut base = trimmed_head.to_string();
+                base.push_str(" {");
+                base.push_str(trailing_ws);
+                if trace_question_else {
+                    eprintln!("TRACE returns block opener: {:?}", base);
+                }
+                return (base, true);
+            }
+            if inline_body.starts_with('{') {
+                let mut base = trimmed_head.to_string();
+                base.push(' ');
+                base.push_str(inline_body);
+                base.push_str(trailing_ws);
+                if trace_question_else {
+                    eprintln!("TRACE returns inline brace body: {:?}", base);
+                }
+                return (base, false);
+            }
+            let converted_inline = convert_inline_segment(inline_body);
+            let mut base = trimmed_head.to_string();
+            base.push_str(" {");
+            if !converted_inline.is_empty() {
+                base.push(' ');
+                base.push_str(&converted_inline);
+                base.push(' ');
+            }
+            base.push('}');
+            base.push_str(trailing_ws);
+            if trace_question_else {
+                eprintln!("TRACE returns inline converted: {:?}", base);
+            }
+            return (base, false);
         } else if tail.trim().is_empty() && looks_like_struct_literal_head(trimmed_head) {
             let mut base = trimmed_head.to_string();
             base.push_str(" {");
@@ -791,6 +860,15 @@ mod tests {
         assert!(output.contains("entry := Wrapper<TripmBus> {"));
         assert!(output.contains("inner: TripmBus::new(),"));
         assert!(output.contains("}"));
+    }
+
+    #[test]
+    fn converts_question_else_block() {
+        let input = "    file := File::open(path)? else:\n        ret none\n";
+        let output = desugar_indentation(&input);
+        assert!(output.contains("file := File::open(path)? else {"));
+        assert!(output.contains("        ret none"));
+        assert!(output.contains("    }"));
     }
 
     #[test]

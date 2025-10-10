@@ -99,6 +99,10 @@ fn parse_attributes(pair: pest::iterators::Pair<Rule>) -> Vec<Attribute> {
 pub fn parse(file: String) -> Program {
     let desugared = indentation::desugar_indentation(&file);
 
+    if std::env::var("TRACE_QUESTION_ELSE").is_ok() {
+        eprintln!("DESUGARED SNIPPET:\n{}", desugared);
+    }
+
     if let Ok(path) = std::env::var("TRICTI_DUMP_DESUGARED") {
         let target = if path.is_empty() {
             "tmp/desugared_dump.tri".to_string()
@@ -300,6 +304,71 @@ mod tests {
         let desugared = indentation::desugar_indentation(src);
         PnParser::parse(Rule::program, &desugared)
             .expect("failed to parse inline if with single statement");
+    }
+
+    #[test]
+    fn parses_postfix_question_expression() {
+        let mut pairs =
+            PnParser::parse(Rule::expression, "value?").expect("failed to parse postfix question");
+        let expr_pair = pairs.next().expect("expected expression pair");
+        let expr = parse_expression(expr_pair);
+        match expr {
+            Expression::Question(inner) => match *inner {
+                Expression::Identifier(name) => assert_eq!(name, "value"),
+                other => panic!("expected identifier, got {:?}", other),
+            },
+            other => panic!("expected question expression, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parses_question_else_expression() {
+        let src = "value? else: ret none\n";
+        let desugared = indentation::desugar_indentation(src);
+        let mut pairs =
+            PnParser::parse(Rule::expression, &desugared).expect("failed to parse question else");
+        let expr_pair = pairs.next().expect("expected expression pair");
+        let expr = parse_expression(expr_pair);
+        match expr {
+            Expression::Match { value, arms } => {
+                assert_eq!(arms.len(), 2, "expected some/none arms");
+
+                match *value {
+                    Expression::Identifier(name) => assert_eq!(name, "value"),
+                    other => panic!("expected identifier scrutinee, got {:?}", other),
+                }
+
+                let some_arm = &arms[0];
+                match &some_arm.pattern {
+                    Expression::Call { function, arguments, .. } => {
+                        match function.as_ref() {
+                            Expression::Identifier(name) => assert_eq!(name, "some"),
+                            other => panic!("expected some identifier, got {:?}", other),
+                        }
+                        assert_eq!(arguments.len(), 1);
+                        match &arguments[0].value {
+                            Expression::Identifier(name) => {
+                                assert_eq!(name, "__tri_question_value")
+                            }
+                            other => panic!("expected capture identifier, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected call pattern, got {:?}", other),
+                }
+
+                let none_arm = &arms[1];
+                match &none_arm.pattern {
+                    Expression::Identifier(name) => assert_eq!(name, "none"),
+                    other => panic!("expected none identifier, got {:?}", other),
+                }
+
+                match &none_arm.body {
+                    Expression::Block { .. } => {}
+                    other => panic!("expected block body, got {:?}", other),
+                }
+            }
+            other => panic!("expected match expression from question else, got {:?}", other),
+        }
     }
 
     #[test]
@@ -970,6 +1039,13 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
                     indices,
                 };
             }
+            Rule::question_else_suffix => {
+                let mut it2 = suffix_pair.into_inner();
+                let block_pair = it2.next().expect("question-else suffix missing block");
+                let else_statements = parse_block(block_pair);
+                let base_expr = expr;
+                expr = desugar_question_else(base_expr, else_statements);
+            }
             Rule::postfix_question => {
                 expr = Expression::Question(Box::new(expr));
             }
@@ -981,6 +1057,36 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     }
 
     expr
+}
+
+fn desugar_question_else(base_expr: Expression, else_statements: Vec<Statement>) -> Expression {
+    let capture_name = "__tri_question_value".to_string();
+
+    let some_pattern = Expression::Call {
+        function: Box::new(Expression::Identifier("some".to_string())),
+        type_args: vec![],
+        arguments: vec![Argument {
+            name: None,
+            value: Expression::Identifier(capture_name.clone()),
+        }],
+    };
+
+    let some_arm = MatchArm {
+        pattern: some_pattern,
+        body: Expression::Identifier(capture_name.clone()),
+    };
+
+    let none_arm = MatchArm {
+        pattern: Expression::Identifier("none".to_string()),
+        body: Expression::Block {
+            statements: else_statements,
+        },
+    };
+
+    Expression::Match {
+        value: Box::new(base_expr),
+        arms: vec![some_arm, none_arm],
+    }
 }
 
 fn parse_cast_expression(pair: pest::iterators::Pair<Rule>) -> Expression {

@@ -18,7 +18,7 @@ DirEntry :: struct
     is_dir: bool,
     is_file: bool,
 
-impl DirEntry {
+impl DirEntry:
     # Get entry name (file or directory name)
     name :: (entry: &DirEntry) -> String => String::clone(&entry.name)
 
@@ -33,13 +33,12 @@ impl DirEntry {
 
 # Trait implementations for DirEntry
 impl Clone for DirEntry:
-    clone :: (&self) -> DirEntry =>
-        DirEntry {
+    clone :: (&self) -> DirEntry => do
+        DirEntry:
             name: String::clone(&self.name),
             path: String::clone(&self.path),
             is_dir: self.is_dir,
             is_file: self.is_file,
-        }
 
 impl Display for DirEntry:
     to_string :: (&self) -> String =>
@@ -47,12 +46,16 @@ impl Display for DirEntry:
 
 impl Debug for DirEntry:
     debug_string :: (&self) -> String => do
-        result := String::from_cstr("DirEntry { name: \"" as *u8)
+        result := String::from("DirEntry { name: ")
 
+        String::push_char(&result, 34)
         String::push_str(&result, &self.name)
-        String::push_str(&result, &String::from_cstr("\", path: \"" as *u8))
+        String::push_char(&result, 34)
+        String::push_str(&result, &String::from(", path: "))
+        String::push_char(&result, 34)
         String::push_str(&result, &self.path)
-        String::push_str(&result, &String::from_cstr("\" }" as *u8))
+        String::push_char(&result, 34)
+        String::push_str(&result, &String::from(" }"))
 
         ret result
 
@@ -130,17 +133,16 @@ is_dir :: (path: String) -> bool => do
 #   char d_name[256]
 read_dirent_name :: (dirent_ptr: *u8) -> String => do
     name_ptr := dirent_ptr + 19
-    
     result := String::new()
     i := 0u64
-    loop:
-        if i >= 256: break
-        
+
+    while i < 256:
         ch := *(name_ptr + i)
         if ch == 0: break
 
         String::push_char(&result, ch)
         i += 1
+
     ret result
 
 # Helper: Get directory entry type from dirent structure

@@ -81,6 +81,7 @@ pub struct CodeGenerator<'ctx> {
     variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
     functions: HashMap<String, FunctionValue<'ctx>>,
     current_function: Option<FunctionValue<'ctx>>,
+    current_function_return_ast: Option<crate::ast::Type>,
     semantic: crate::semantic::SemanticContext,
     struct_types: HashMap<String, (StructType<'ctx>, Vec<String>)>, // name -> (llvm struct, field order)
     current_impl_struct: Option<String>,
@@ -115,6 +116,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             variables: HashMap::new(),
             functions: HashMap::new(),
             current_function: None,
+            current_function_return_ast: None,
             semantic: semantic_context,
             struct_types: HashMap::new(),
             current_impl_struct: None,
@@ -444,24 +446,15 @@ impl<'ctx> CodeGenerator<'ctx> {
             .ok_or_else(|| {
                 CodegenError::InvalidOperation("Vec struct type not registered".to_string())
             })?;
-        let data_idx = order
-            .iter()
-            .position(|n| n == "data")
-            .ok_or_else(|| {
-                CodegenError::InvalidOperation("Vec struct missing data field".to_string())
-            })? as u32;
-        let len_idx = order
-            .iter()
-            .position(|n| n == "len")
-            .ok_or_else(|| {
-                CodegenError::InvalidOperation("Vec struct missing len field".to_string())
-            })? as u32;
-        let cap_idx = order
-            .iter()
-            .position(|n| n == "capacity")
-            .ok_or_else(|| {
-                CodegenError::InvalidOperation("Vec struct missing capacity field".to_string())
-            })? as u32;
+        let data_idx = order.iter().position(|n| n == "data").ok_or_else(|| {
+            CodegenError::InvalidOperation("Vec struct missing data field".to_string())
+        })? as u32;
+        let len_idx = order.iter().position(|n| n == "len").ok_or_else(|| {
+            CodegenError::InvalidOperation("Vec struct missing len field".to_string())
+        })? as u32;
+        let cap_idx = order.iter().position(|n| n == "capacity").ok_or_else(|| {
+            CodegenError::InvalidOperation("Vec struct missing capacity field".to_string())
+        })? as u32;
         Ok((st, data_idx, len_idx, cap_idx))
     }
 
@@ -502,10 +495,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .build_struct_gep(vec_struct, alloca, cap_idx, "vec_cap_ptr")
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
-        let elem_ptr_ty = self
-            .context
-            .i64_type()
-            .ptr_type(AddressSpace::default());
+        let elem_ptr_ty = self.context.i64_type().ptr_type(AddressSpace::default());
         let data_ptr = self
             .builder
             .build_load(elem_ptr_ty, data_field_ptr, "vec_data_load")
@@ -562,9 +552,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     )
                 })?;
                 let grow_bb = self.context.append_basic_block(current_fn, "vec.push.grow");
-                let push_cont_bb = self
-                    .context
-                    .append_basic_block(current_fn, "vec.push.cont");
+                let push_cont_bb = self.context.append_basic_block(current_fn, "vec.push.cont");
 
                 self.builder
                     .build_conditional_branch(needs_grow, grow_bb, push_cont_bb)
@@ -664,14 +652,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .build_store(copy_idx_alloca, zero_i64)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
-                let copy_cond_bb =
-                    self.context.append_basic_block(current_fn, "vec.push.copy.cond");
-                let copy_body_bb =
-                    self.context.append_basic_block(current_fn, "vec.push.copy.body");
-                let copy_inc_bb =
-                    self.context.append_basic_block(current_fn, "vec.push.copy.inc");
-                let copy_end_bb =
-                    self.context.append_basic_block(current_fn, "vec.push.copy.end");
+                let copy_cond_bb = self
+                    .context
+                    .append_basic_block(current_fn, "vec.push.copy.cond");
+                let copy_body_bb = self
+                    .context
+                    .append_basic_block(current_fn, "vec.push.copy.body");
+                let copy_inc_bb = self
+                    .context
+                    .append_basic_block(current_fn, "vec.push.copy.inc");
+                let copy_end_bb = self
+                    .context
+                    .append_basic_block(current_fn, "vec.push.copy.end");
 
                 self.builder
                     .build_unconditional_branch(copy_cond_bb)
@@ -685,26 +677,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .into_int_value();
                 let copy_cmp = self
                     .builder
-                    .build_int_compare(
-                        IntPredicate::ULT,
-                        copy_idx,
-                        len_val_initial,
-                        "vec_copy_cmp",
-                    )
+                    .build_int_compare(IntPredicate::ULT, copy_idx, len_val_initial, "vec_copy_cmp")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 self.builder
                     .build_conditional_branch(copy_cmp, copy_body_bb, copy_end_bb)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
                 self.builder.position_at_end(copy_body_bb);
-                    let src_ptr = unsafe {
-                        self.builder.build_in_bounds_gep(
-                            i64_ty,
-                            data_ptr,
-                            &[copy_idx],
-                            "vec_copy_src",
-                        )
-                    }
+                let src_ptr = unsafe {
+                    self.builder
+                        .build_in_bounds_gep(i64_ty, data_ptr, &[copy_idx], "vec_copy_src")
+                }
                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 let src_val = self
                     .builder
@@ -729,11 +712,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.builder.position_at_end(copy_inc_bb);
                 let next_idx = self
                     .builder
-                    .build_int_add(
-                        copy_idx,
-                        i64_ty.const_int(1, false),
-                        "vec_copy_next",
-                    )
+                    .build_int_add(copy_idx, i64_ty.const_int(1, false), "vec_copy_next")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 self.builder
                     .build_store(copy_idx_alloca, next_idx)
@@ -780,11 +759,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 let len_next = self
                     .builder
-                    .build_int_add(
-                        len_val,
-                        i64_ty.const_int(1, false),
-                        "vec_len_next",
-                    )
+                    .build_int_add(len_val, i64_ty.const_int(1, false), "vec_len_next")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 self.builder
                     .build_store(len_ptr, len_next)
@@ -813,12 +788,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                 let idx_ge_len = self
                     .builder
-                    .build_int_compare(
-                        IntPredicate::UGE,
-                        idx_i64,
-                        len_val,
-                        "vec_get_oob",
-                    )
+                    .build_int_compare(IntPredicate::UGE, idx_i64, len_val, "vec_get_oob")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
                 let current_fn = self.current_function.ok_or_else(|| {
@@ -835,10 +805,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
                 self.builder.position_at_end(none_bb);
-                let none_struct = enum_ty.const_named_struct(&[
-                    zero_i64.into(),
-                    zero_i64.into(),
-                ]);
+                let none_struct = enum_ty.const_named_struct(&[zero_i64.into(), zero_i64.into()]);
                 self.builder
                     .build_store(result_alloca, none_struct)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -849,12 +816,8 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                 self.builder.position_at_end(some_bb);
                 let elem_ptr = unsafe {
-                    self.builder.build_in_bounds_gep(
-                        i64_ty,
-                        data_ptr,
-                        &[idx_i64],
-                        "vec_get_ptr",
-                    )
+                    self.builder
+                        .build_in_bounds_gep(i64_ty, data_ptr, &[idx_i64], "vec_get_ptr")
                 }
                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 let elem_val = self
@@ -3045,9 +3008,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             .build_store(tuple_alloca, tuple_val.as_basic_value_enum())
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
-        let current_fn = self.current_function.ok_or_else(|| {
-            CodegenError::CompilationError("No current function".to_string())
-        })?;
+        let current_fn = self
+            .current_function
+            .ok_or_else(|| CodegenError::CompilationError("No current function".to_string()))?;
 
         let mut arm_blocks: Vec<BasicBlock<'ctx>> = Vec::with_capacity(arms.len());
         let mut binding_records: Vec<Vec<(String, Vec<u32>, BasicTypeEnum<'ctx>)>> =
@@ -3065,14 +3028,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         for (i, arm) in arms.iter().enumerate() {
             let cmp_block = match next_cmp_block {
                 Some(bb) => bb,
-                None => self
-                    .builder
-                    .get_insert_block()
-                    .ok_or_else(|| {
-                        CodegenError::CompilationError(
-                            "missing insertion block for tuple match".to_string(),
-                        )
-                    })?,
+                None => self.builder.get_insert_block().ok_or_else(|| {
+                    CodegenError::CompilationError(
+                        "missing insertion block for tuple match".to_string(),
+                    )
+                })?,
             };
             self.builder.position_at_end(cmp_block);
 
@@ -3161,10 +3121,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     )
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                     .into_struct_value();
-                for (binding_idx, (name, path, field_ty)) in binding_records[i]
-                    .iter()
-                    .enumerate()
-                {
+                for (binding_idx, (name, path, field_ty)) in binding_records[i].iter().enumerate() {
                     let value = self.extract_tuple_path_value(
                         loaded,
                         path,
@@ -3195,17 +3152,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .into()
                 }
             } else {
-                self.cast_to_int(body_val_raw, self.context.i64_type())?.into()
+                self.cast_to_int(body_val_raw, self.context.i64_type())?
+                    .into()
             };
 
-            let arm_block = self
-                .builder
-                .get_insert_block()
-                .ok_or_else(|| {
-                    CodegenError::CompilationError(
-                        "missing arm block after tuple match arm".to_string(),
-                    )
-                })?;
+            let arm_block = self.builder.get_insert_block().ok_or_else(|| {
+                CodegenError::CompilationError(
+                    "missing arm block after tuple match arm".to_string(),
+                )
+            })?;
             let mut flows_to_cont = false;
             if arm_block.get_terminator().is_none() {
                 self.builder
@@ -3358,13 +3313,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                     let mut ambiguous = false;
                     for (struct_name, (struct_ty, order)) in &self.struct_types {
                         if order.len() == fields.len()
-                            && order.iter().all(|field_name| fields.contains_key(field_name))
+                            && order
+                                .iter()
+                                .all(|field_name| fields.contains_key(field_name))
                         {
-                            let entry = (
-                                struct_name.clone(),
-                                *struct_ty,
-                                order.clone(),
-                            );
+                            let entry = (struct_name.clone(), *struct_ty, order.clone());
                             if candidate.is_some() {
                                 ambiguous = true;
                                 break;
@@ -3482,10 +3435,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .build_store(idx_alloca, i64_ty.const_zero())
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
-                    let cond_bb =
-                        self.context.append_basic_block(current_fn, "vec_fill.cond");
-                    let body_bb =
-                        self.context.append_basic_block(current_fn, "vec_fill.body");
+                    let cond_bb = self.context.append_basic_block(current_fn, "vec_fill.cond");
+                    let body_bb = self.context.append_basic_block(current_fn, "vec_fill.body");
                     let inc_bb = self.context.append_basic_block(current_fn, "vec_fill.inc");
                     let end_bb = self.context.append_basic_block(current_fn, "vec_fill.end");
 
@@ -3527,11 +3478,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.builder.position_at_end(inc_bb);
                     let next = self
                         .builder
-                        .build_int_add(
-                            idx_cur,
-                            i64_ty.const_int(1, false),
-                            "vec_fill_inc",
-                        )
+                        .build_int_add(idx_cur, i64_ty.const_int(1, false), "vec_fill_inc")
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                     self.builder
                         .build_store(idx_alloca, next)
@@ -3641,8 +3588,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             .build_insert_value(vec_value, zero, len_idx, "mat_null_len")
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                             .into_struct_value();
-                        self
-                            .builder
+                        self.builder
                             .build_insert_value(vec_value, zero, cap_idx, "mat_null_cap")
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                             .into_struct_value()
@@ -3805,12 +3751,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 if name == "none" {
-                    if let Some(_enum_ty) = self.enum_struct {
+                    if let Some(enum_ty) = self.enum_struct {
                         let tag = self.context.i64_type().const_zero();
                         let payload = self.context.i64_type().const_zero();
-                        let struct_val = self
-                            .context
-                            .const_struct(&[tag.into(), payload.into()], false);
+                        let struct_val = enum_ty.const_named_struct(&[tag.into(), payload.into()]);
                         return Ok(struct_val.into());
                     } else {
                         return Ok(self.context.i64_type().const_zero().into());
@@ -4178,7 +4122,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Evaluate scrutinee once
                 let raw = self.generate_expression(value)?;
 
-                if arms.iter().any(|arm| matches!(arm.pattern, Expression::Tuple(_))) {
+                if arms
+                    .iter()
+                    .any(|arm| matches!(arm.pattern, Expression::Tuple(_)))
+                {
                     return self.generate_tuple_match(raw, arms);
                 }
 
@@ -4512,6 +4459,142 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.cast_value(val, to_type)
             }
 
+            Expression::Question(inner) => {
+                let optional_val = self.generate_expression(inner)?;
+                let enum_ty = self
+                    .enum_struct
+                    .ok_or_else(|| {
+                        CodegenError::CompilationError(
+                            "optional enum type not available for question operator".to_string(),
+                        )
+                    })?;
+                let current_fn = self.current_function.ok_or_else(|| {
+                    CodegenError::CompilationError(
+                        "question operator used outside of a function".to_string(),
+                    )
+                })?;
+                let optional_struct = if optional_val.is_struct_value() {
+                    let sv = optional_val.into_struct_value();
+                    if sv.get_type() == enum_ty {
+                        sv
+                    } else {
+                        return Err(CodegenError::InvalidOperation(
+                            "question operator requires optional value".to_string(),
+                        ));
+                    }
+                } else if optional_val.is_pointer_value() {
+                    let loaded = self
+                        .builder
+                        .build_load(enum_ty, optional_val.into_pointer_value(), "question_load")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    loaded.into_struct_value()
+                } else {
+                    return Err(CodegenError::InvalidOperation(
+                        "question operator requires optional value".to_string(),
+                    ));
+                };
+
+                let temp_alloca = self
+                    .create_entry_block_alloca("question_tmp", enum_ty.into())?;
+                self.builder
+                    .build_store(temp_alloca, optional_struct)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let tag_ptr = self
+                    .builder
+                    .build_struct_gep(enum_ty, temp_alloca, 0, "question_tag_ptr")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let tag_val = self
+                    .builder
+                    .build_load(self.context.i64_type(), tag_ptr, "question_tag")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                    .into_int_value();
+                let is_some = self
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        tag_val,
+                        self.context.i64_type().const_zero(),
+                        "question_is_some",
+                    )
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let some_bb = self.context.append_basic_block(current_fn, "question.some");
+                let none_bb = self.context.append_basic_block(current_fn, "question.none");
+                let cont_bb = self.context.append_basic_block(current_fn, "question.cont");
+
+                self.builder
+                    .build_conditional_branch(is_some, some_bb, none_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+                let ret_ast = self
+                    .current_function_return_ast
+                    .clone()
+                    .ok_or_else(|| {
+                        CodegenError::CompilationError(
+                            "question operator requires function return type".to_string(),
+                        )
+                    })?;
+                let payload_target_ast = match &ret_ast {
+                    Type::Optional { inner } => inner.as_ref().clone(),
+                    _ => {
+                        return Err(CodegenError::InvalidOperation(
+                            "question operator requires optional return type".to_string(),
+                        ))
+                    }
+                };
+                let ret_llvm_ty = self.map_ast_type(&ret_ast).ok_or_else(|| {
+                    CodegenError::CompilationError(
+                        "unable to determine LLVM type for function return".to_string(),
+                    )
+                })?;
+                let payload_target_ty = self.map_ast_type(&payload_target_ast);
+
+                // some branch: extract payload and continue
+                self.builder.position_at_end(some_bb);
+                let payload_ptr = self
+                    .builder
+                    .build_struct_gep(enum_ty, temp_alloca, 1, "question_payload_ptr")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let payload_raw = self
+                    .builder
+                    .build_load(self.context.i64_type(), payload_ptr, "question_payload_raw")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let payload_casted = if let Some(target_ty) = payload_target_ty {
+                    self.cast_basic_to_type(payload_raw, target_ty)?
+                } else {
+                    payload_raw
+                };
+                self.builder
+                    .build_unconditional_branch(cont_bb)
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                let some_end = self.builder.get_insert_block().unwrap();
+
+                // none branch: return early with none value matching function return type
+                self.builder.position_at_end(none_bb);
+                if let BasicTypeEnum::StructType(optional_struct_ty) = ret_llvm_ty {
+                    let none_struct = optional_struct_ty.const_named_struct(&[
+                        self.context.i64_type().const_zero().into(),
+                        self.context.i64_type().const_zero().into(),
+                    ]);
+                    let none_value: BasicValueEnum<'ctx> = none_struct.into();
+                    self.try_build_return(Some(&none_value))?;
+                } else {
+                    return Err(CodegenError::InvalidOperation(
+                        "question operator requires optional return type".to_string(),
+                    ));
+                }
+
+                // continue execution with payload from some branch
+                self.builder.position_at_end(cont_bb);
+                let result_phi = self
+                    .builder
+                    .build_phi(payload_casted.get_type(), "question_result")
+                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                result_phi.add_incoming(&[(&payload_casted, some_end)]);
+                Ok(result_phi.as_basic_value())
+            }
+
             Expression::Call {
                 function,
                 type_args,
@@ -4653,15 +4736,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                                             .iter()
                                             .find(|(_, (llvm_st, _))| *llvm_st == *st)
                                         {
-                                            let mangled_trait =
-                                                format!("{}_{}_{}", trait_name, struct_name, method_name);
+                                            let mangled_trait = format!(
+                                                "{}_{}_{}",
+                                                trait_name, struct_name, method_name
+                                            );
                                             if let Some(function_val) =
                                                 self.functions.get(&mangled_trait).cloned()
                                             {
                                                 let param_metas =
                                                     function_val.get_type().get_param_types();
-                                                let mut arg_values: Vec<BasicMetadataValueEnum<'ctx>> =
-                                                    Vec::new();
+                                                let mut arg_values: Vec<
+                                                    BasicMetadataValueEnum<'ctx>,
+                                                > = Vec::new();
 
                                                 if let Some(first_meta) = param_metas.get(0) {
                                                     let recv_meta: BasicMetadataValueEnum<'ctx> =
@@ -4734,11 +4820,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                                                     arg_values.push(recv_meta);
                                                 }
 
-                                                for (arg_index, arg) in arguments.iter().enumerate().skip(1) {
-                                                    let value = self.generate_expression(&arg.value)?;
+                                                for (arg_index, arg) in
+                                                    arguments.iter().enumerate().skip(1)
+                                                {
+                                                    let value =
+                                                        self.generate_expression(&arg.value)?;
                                                     let param_meta_index = arg_index;
                                                     let casted_meta: BasicMetadataValueEnum<'ctx> =
-                                                        if let Some(meta_ty) = param_metas.get(param_meta_index) {
+                                                        if let Some(meta_ty) =
+                                                            param_metas.get(param_meta_index)
+                                                        {
                                                             match meta_ty {
                                                                 inkwell::types::BasicMetadataTypeEnum::IntType(it) => {
                                                                     self.cast_to_int(value, *it)?.into()
@@ -4784,12 +4875,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                                                                     .into(),
                                                             }
                                                         } else {
-                                                            self.cast_to_int(value, self.context.i64_type())?.into()
+                                                            self.cast_to_int(
+                                                                value,
+                                                                self.context.i64_type(),
+                                                            )?
+                                                            .into()
                                                         };
                                                     arg_values.push(casted_meta);
                                                 }
 
-                                                for pad_index in arguments.len()..param_metas.len() {
+                                                for pad_index in arguments.len()..param_metas.len()
+                                                {
                                                     let pad: BasicMetadataValueEnum<'ctx> = match param_metas[pad_index] {
                                                         inkwell::types::BasicMetadataTypeEnum::IntType(it) => it.const_zero().into(),
                                                         inkwell::types::BasicMetadataTypeEnum::FloatType(ft) => ft.const_zero().into(),
@@ -4801,9 +4897,15 @@ impl<'ctx> CodeGenerator<'ctx> {
 
                                                 let result = self
                                                     .builder
-                                                    .build_call(function_val, &arg_values, "trait_path_call")
+                                                    .build_call(
+                                                        function_val,
+                                                        &arg_values,
+                                                        "trait_path_call",
+                                                    )
                                                     .map_err(|e| {
-                                                        CodegenError::CompilationError(e.to_string())
+                                                        CodegenError::CompilationError(
+                                                            e.to_string(),
+                                                        )
                                                     })?;
 
                                                 return if let Some(value) =
@@ -5618,11 +5720,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             if vec_val.get_type() == vec_struct {
                                 let len_val = self
                                     .builder
-                                    .build_extract_value(
-                                        vec_val,
-                                        len_idx,
-                                        "vec_len_extract",
-                                    )
+                                    .build_extract_value(vec_val, len_idx, "vec_len_extract")
                                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                                 return Ok(len_val);
                             }
@@ -6754,11 +6852,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     }
                                 }
                                 eprintln!("no function found for {}.{}", struct_name, field);
-                                let mut keys: Vec<String> = self
-                                    .functions
-                                    .keys()
-                                    .cloned()
-                                    .collect();
+                                let mut keys: Vec<String> =
+                                    self.functions.keys().cloned().collect();
                                 keys.sort();
                                 eprintln!("available functions: {:?}", keys);
                             }
@@ -7697,10 +7792,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     .builder
                                     .build_global_string_ptr("%lld", "fmt_some_payload")
                                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                                let args_payload: Vec<BasicValueEnum<'ctx>> = vec![
-                                    fmt_payload.as_pointer_value().into(),
-                                    payload_val.into(),
-                                ];
+                                let args_payload: Vec<BasicValueEnum<'ctx>> =
+                                    vec![fmt_payload.as_pointer_value().into(), payload_val.into()];
                                 let args_payload_meta: Vec<_> =
                                     args_payload.into_iter().map(|v| v.into()).collect();
                                 self.builder
@@ -7737,10 +7830,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     .builder
                                     .build_global_string_ptr("%lld", "fmt_enum_tag")
                                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                                let args_tag: Vec<BasicValueEnum<'ctx>> = vec![
-                                    fmt_tag.as_pointer_value().into(),
-                                    tag_val.into(),
-                                ];
+                                let args_tag: Vec<BasicValueEnum<'ctx>> =
+                                    vec![fmt_tag.as_pointer_value().into(), tag_val.into()];
                                 let args_tag_meta: Vec<_> =
                                     args_tag.into_iter().map(|v| v.into()).collect();
                                 self.builder
@@ -8493,6 +8584,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     let prev_fn = self.current_function;
                     let prev_vars = std::mem::take(&mut self.variables);
                     self.current_function = Some(function);
+                    let prev_ret_ast = self.current_function_return_ast.clone();
+                    let ret_ast = return_type.clone().unwrap_or(Type::None);
+                    self.current_function_return_ast = Some(ret_ast.clone());
                     self.builder.position_at_end(entry);
 
                     // Bind parameters to allocas
@@ -8540,6 +8634,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // Restore state
                     self.variables = prev_vars;
                     self.current_function = prev_fn;
+                    self.current_function_return_ast = prev_ret_ast;
                     if let Some(bb) = prev_insert_block {
                         self.builder.position_at_end(bb);
                     }
@@ -8554,9 +8649,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     for m in methods {
                         match m {
                             Statement::ConstDecl {
-                                name: mname,
-                                value,
-                                ..
+                                name: mname, value, ..
                             } => {
                                 if let ConstValue::Expression(Expression::Function {
                                     parameters,
@@ -8573,8 +8666,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                                         .and_then(|t| self.map_ast_type(t))
                                         .unwrap_or(self.context.i64_type().into());
                                     let mut param_tys_bte: Vec<BasicTypeEnum<'ctx>> = Vec::new();
-                                    param_tys_bte
-                                        .push(self.context.ptr_type(AddressSpace::default()).into());
+                                    param_tys_bte.push(
+                                        self.context.ptr_type(AddressSpace::default()).into(),
+                                    );
                                     param_tys_bte.extend(parameters.iter().map(|p| {
                                         p.param_type
                                             .as_ref()
@@ -8584,7 +8678,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     let param_meta: Vec<inkwell::types::BasicMetadataTypeEnum> =
                                         param_tys_bte.iter().map(|t| (*t).into()).collect();
                                     let fn_type = match ret_ty {
-                                        BasicTypeEnum::IntType(it) => it.fn_type(&param_meta, false),
+                                        BasicTypeEnum::IntType(it) => {
+                                            it.fn_type(&param_meta, false)
+                                        }
                                         BasicTypeEnum::FloatType(ft) => {
                                             ft.fn_type(&param_meta, false)
                                         }
@@ -8675,6 +8771,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                         let prev_fn = self.current_function;
                         let prev_vars = std::mem::take(&mut self.variables);
                         self.current_function = Some(f);
+                        let prev_ret_ast = self.current_function_return_ast.clone();
+                        let ret_ast = return_type.clone().unwrap_or(Type::None);
+                        self.current_function_return_ast = Some(ret_ast.clone());
 
                         // Bind params to allocas
                         for (i, param) in f.get_param_iter().enumerate() {
@@ -8933,6 +9032,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
 
                         // Restore state for next
+                        self.current_function_return_ast = prev_ret_ast;
                         self.variables = prev_vars;
                         self.local_types.clear();
                         self.unsigned_variables.clear();
@@ -8950,6 +9050,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                         let prev_fn = self.current_function;
                         let prev_vars = std::mem::take(&mut self.variables);
                         self.current_function = Some(f);
+                        let prev_ret_ast = self.current_function_return_ast.clone();
+                        let ret_ast = system_def
+                            .return_type
+                            .clone()
+                            .unwrap_or(Type::None);
+                        self.current_function_return_ast = Some(ret_ast);
 
                         // Bind system parameters to allocas
                         for (i, param) in f.get_param_iter().enumerate() {
@@ -9033,6 +9139,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
 
                         // Restore context
+                        self.current_function_return_ast = prev_ret_ast;
                         self.variables = prev_vars;
                         self.local_types.clear();
                         self.unsigned_variables.clear();
@@ -9056,12 +9163,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     ..
                                 }) = value
                                 {
-                                    Some((
-                                        name.clone(),
-                                        parameters,
-                                        return_type,
-                                        body,
-                                    ))
+                                    Some((name.clone(), parameters, return_type, body))
                                 } else {
                                     None
                                 }
@@ -9095,22 +9197,21 @@ impl<'ctx> CodeGenerator<'ctx> {
                         let prev_vars = std::mem::take(&mut self.variables);
                         self.current_function = Some(f);
                         self.current_impl_struct = Some(type_name.clone());
+                        let prev_ret_ast = self.current_function_return_ast.clone();
+                        let ret_ast = return_type.clone().unwrap_or(Type::None);
+                        self.current_function_return_ast = Some(ret_ast.clone());
 
                         let mut param_index = 0usize;
                         if trait_name.is_none() {
                             if let Some((_st, _)) = self.struct_types.get(type_name) {
                                 if let Some(first_param) = f.get_param_iter().next() {
-                                    let p_ty = self
-                                        .context
-                                        .ptr_type(AddressSpace::default())
-                                        .into();
-                                    let alloca =
-                                        self.create_entry_block_alloca("self", p_ty)?;
+                                    let p_ty =
+                                        self.context.ptr_type(AddressSpace::default()).into();
+                                    let alloca = self.create_entry_block_alloca("self", p_ty)?;
                                     self.builder.build_store(alloca, first_param).map_err(|e| {
                                         CodegenError::CompilationError(e.to_string())
                                     })?;
-                                    self.variables
-                                        .insert("self".to_string(), (alloca, p_ty));
+                                    self.variables.insert("self".to_string(), (alloca, p_ty));
                                     self.local_types.insert(
                                         "self".to_string(),
                                         crate::ast::Type::Pointer {
@@ -9196,17 +9297,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                                         type_name, mname, ty_str
                                     );
                                 }
-                                let ret_val: BasicValueEnum<'ctx> = if let Some(v) =
-                                    last_expr_value
+                                let ret_val: BasicValueEnum<'ctx> = if let Some(v) = last_expr_value
                                 {
                                     self.cast_basic_to_type(v, ret_ty)?
                                 } else {
                                     match ret_ty {
                                         BasicTypeEnum::IntType(it) => it.const_zero().into(),
                                         BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
-                                        BasicTypeEnum::PointerType(pt) => {
-                                            pt.const_zero().into()
-                                        }
+                                        BasicTypeEnum::PointerType(pt) => pt.const_zero().into(),
                                         _ => self.context.i64_type().const_zero().into(),
                                     }
                                 };
@@ -9216,6 +9314,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }
                         }
 
+                        self.current_function_return_ast = prev_ret_ast;
                         self.variables = prev_vars;
                         self.local_types.clear();
                         self.unsigned_variables.clear();

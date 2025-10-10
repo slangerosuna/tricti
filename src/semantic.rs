@@ -1644,6 +1644,11 @@ fn infer_expression_type(
             if name == "if" {
                 panic!("identifier expression encountered: 'if'");
             }
+            if name == "none" {
+                return Ok(Type::Optional {
+                    inner: Box::new(Type::None),
+                });
+            }
             // Heuristic: enum variant static path lowered by parser as Identifier("Type_Variant").
             // If it matches a known enum type and existing variant name, treat as i64 tag.
             if let Some((tname, vname)) = name.split_once('_') {
@@ -2409,6 +2414,48 @@ fn infer_expression_type(
                 Err(SemanticError::UndefinedFunction(mangled_name))
             }
         }
+        Expression::Question(expr) => {
+            let opt_type = infer_expression_type(expr, context)?;
+            match opt_type {
+                Type::Optional { inner } => {
+                    let payload_type = inner.as_ref().clone();
+                    if let Some(expected_ret) = context.current_function_return_type.as_ref() {
+                        match expected_ret {
+                            Type::Optional { inner: expected_inner } => {
+                                if !types_compatible(expected_inner, inner.as_ref()) {
+                                    return Err(SemanticError::TypeMismatch {
+                                        expected: Type::Optional {
+                                            inner: expected_inner.clone(),
+                                        },
+                                        found: Type::Optional {
+                                            inner: inner.clone(),
+                                        },
+                                    });
+                                }
+                            }
+                            _ => {
+                                return Err(SemanticError::InvalidOperation {
+                                    operator: "?".to_string(),
+                                    operand_types: vec![expected_ret.clone()],
+                                });
+                            }
+                        }
+                    } else {
+                        return Err(SemanticError::InvalidOperation {
+                            operator: "?".to_string(),
+                            operand_types: vec![Type::Optional {
+                                inner: inner.clone(),
+                            }],
+                        });
+                    }
+                    Ok(payload_type)
+                }
+                other => Err(SemanticError::InvalidOperation {
+                    operator: "?".to_string(),
+                    operand_types: vec![other],
+                }),
+            }
+        }
         _ => {
             // For other expression types, return none for now
             Ok(Type::None)
@@ -2630,6 +2677,15 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             Type::Identifier { name, .. },
             Type::Pointer { .. } | Type::RawPointer { .. } | Type::Reference { .. },
         ) if matches!(name.as_str(), "i64" | "u64") => true,
+        (
+            Type::Optional { inner: expected_inner },
+            Type::Optional { inner: found_inner },
+        ) => {
+            matches!(**found_inner, Type::None)
+                || matches!(**expected_inner, Type::None)
+                || types_compatible(expected_inner.as_ref(), found_inner.as_ref())
+        },
+        (Type::Optional { .. }, Type::None) | (Type::None, Type::Optional { .. }) => true,
         (
             Type::Identifier {
                 name: a,
