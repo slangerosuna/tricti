@@ -1041,6 +1041,17 @@ fn parse_postfix_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
             }
             Rule::question_else_suffix => {
                 let mut it2 = suffix_pair.into_inner();
+                // Skip the explicit `else` keyword emitted by the grammar, then grab the block
+                if let Some(keyword_pair) = it2.next() {
+                    if keyword_pair.as_rule() != Rule::keyword_else {
+                        // If the grammar ever changes we can still handle the block directly
+                        // by treating this as the block pair.
+                        let else_statements = parse_block(keyword_pair);
+                        let base_expr = expr;
+                        expr = desugar_question_else(base_expr, else_statements);
+                        continue;
+                    }
+                }
                 let block_pair = it2.next().expect("question-else suffix missing block");
                 let else_statements = parse_block(block_pair);
                 let base_expr = expr;

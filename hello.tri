@@ -1,6 +1,3 @@
-# Simple hello world program
-@trigger(Init)
-main :: () => {
-    hello := "Hello, TriCTI!"
-    println(hello)
-}
+main :: () => do
+  hello := "Hello, World!"
+  println(hello)

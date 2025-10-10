@@ -11,7 +11,6 @@ tricti::tri_test_with_prelude!(
         maybe_even :: (value: i64) -> ?i64 => do
             if value % 2 == 0:
                 ret some value
-            println("maybe_even returning none")
             ret none
 
         double_even :: (value: i64) -> ?i64 => do

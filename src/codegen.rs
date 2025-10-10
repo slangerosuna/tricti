@@ -142,26 +142,93 @@ impl<'ctx> CodeGenerator<'ctx> {
         &self,
         val: Option<&dyn inkwell::values::BasicValue<'ctx>>,
     ) -> Result<(), CodegenError> {
-        if let Some(bb) = self.builder.get_insert_block() {
-            if bb.get_terminator().is_none() {
+        if let Some(block) = self.builder.get_insert_block() {
+            if block.get_terminator().is_none() {
                 self.builder
                     .build_return(val)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                return Ok(());
             }
         }
         Ok(())
     }
 
-    fn branch_to(&self, target: BasicBlock<'ctx>) -> Result<(), CodegenError> {
-        if let Some(current_bb) = self.builder.get_insert_block() {
-            if current_bb.get_terminator().is_none() {
+    fn branch_to(
+        &self,
+        target: inkwell::basic_block::BasicBlock<'ctx>,
+    ) -> Result<(), CodegenError> {
+        if let Some(current_block) = self.builder.get_insert_block() {
+            if current_block.get_terminator().is_none() {
                 self.builder
                     .build_unconditional_branch(target)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
             }
         }
         Ok(())
+    }
+
+    fn statements_contain_return(statements: &[Statement]) -> bool {
+        statements
+            .iter()
+            .any(|stmt| Self::statement_contains_return(stmt))
+    }
+
+    fn statement_contains_return(stmt: &Statement) -> bool {
+        match stmt {
+            Statement::Return(_) => true,
+            Statement::Expression(expr) => Self::expression_contains_return(expr),
+            Statement::VariableDecl { value, .. }
+            | Statement::Assignment { value, .. } => Self::expression_contains_return(value),
+            Statement::ForLoop { body, .. }
+            | Statement::ModuleDecl { items: Some(body), .. }
+            | Statement::ImplBlock { methods: body, .. } => {
+                Self::statements_contain_return(body)
+            }
+            Statement::ImplMethod { body, .. } => match body {
+                FunctionBody::Expression(expr) => Self::expression_contains_return(expr),
+                FunctionBody::Block(stmts) => Self::statements_contain_return(stmts),
+            },
+            Statement::IfDef {
+                then_branch,
+                else_branch,
+                ..
+            } => Self::statements_contain_return(then_branch)
+                || else_branch
+                    .as_ref()
+                    .map_or(false, |branch| Self::statements_contain_return(branch)),
+            _ => false,
+        }
+    }
+
+    fn expression_contains_return(expr: &Expression) -> bool {
+        match expr {
+            Expression::Block { statements } | Expression::UnsafeBlock { statements } => {
+                Self::statements_contain_return(statements)
+            }
+            Expression::If {
+                then_branch,
+                else_branch,
+                ..
+            } => Self::statements_contain_return(then_branch)
+                || else_branch
+                    .as_ref()
+                    .map_or(false, |branch| Self::statements_contain_return(branch)),
+            Expression::IfExpr {
+                then_expr,
+                else_expr,
+                ..
+            } => Self::expression_contains_return(then_expr)
+                || else_expr
+                    .as_ref()
+                    .map_or(false, |expr| Self::expression_contains_return(expr)),
+            Expression::Loop { body } => Self::statements_contain_return(body),
+            Expression::Match { arms, .. } => arms
+                .iter()
+                .any(|arm| Self::expression_contains_return(&arm.body)),
+            Expression::Question(inner) | Expression::Unwrap(inner) => {
+                Self::expression_contains_return(inner)
+            }
+            _ => false,
+        }
     }
 
     fn const_int_from_literal(
@@ -195,13 +262,17 @@ impl<'ctx> CodeGenerator<'ctx> {
         match pattern {
             Expression::Identifier(name) => {
                 if name == "none" {
-                    return Ok(self.context.i64_type().const_zero());
+                    let tag = self.context.i64_type().const_zero();
+                    eprintln!("pattern tag for none: {}", tag.get_zero_extended_constant().unwrap_or(999));
+                    return Ok(tag);
                 }
                 if let Some((tname, vname)) = name.split_once('_') {
                     if let Some(Type::Enum { variants, order }) = self.semantic.types.get(tname) {
                         if variants.contains_key(vname) {
                             let idx = order.iter().position(|s| s == vname).unwrap_or(0) as u64;
-                            return Ok(self.context.i64_type().const_int(idx, false));
+                            let tag = self.context.i64_type().const_int(idx, false);
+                            eprintln!("pattern tag for {}_{}: {}", tname, vname, idx);
+                            return Ok(tag);
                         }
                     }
                 }
@@ -2738,10 +2809,21 @@ impl<'ctx> CodeGenerator<'ctx> {
             Statement::Return(expr) => {
                 if let Some(expr) = expr {
                     let value = self.generate_expression(expr)?;
+                    if let Some(bb) = self.builder.get_insert_block() {
+                        let name = bb.get_name().to_string_lossy().into_owned();
+                        eprintln!("building return in block {}", name);
+                    } else {
+                        eprintln!("building return with no current block");
+                    }
+                    eprintln!(
+                        "building return terminator with value type {}",
+                        value.get_type().print_to_string().to_string()
+                    );
                     self.builder
                         .build_return(Some(&value))
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 } else {
+                    eprintln!("building return terminator without value");
                     self.builder
                         .build_return(None)
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -3210,6 +3292,210 @@ impl<'ctx> CodeGenerator<'ctx> {
             phi.add_incoming(&incoming_dyn);
             Ok(phi.as_basic_value())
         }
+    }
+
+    fn try_generate_question_else_match(
+        &mut self,
+        raw: BasicValueEnum<'ctx>,
+        arms: &[MatchArm],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        if arms.len() != 2 {
+            return Ok(None);
+        }
+
+        let (some_arm, none_arm) = (&arms[0], &arms[1]);
+
+        let capture_name = match &some_arm.pattern {
+            Expression::Call {
+                function,
+                type_args: _,
+                arguments,
+            } => {
+                if !matches!(function.as_ref(), Expression::Identifier(name) if name == "some") {
+                    return Ok(None);
+                }
+                if arguments.len() != 1 {
+                    return Ok(None);
+                }
+                if let Expression::Identifier(capture) = &arguments[0].value {
+                    capture.clone()
+                } else {
+                    return Ok(None);
+                }
+            }
+            _ => {
+                return Ok(None);
+            }
+        };
+
+        if !matches!(&none_arm.pattern, Expression::Identifier(name) if name == "none") {
+            return Ok(None);
+        }
+
+        if !matches!(&some_arm.body, Expression::Identifier(name) if name == "__tri_question_value") {
+            return Ok(None);
+        }
+
+        eprintln!(
+            "question_else specialization engaged: some_body={:?}, none_body={:?}",
+            some_arm.body,
+            none_arm.body
+        );
+
+        let enum_ty = match self.enum_struct {
+            Some(st) => st,
+            None => return Ok(None),
+        };
+
+        let current_fn = match self.current_function {
+            Some(f) => f,
+            None => {
+                return Err(CodegenError::CompilationError(
+                    "question-else match outside function".to_string(),
+                ))
+            }
+        };
+
+        let opt_struct = if raw.is_struct_value() {
+            raw.into_struct_value()
+        } else if raw.is_pointer_value() {
+            self.builder
+                .build_load(enum_ty, raw.into_pointer_value(), "question_else_load")
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                .into_struct_value()
+        } else {
+            return Ok(None);
+        };
+
+        let tag_val = self
+            .builder
+            .build_extract_value(opt_struct, 0, "question_else_tag")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+            .into_int_value();
+        let payload_raw = self
+            .builder
+            .build_extract_value(opt_struct, 1, "question_else_payload")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        let some_bb = self
+            .context
+            .append_basic_block(current_fn, "question_else.some");
+        let none_bb = self
+            .context
+            .append_basic_block(current_fn, "question_else.none");
+        let cont_bb = self
+            .context
+            .append_basic_block(current_fn, "question_else.cont");
+
+        let is_some = self
+            .builder
+            .build_int_compare(
+                IntPredicate::NE,
+                tag_val,
+                self.context.i64_type().const_zero(),
+                "question_else_is_some",
+            )
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        self.builder
+            .build_conditional_branch(is_some, some_bb, none_bb)
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        let mut incoming: Vec<(BasicValueEnum<'ctx>, BasicBlock<'ctx>)> = Vec::new();
+        let mut phi_result_ty: Option<BasicTypeEnum<'ctx>> = None;
+
+        // Some branch
+        self.builder.position_at_end(some_bb);
+        let payload_ty = payload_raw.get_type();
+        let payload_alloca = self
+            .create_entry_block_alloca(&capture_name, payload_ty)
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        self.builder
+            .build_store(payload_alloca, payload_raw)
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let previous_binding = self
+            .variables
+            .insert(capture_name.clone(), (payload_alloca, payload_ty));
+        let some_val_raw = self.generate_expression(&some_arm.body)?;
+        if let Some(prev) = previous_binding {
+            self.variables.insert(capture_name.clone(), prev);
+        } else {
+            self.variables.remove(&capture_name);
+        }
+        let some_block = self
+            .builder
+            .get_insert_block()
+            .unwrap_or(some_bb);
+        let some_terminates = some_block.get_terminator().is_some();
+        if !some_terminates {
+            let casted = {
+                let value_ty = some_val_raw.get_type();
+                phi_result_ty = Some(value_ty);
+                some_val_raw
+            };
+            self.builder
+                .build_unconditional_branch(cont_bb)
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+            incoming.push((casted, some_block));
+        }
+
+        // None branch
+        self.builder.position_at_end(none_bb);
+        let none_val_raw = self.generate_expression(&none_arm.body)?;
+        let none_block = self
+            .builder
+            .get_insert_block()
+            .unwrap_or(none_bb);
+        let none_terminates = none_block.get_terminator().is_some();
+        if !none_terminates {
+            let casted = if let Some(target_ty) = phi_result_ty {
+                if none_val_raw.get_type() != target_ty {
+                    self.cast_basic_to_type(none_val_raw, target_ty)?
+                } else {
+                    none_val_raw
+                }
+            } else {
+                let value_ty = none_val_raw.get_type();
+                phi_result_ty = Some(value_ty);
+                none_val_raw
+            };
+            self.builder
+                .build_unconditional_branch(cont_bb)
+                .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+            incoming.push((casted, none_block));
+        }
+
+        if incoming.is_empty() {
+            self.builder.position_at_end(cont_bb);
+            let zero = match phi_result_ty {
+                Some(BasicTypeEnum::IntType(it)) => it.const_zero().into(),
+                Some(BasicTypeEnum::FloatType(ft)) => ft.const_zero().into(),
+                Some(BasicTypeEnum::PointerType(pt)) => pt.const_null().into(),
+                Some(BasicTypeEnum::StructType(st)) => st.get_undef().into(),
+                Some(BasicTypeEnum::VectorType(vt)) => vt.const_zero().into(),
+                Some(BasicTypeEnum::ArrayType(at)) => at.const_zero().into(),
+                Some(_) => self.context.i64_type().const_zero().into(),
+                None => self.context.i64_type().const_zero().into(),
+            };
+            return Ok(Some(zero));
+        }
+
+        self.builder.position_at_end(cont_bb);
+        let phi = self
+            .builder
+            .build_phi(
+                phi_result_ty.unwrap_or(self.context.i64_type().into()),
+                "question_else_result",
+            )
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let incoming_dyn: Vec<(
+            &dyn inkwell::values::BasicValue<'ctx>,
+            BasicBlock<'ctx>,
+        )> = incoming
+            .iter()
+            .map(|(v, bb)| (v as &dyn inkwell::values::BasicValue<'ctx>, *bb))
+            .collect();
+        phi.add_incoming(&incoming_dyn);
+        Ok(Some(phi.as_basic_value()))
     }
 
     fn extract_tuple_path_value(
@@ -4121,6 +4407,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Match { value, arms } => {
                 // Evaluate scrutinee once
                 let raw = self.generate_expression(value)?;
+                eprintln!(
+                    "match scrutinee type {}",
+                    raw.get_type().print_to_string().to_string()
+                );
 
                 if arms
                     .iter()
@@ -4140,6 +4430,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 } else {
                     None
                 };
+                eprintln!("match raw.is_struct_value={} is_pointer={}", raw.is_struct_value(), raw.is_pointer_value());
                 let scrut = if raw.is_struct_value() {
                     let tag_ptr = self
                         .builder
@@ -4159,6 +4450,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                 } else {
                     self.cast_to_int(raw, self.context.i64_type())?
                 };
+                eprintln!(
+                    "match tag type {}",
+                    scrut.get_type().print_to_string().to_string()
+                );
+
+                if let Some(question_else_value) =
+                    self.try_generate_question_else_match(raw, arms)?
+                {
+                    return Ok(question_else_value);
+                }
 
                 let current_fn = self.current_function.ok_or_else(|| {
                     CodegenError::CompilationError("No current function".to_string())
@@ -4228,6 +4529,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 )> = Vec::new();
                 for (i, arm) in arms.iter().enumerate() {
                     self.builder.position_at_end(arm_blocks[i].0);
+                    eprintln!("executing codegen for arm {}", i);
+                    let arm_returns = Self::expression_contains_return(&arm.body);
                     let mut saved_bindings: Vec<(
                         String,
                         Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
@@ -4328,7 +4631,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
                     }
                     let body_val_raw = self.generate_expression(&arm.body)?;
-                    let body_val = if body_val_raw.is_int_value() {
+                    eprintln!("arm {} body value type {}", i, body_val_raw.get_type().print_to_string().to_string());
+                    let body_val: BasicValueEnum<'ctx> = if body_val_raw.is_int_value() {
                         let int_val = body_val_raw.into_int_value();
                         if int_val.get_type() == self.context.i64_type() {
                             int_val.into()
@@ -4342,15 +4646,30 @@ impl<'ctx> CodeGenerator<'ctx> {
                         self.cast_to_int(body_val_raw, self.context.i64_type())?
                             .into()
                     };
-                    let arm_block = self.builder.get_insert_block().unwrap();
+                    let arm_block = self
+                        .builder
+                        .get_insert_block()
+                        .unwrap_or(arm_blocks[i].0);
+                    let has_terminator = arm_block.get_terminator().is_some();
+                    eprintln!(
+                        "arm {} terminator present? {}",
+                        i,
+                        has_terminator
+                    );
                     let mut flows_to_cont = false;
-                    if arm_block.get_terminator().is_none() {
+                    if !arm_returns && arm_block.get_terminator().is_none() {
                         self.builder
                             .build_unconditional_branch(cont_bb)
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                         flows_to_cont = true;
                     }
-                    if flows_to_cont {
+                    if !arm_returns && flows_to_cont {
+                        let value_str = format!(
+                            "arm {} incoming value {}",
+                            i,
+                            body_val.get_type().print_to_string().to_string()
+                        );
+                        eprintln!("{}", value_str);
                         incoming.push((body_val, arm_block));
                     }
 
@@ -4378,11 +4697,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                     default_flows = true;
                 }
                 if default_flows {
+                    eprintln!(
+                        "default incoming value {}",
+                        def_val.get_type().print_to_string().to_string()
+                    );
                     incoming.push((def_val, default_block));
                 }
 
                 // Merge with phi
                 self.builder.position_at_end(cont_bb);
+                eprintln!("match incoming count {}", incoming.len());
                 if incoming.is_empty() {
                     Ok(self.context.i64_type().const_zero().into())
                 } else {
