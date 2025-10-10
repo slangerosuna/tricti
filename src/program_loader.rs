@@ -32,13 +32,11 @@ fn fallback_std_program() -> Program {
             name: "__tricti_std_placeholder".to_string(),
             type_params: Vec::new(),
             type_annotation: None,
-            value: ConstValue::Expression(Expression::Literal(Literal::Integer(
-                IntegerLiteral {
-                    raw: "0".to_string(),
-                    value: 0,
-                    suffix: None,
-                },
-            ))),
+            value: ConstValue::Expression(Expression::Literal(Literal::Integer(IntegerLiteral {
+                raw: "0".to_string(),
+                value: 0,
+                suffix: None,
+            }))),
             extern_linkage: None,
         }],
     }
@@ -81,7 +79,9 @@ pub fn parse_source_with_std(
         Ok(program) => program,
         Err(err) => {
             eprintln!("warning: failed to parse primary source: {:?}", err);
-            Program { statements: Vec::new() }
+            Program {
+                statements: Vec::new(),
+            }
         }
     };
     let has_no_std_attr = has_program_no_std_attribute(&program);
@@ -90,6 +90,7 @@ pub fn parse_source_with_std(
         program,
         options.base_dir,
         options.base_dir,
+        None,
         &mut visited_modules,
     );
 
@@ -170,13 +171,20 @@ fn load_and_expand_stdlib(
         .map(Path::to_path_buf)
         .unwrap_or_else(|| std::env::current_dir().expect("failed to get current dir"));
 
-    expand_modules(std_program, &base_dir, root_dir, visited_modules)
+    expand_modules(
+        std_program,
+        &base_dir,
+        root_dir,
+        Some(stdlib_path),
+        visited_modules,
+    )
 }
 
 fn expand_modules(
     program: Program,
     base_dir: &Path,
     root_dir: &Path,
+    current_file: Option<&Path>,
     visited: &mut HashSet<PathBuf>,
 ) -> Program {
     let mut expanded: Vec<Statement> = Vec::new();
@@ -187,23 +195,48 @@ fn expand_modules(
                 items,
                 is_public: _,
             } if items.is_none() => {
+                let module_file = format!("{}.tri", name);
+                let mut roots: Vec<PathBuf> = vec![
+                    base_dir.to_path_buf(),
+                    base_dir.join("src"),
+                    base_dir.join("stdlib"),
+                    root_dir.to_path_buf(),
+                    root_dir.join("src"),
+                    root_dir.join("stdlib"),
+                ];
+
+                if let Some(parent) = base_dir.parent() {
+                    roots.push(parent.to_path_buf());
+                    roots.push(parent.join("src"));
+                    roots.push(parent.join("stdlib"));
+                }
+
+                if let Some(current_path) = current_file {
+                    if let Some(parent) = current_path.parent() {
+                        roots.push(parent.to_path_buf());
+                        if let Some(stem) = current_path.file_stem().and_then(|s| s.to_str()) {
+                            roots.push(parent.join(stem));
+                        }
+                    }
+                }
+
                 let mut tried: Vec<PathBuf> = Vec::new();
-                tried.push(base_dir.join(format!("{}.tri", name)));
-                tried.push(base_dir.join("src").join(format!("{}.tri", name)));
-                tried.push(root_dir.join(format!("{}.tri", name)));
-                tried.push(root_dir.join("src").join(format!("{}.tri", name)));
-                tried.push(root_dir.join("stdlib").join(format!("{}.tri", name)));
+                for root in roots {
+                    tried.push(root.join(Path::new(&module_file)));
+                    tried.push(root.join(Path::new(name)).join("mod.tri"));
+                    tried.push(root.join(Path::new(name)).join(Path::new(&module_file)));
+                }
 
                 let mut loaded: Option<(String, PathBuf)> = None;
-                if let Some(parent) = base_dir.parent() {
-                    let parent = parent.to_path_buf();
-                    tried.push(parent.join(format!("{}.tri", name)));
-                    tried.push(parent.join("src").join(format!("{}.tri", name)));
-                    tried.push(parent.join("stdlib").join(format!("{}.tri", name)));
-                }
+                let mut already_loaded = false;
+                let mut unique: HashSet<PathBuf> = HashSet::new();
                 for candidate in tried {
+                    if !unique.insert(candidate.clone()) {
+                        continue;
+                    }
                     if let Ok(canonical) = fs::canonicalize(&candidate) {
                         if visited.contains(&canonical) {
+                            already_loaded = true;
                             continue;
                         }
                         if let Ok(content) = fs::read_to_string(&canonical) {
@@ -232,8 +265,10 @@ fn expand_modules(
                         .parent()
                         .map(Path::to_path_buf)
                         .unwrap_or_else(|| base_dir.to_path_buf());
-                    sub = expand_modules(sub, &base_for_sub, root_dir, visited);
+                    sub = expand_modules(sub, &base_for_sub, root_dir, Some(&canonical), visited);
                     expanded.extend(sub.statements);
+                } else if already_loaded {
+                    continue;
                 } else {
                     eprintln!("warning: module '{}' not found on disk", name);
                 }
@@ -246,32 +281,54 @@ fn expand_modules(
                 if !path.is_empty() {
                     let joined = path.join("/");
                     let name = &path[0];
-                    let mut tried: Vec<PathBuf> = Vec::new();
-                    tried.push(base_dir.join(format!("{}.tri", joined)));
-                    tried.push(base_dir.join("src").join(format!("{}.tri", joined)));
-                    tried.push(base_dir.join("stdlib").join(format!("{}.tri", joined)));
-                    tried.push(base_dir.join(format!("{}.tri", name)));
-                    tried.push(base_dir.join("src").join(format!("{}.tri", name)));
-                    tried.push(base_dir.join("stdlib").join(format!("{}.tri", name)));
-                    tried.push(root_dir.join(format!("{}.tri", joined)));
-                    tried.push(root_dir.join("src").join(format!("{}.tri", joined)));
-                    tried.push(root_dir.join("stdlib").join(format!("{}.tri", joined)));
-                    tried.push(root_dir.join(format!("{}.tri", name)));
-                    tried.push(root_dir.join("src").join(format!("{}.tri", name)));
-                    tried.push(root_dir.join("stdlib").join(format!("{}.tri", name)));
-                    let mut loaded: Option<(String, PathBuf)> = None;
+                    let joined_file = format!("{}.tri", joined);
+                    let module_file = format!("{}.tri", name);
+                    let joined_path = Path::new(&joined);
+
+                    let mut roots: Vec<PathBuf> = vec![
+                        base_dir.to_path_buf(),
+                        base_dir.join("src"),
+                        base_dir.join("stdlib"),
+                        root_dir.to_path_buf(),
+                        root_dir.join("src"),
+                        root_dir.join("stdlib"),
+                    ];
+
                     if let Some(parent) = base_dir.parent() {
-                        let parent = parent.to_path_buf();
-                        tried.push(parent.join(format!("{}.tri", joined)));
-                        tried.push(parent.join("src").join(format!("{}.tri", joined)));
-                        tried.push(parent.join("stdlib").join(format!("{}.tri", joined)));
-                        tried.push(parent.join(format!("{}.tri", name)));
-                        tried.push(parent.join("src").join(format!("{}.tri", name)));
-                        tried.push(parent.join("stdlib").join(format!("{}.tri", name)));
+                        roots.push(parent.to_path_buf());
+                        roots.push(parent.join("src"));
+                        roots.push(parent.join("stdlib"));
                     }
+
+                    if let Some(current_path) = current_file {
+                        if let Some(parent) = current_path.parent() {
+                            roots.push(parent.to_path_buf());
+                            if let Some(stem) = current_path.file_stem().and_then(|s| s.to_str()) {
+                                roots.push(parent.join(stem));
+                            }
+                        }
+                    }
+
+                    let mut tried: Vec<PathBuf> = Vec::new();
+                    for root in roots {
+                        tried.push(root.join(Path::new(&joined_file)));
+                        tried.push(root.join(joined_path).join("mod.tri"));
+                        tried.push(root.join(joined_path).join(Path::new(&module_file)));
+                        tried.push(root.join(Path::new(&module_file)));
+                        tried.push(root.join(Path::new(name)).join("mod.tri"));
+                        tried.push(root.join(Path::new(name)).join(Path::new(&module_file)));
+                    }
+
+                    let mut loaded: Option<(String, PathBuf)> = None;
+                    let mut already_loaded = false;
+                    let mut unique: HashSet<PathBuf> = HashSet::new();
                     for candidate in tried {
+                        if !unique.insert(candidate.clone()) {
+                            continue;
+                        }
                         if let Ok(canonical) = fs::canonicalize(&candidate) {
                             if visited.contains(&canonical) {
+                                already_loaded = true;
                                 continue;
                             }
                             if let Ok(content) = fs::read_to_string(&canonical) {
@@ -299,8 +356,11 @@ fn expand_modules(
                             .parent()
                             .map(Path::to_path_buf)
                             .unwrap_or_else(|| base_dir.to_path_buf());
-                        sub = expand_modules(sub, &base_for_sub, root_dir, visited);
+                        sub =
+                            expand_modules(sub, &base_for_sub, root_dir, Some(&canonical), visited);
                         expanded.extend(sub.statements);
+                    } else if already_loaded {
+                        continue;
                     } else {
                         eprintln!("warning: use {:?} not found on disk", path);
                     }

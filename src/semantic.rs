@@ -2421,7 +2421,9 @@ fn infer_expression_type(
                     let payload_type = inner.as_ref().clone();
                     if let Some(expected_ret) = context.current_function_return_type.as_ref() {
                         match expected_ret {
-                            Type::Optional { inner: expected_inner } => {
+                            Type::Optional {
+                                inner: expected_inner,
+                            } => {
                                 if !types_compatible(expected_inner, inner.as_ref()) {
                                     return Err(SemanticError::TypeMismatch {
                                         expected: Type::Optional {
@@ -2678,13 +2680,15 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
             Type::Pointer { .. } | Type::RawPointer { .. } | Type::Reference { .. },
         ) if matches!(name.as_str(), "i64" | "u64") => true,
         (
-            Type::Optional { inner: expected_inner },
+            Type::Optional {
+                inner: expected_inner,
+            },
             Type::Optional { inner: found_inner },
         ) => {
             matches!(**found_inner, Type::None)
                 || matches!(**expected_inner, Type::None)
                 || types_compatible(expected_inner.as_ref(), found_inner.as_ref())
-        },
+        }
         (Type::Optional { .. }, Type::None) | (Type::None, Type::Optional { .. }) => true,
         (
             Type::Identifier {

@@ -340,7 +340,11 @@ mod tests {
 
                 let some_arm = &arms[0];
                 match &some_arm.pattern {
-                    Expression::Call { function, arguments, .. } => {
+                    Expression::Call {
+                        function,
+                        arguments,
+                        ..
+                    } => {
                         match function.as_ref() {
                             Expression::Identifier(name) => assert_eq!(name, "some"),
                             other => panic!("expected some identifier, got {:?}", other),
@@ -367,7 +371,10 @@ mod tests {
                     other => panic!("expected block body, got {:?}", other),
                 }
             }
-            other => panic!("expected match expression from question else, got {:?}", other),
+            other => panic!(
+                "expected match expression from question else, got {:?}",
+                other
+            ),
         }
     }
 

@@ -25,7 +25,7 @@ impl Path:
     # Check if path is a regular file
     is_file :: (path: &Path) -> bool => do
         stat_buf: [u8; 144] = [0; 144]
-    if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) ~= 0:
+        if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) ~= 0:
             ret false
         
         mode_ptr := (&stat_buf[24]) as *u32
@@ -37,7 +37,7 @@ impl Path:
     # Check if path is a directory
     is_dir :: (path: &Path) -> bool => do
         stat_buf: [u8; 144] = [0; 144]
-    if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) ~= 0:
+        if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) ~= 0:
             ret false
         
         mode_ptr := (&stat_buf[24]) as *u32
@@ -91,7 +91,7 @@ impl Path:
     join :: (path: &Path, other: String) -> Path => do
         result := String::clone(&path.path)
         
-    if result.len > 0 and result.data[result.len - 1] ~= 47:
+        if result.len > 0 and result.data[result.len - 1] ~= 47:
             String::push_char(&result, 47)
         
         String::push_str(&result, &other)
@@ -116,9 +116,11 @@ impl Display for Path:
 
 impl Debug for Path:
     debug_string :: (&self) -> String => do
-        result := String::from_cstr("Path(\"" as *u8)
+        result := String::from_cstr("Path(" as *u8)
+        String::push_char(&result, 34)
         String::push_str(&result, &self.path)
-        String::push_str(&result, &String::from_cstr("\")" as *u8))
+        String::push_char(&result, 34)
+        String::push_char(&result, 41)
         ret result
 
 impl Drop for Path:

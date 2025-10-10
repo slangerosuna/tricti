@@ -176,13 +176,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         match stmt {
             Statement::Return(_) => true,
             Statement::Expression(expr) => Self::expression_contains_return(expr),
-            Statement::VariableDecl { value, .. }
-            | Statement::Assignment { value, .. } => Self::expression_contains_return(value),
-            Statement::ForLoop { body, .. }
-            | Statement::ModuleDecl { items: Some(body), .. }
-            | Statement::ImplBlock { methods: body, .. } => {
-                Self::statements_contain_return(body)
+            Statement::VariableDecl { value, .. } | Statement::Assignment { value, .. } => {
+                Self::expression_contains_return(value)
             }
+            Statement::ForLoop { body, .. }
+            | Statement::ModuleDecl {
+                items: Some(body), ..
+            }
+            | Statement::ImplBlock { methods: body, .. } => Self::statements_contain_return(body),
             Statement::ImplMethod { body, .. } => match body {
                 FunctionBody::Expression(expr) => Self::expression_contains_return(expr),
                 FunctionBody::Block(stmts) => Self::statements_contain_return(stmts),
@@ -191,10 +192,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 then_branch,
                 else_branch,
                 ..
-            } => Self::statements_contain_return(then_branch)
-                || else_branch
-                    .as_ref()
-                    .map_or(false, |branch| Self::statements_contain_return(branch)),
+            } => {
+                Self::statements_contain_return(then_branch)
+                    || else_branch
+                        .as_ref()
+                        .map_or(false, |branch| Self::statements_contain_return(branch))
+            }
             _ => false,
         }
     }
@@ -208,18 +211,22 @@ impl<'ctx> CodeGenerator<'ctx> {
                 then_branch,
                 else_branch,
                 ..
-            } => Self::statements_contain_return(then_branch)
-                || else_branch
-                    .as_ref()
-                    .map_or(false, |branch| Self::statements_contain_return(branch)),
+            } => {
+                Self::statements_contain_return(then_branch)
+                    || else_branch
+                        .as_ref()
+                        .map_or(false, |branch| Self::statements_contain_return(branch))
+            }
             Expression::IfExpr {
                 then_expr,
                 else_expr,
                 ..
-            } => Self::expression_contains_return(then_expr)
-                || else_expr
-                    .as_ref()
-                    .map_or(false, |expr| Self::expression_contains_return(expr)),
+            } => {
+                Self::expression_contains_return(then_expr)
+                    || else_expr
+                        .as_ref()
+                        .map_or(false, |expr| Self::expression_contains_return(expr))
+            }
             Expression::Loop { body } => Self::statements_contain_return(body),
             Expression::Match { arms, .. } => arms
                 .iter()
@@ -263,7 +270,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Identifier(name) => {
                 if name == "none" {
                     let tag = self.context.i64_type().const_zero();
-                    eprintln!("pattern tag for none: {}", tag.get_zero_extended_constant().unwrap_or(999));
+                    eprintln!(
+                        "pattern tag for none: {}",
+                        tag.get_zero_extended_constant().unwrap_or(999)
+                    );
                     return Ok(tag);
                 }
                 if let Some((tname, vname)) = name.split_once('_') {
@@ -558,7 +568,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .build_struct_gep(vec_struct, alloca, cap_idx, "vec_cap_ptr")
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
-    let elem_ptr_ty = self.context.ptr_type(AddressSpace::default());
+        let elem_ptr_ty = self.context.ptr_type(AddressSpace::default());
         let data_ptr = self
             .builder
             .build_load(elem_ptr_ty, data_field_ptr, "vec_data_load")
@@ -3322,7 +3332,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             return Ok(None);
         }
 
-        if !matches!(&some_arm.body, Expression::Identifier(name) if name == "__tri_question_value") {
+        if !matches!(&some_arm.body, Expression::Identifier(name) if name == "__tri_question_value")
+        {
             return Ok(None);
         }
 
@@ -3351,8 +3362,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             return Ok(None);
         };
 
-        let opt_alloca = self
-            .create_entry_block_alloca("question_else_opt", enum_ty.into())?;
+        let opt_alloca = self.create_entry_block_alloca("question_else_opt", enum_ty.into())?;
         self.builder
             .build_store(opt_alloca, opt_struct)
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -3372,7 +3382,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
         let payload_raw = self
             .builder
-            .build_load(self.context.i64_type(), payload_ptr, "question_else_payload")
+            .build_load(
+                self.context.i64_type(),
+                payload_ptr,
+                "question_else_payload",
+            )
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
         let none_tag = self.get_pattern_tag(&none_arm.pattern)?;
 
@@ -3388,12 +3402,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         let is_none = self
             .builder
-            .build_int_compare(
-                IntPredicate::EQ,
-                tag_val,
-                none_tag,
-                "question_else_is_none",
-            )
+            .build_int_compare(IntPredicate::EQ, tag_val, none_tag, "question_else_is_none")
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
         self.builder
             .build_conditional_branch(is_none, none_bb, some_bb)
@@ -3420,10 +3429,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         } else {
             self.variables.remove(&capture_name);
         }
-        let some_block = self
-            .builder
-            .get_insert_block()
-            .unwrap_or(some_bb);
+        let some_block = self.builder.get_insert_block().unwrap_or(some_bb);
         if some_block.get_terminator().is_none() {
             let mut casted = some_val_raw;
             if let Some(target_ty) = phi_result_ty {
@@ -3442,10 +3448,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // None branch
         self.builder.position_at_end(none_bb);
         let none_val_raw = self.generate_expression(&none_arm.body)?;
-        let none_block = self
-            .builder
-            .get_insert_block()
-            .unwrap_or(none_bb);
+        let none_block = self.builder.get_insert_block().unwrap_or(none_bb);
         if none_block.get_terminator().is_none() {
             let mut casted = none_val_raw;
             if let Some(target_ty) = phi_result_ty {
@@ -3483,13 +3486,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 "question_else_result",
             )
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-        let incoming_dyn: Vec<(
-            &dyn inkwell::values::BasicValue<'ctx>,
-            BasicBlock<'ctx>,
-        )> = incoming
-            .iter()
-            .map(|(v, bb)| (v as &dyn inkwell::values::BasicValue<'ctx>, *bb))
-            .collect();
+        let incoming_dyn: Vec<(&dyn inkwell::values::BasicValue<'ctx>, BasicBlock<'ctx>)> =
+            incoming
+                .iter()
+                .map(|(v, bb)| (v as &dyn inkwell::values::BasicValue<'ctx>, *bb))
+                .collect();
         phi.add_incoming(&incoming_dyn);
         Ok(Some(phi.as_basic_value()))
     }
@@ -4426,7 +4427,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 } else {
                     None
                 };
-                eprintln!("match raw.is_struct_value={} is_pointer={}", raw.is_struct_value(), raw.is_pointer_value());
+                eprintln!(
+                    "match raw.is_struct_value={} is_pointer={}",
+                    raw.is_struct_value(),
+                    raw.is_pointer_value()
+                );
                 let scrut = if raw.is_struct_value() {
                     let tag_ptr = self
                         .builder
@@ -4627,7 +4632,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
                     }
                     let body_val_raw = self.generate_expression(&arm.body)?;
-                    eprintln!("arm {} body value type {}", i, body_val_raw.get_type().print_to_string().to_string());
+                    eprintln!(
+                        "arm {} body value type {}",
+                        i,
+                        body_val_raw.get_type().print_to_string().to_string()
+                    );
                     let body_val: BasicValueEnum<'ctx> = if body_val_raw.is_int_value() {
                         let int_val = body_val_raw.into_int_value();
                         if int_val.get_type() == self.context.i64_type() {
@@ -4642,16 +4651,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                         self.cast_to_int(body_val_raw, self.context.i64_type())?
                             .into()
                     };
-                    let arm_block = self
-                        .builder
-                        .get_insert_block()
-                        .unwrap_or(arm_blocks[i].0);
+                    let arm_block = self.builder.get_insert_block().unwrap_or(arm_blocks[i].0);
                     let has_terminator = arm_block.get_terminator().is_some();
-                    eprintln!(
-                        "arm {} terminator present? {}",
-                        i,
-                        has_terminator
-                    );
+                    eprintln!("arm {} terminator present? {}", i, has_terminator);
                     let mut flows_to_cont = false;
                     if !arm_returns && arm_block.get_terminator().is_none() {
                         self.builder
@@ -4781,13 +4783,11 @@ impl<'ctx> CodeGenerator<'ctx> {
 
             Expression::Question(inner) => {
                 let optional_val = self.generate_expression(inner)?;
-                let enum_ty = self
-                    .enum_struct
-                    .ok_or_else(|| {
-                        CodegenError::CompilationError(
-                            "optional enum type not available for question operator".to_string(),
-                        )
-                    })?;
+                let enum_ty = self.enum_struct.ok_or_else(|| {
+                    CodegenError::CompilationError(
+                        "optional enum type not available for question operator".to_string(),
+                    )
+                })?;
                 let current_fn = self.current_function.ok_or_else(|| {
                     CodegenError::CompilationError(
                         "question operator used outside of a function".to_string(),
@@ -4814,8 +4814,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     ));
                 };
 
-                let temp_alloca = self
-                    .create_entry_block_alloca("question_tmp", enum_ty.into())?;
+                let temp_alloca = self.create_entry_block_alloca("question_tmp", enum_ty.into())?;
                 self.builder
                     .build_store(temp_alloca, optional_struct)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -4847,14 +4846,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .build_conditional_branch(is_some, some_bb, none_bb)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
-                let ret_ast = self
-                    .current_function_return_ast
-                    .clone()
-                    .ok_or_else(|| {
-                        CodegenError::CompilationError(
-                            "question operator requires function return type".to_string(),
-                        )
-                    })?;
+                let ret_ast = self.current_function_return_ast.clone().ok_or_else(|| {
+                    CodegenError::CompilationError(
+                        "question operator requires function return type".to_string(),
+                    )
+                })?;
                 let payload_target_ast = match &ret_ast {
                     Type::Optional { inner } => inner.as_ref().clone(),
                     _ => {
@@ -9400,10 +9396,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         let prev_vars = std::mem::take(&mut self.variables);
                         self.current_function = Some(f);
                         let prev_ret_ast = self.current_function_return_ast.clone();
-                        let ret_ast = system_def
-                            .return_type
-                            .clone()
-                            .unwrap_or(Type::None);
+                        let ret_ast = system_def.return_type.clone().unwrap_or(Type::None);
                         self.current_function_return_ast = Some(ret_ast);
 
                         // Bind system parameters to allocas

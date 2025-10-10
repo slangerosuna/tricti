@@ -95,7 +95,7 @@ copy_file :: (from: String, to: String) -> bool => do
 move_file :: (from: String, to: String) -> bool => do
     if rename(String::clone(&from), String::clone(&to)):
         ret true
-    
+
     if copy_file(String::clone(&from), String::clone(&to)):
         ret remove_file(from)
     

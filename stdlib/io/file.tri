@@ -23,7 +23,8 @@ impl File:
         fd := posix_open(String::as_ptr(&path), O_RDONLY, 0)
         if fd < 0: ret none
 
-        ret some File { fd: fd, path: path, is_open: true }
+        path_obj := Path::new(path)
+        ret some File { fd: fd, path: path_obj, is_open: true }
 
     # Create file for writing (truncates if exists)
     # Returns Some(File) on success, None on error
@@ -31,7 +32,8 @@ impl File:
         fd := posix_open(String::as_ptr(&path), O_WRONLY or O_CREAT or O_TRUNC, 420)
         if fd < 0: ret none
 
-        ret some File { fd: fd, path: path, is_open: true }
+        path_obj := Path::new(path)
+        ret some File { fd: fd, path: path_obj, is_open: true }
 
     # Open file with custom flags and mode
     # flags: O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_APPEND
@@ -41,7 +43,8 @@ impl File:
         fd := posix_open(String::as_ptr(&path), flags, mode)
         if fd < 0: ret none
 
-        ret some File { fd: fd, path: path, is_open: true }
+        path_obj := Path::new(path)
+        ret some File { fd: fd, path: path_obj, is_open: true }
 
     # Open file for appending
     # Returns Some(File) on success, None on error
@@ -49,7 +52,8 @@ impl File:
         fd := posix_open(String::as_ptr(&path), O_WRONLY or O_CREAT or O_APPEND, 420)
         if fd < 0: ret none
 
-        ret some File { fd: fd, path: path, is_open: true }
+        path_obj := Path::new(path)
+        ret some File { fd: fd, path: path_obj, is_open: true }
 
     # Close file and release file descriptor
     # Returns true on success, false on error
@@ -187,12 +191,12 @@ impl Read for File:
 
     read_exact :: (&mut self, buf: *u8, len: u64) -> bool => do
         total := 0u64
-        loop:
-            if total >= len: ret true
+        while total < len:
             bytes := File::read_bytes(self, buf + total, len - total)? else: ret false
             if bytes == 0: ret false
-
             total = total + bytes
+
+        ret true
 
 # Implement Write trait for File
 impl Write for File:
@@ -201,12 +205,12 @@ impl Write for File:
 
     write_all :: (&mut self, buf: *u8, len: u64) -> bool => do
         total := 0u64
-        loop:
-            if total >= len: ret true
+        while total < len:
             bytes := File::write_bytes(self, buf + total, len - total)? else: ret false
             if bytes == 0: ret false
-
             total = total + bytes
+
+        ret true
 
     flush :: (&mut self) -> bool =>
         File::sync(self)

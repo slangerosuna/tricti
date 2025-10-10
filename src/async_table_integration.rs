@@ -6,6 +6,7 @@ use crate::table_runtime::{ColumnValue, RowId, TableRow, TableRuntime};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
@@ -24,6 +25,8 @@ pub struct AsyncTableRuntime {
     active_queries: Arc<RwLock<HashMap<QueryId, QueryFuture>>>,
     /// Configuration
     config: AsyncTableConfig,
+    /// Metrics tracking
+    total_queries_executed: AtomicU64,
 }
 
 /// Configuration for async table operations
@@ -213,6 +216,7 @@ impl AsyncTableRuntime {
             query_cache: Arc::new(RwLock::new(QueryCache::new())),
             active_queries: Arc::new(RwLock::new(HashMap::new())),
             config,
+            total_queries_executed: AtomicU64::new(0),
         }
     }
 
@@ -227,6 +231,7 @@ impl AsyncTableRuntime {
         // Check query cache first
         if self.config.enable_query_caching {
             if let Some(cached_result) = self.check_query_cache(&query_spec).await? {
+                self.total_queries_executed.fetch_add(1, Ordering::Relaxed);
                 return Ok(self.create_completed_future(query_id, task_id, cached_result));
             }
         }
@@ -290,6 +295,8 @@ impl AsyncTableRuntime {
 
         // Start async execution
         self.start_query_execution(query_id, execution_plan).await?;
+
+        self.total_queries_executed.fetch_add(1, Ordering::Relaxed);
 
         Ok(future)
     }
@@ -667,8 +674,7 @@ impl AsyncTableRuntime {
             active_queries: active_queries.len(),
             cache_hit_ratio: self.calculate_cache_hit_ratio(&cache.cache_stats),
             average_query_time: Duration::from_millis(100), // Placeholder
-            total_queries_executed: cache.cache_stats.plan_cache_hits
-                + cache.cache_stats.plan_cache_misses,
+            total_queries_executed: self.total_queries_executed.load(Ordering::Relaxed),
         }
     }
 

@@ -474,7 +474,10 @@ fn convert_block_leader(segment: &str) -> (String, bool) {
             return ensure_arrow_block(base, false);
         } else if trimmed_head.ends_with("? else") {
             if trace_question_else {
-                eprintln!("TRACE matched question_else: head={:?} tail={:?}", trimmed_head, tail);
+                eprintln!(
+                    "TRACE matched question_else: head={:?} tail={:?}",
+                    trimmed_head, tail
+                );
             }
             let inline_body = tail.trim_start();
             if inline_body.is_empty() {

@@ -250,7 +250,9 @@ Logs :: table
     assert_eq!(program.statements.len(), 1);
 
     match &program.statements[0] {
-    Statement::ConstDecl { name: _name, value, .. } => match value {
+        Statement::ConstDecl {
+            name: _name, value, ..
+        } => match value {
             ConstValue::TableDef(table) => {
                 let message_col = &table.columns[1];
                 assert_eq!(message_col.annotations.len(), 1);

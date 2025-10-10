@@ -24,7 +24,7 @@ impl Metadata:
     # Returns Some(metadata) on success, None on error
     from_path :: (path: String) -> ?Metadata => do
         stat_buf: [u8; 144] = [0; 144]
-    if posix_stat(String::as_ptr(&path), &stat_buf as *u8) ~= 0:
+        if posix_stat(String::as_ptr(&path), &stat_buf as *u8) ~= 0:
             ret none
 
         ret Metadata::parse_stat_buf(&stat_buf)
@@ -93,15 +93,15 @@ impl Metadata:
 
     # Check if readable
     is_readable :: (meta: &Metadata) -> bool =>
-    (meta.permissions and S_IRUSR) ~= 0
+        (meta.permissions and S_IRUSR) ~= 0
 
     # Check if writable
     is_writable :: (meta: &Metadata) -> bool =>
-    (meta.permissions and S_IWUSR) ~= 0
+        (meta.permissions and S_IWUSR) ~= 0
 
     # Check if executable
     is_executable :: (meta: &Metadata) -> bool =>
-    (meta.permissions and S_IXUSR) ~= 0
+        (meta.permissions and S_IXUSR) ~= 0
 
 # Trait implementations for Metadata
 impl Clone for Metadata:
