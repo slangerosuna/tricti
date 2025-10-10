@@ -28,7 +28,7 @@ tricti::tri_test_with_prelude!(
                 some value => println(value.to_string()),
                 none => println("unexpected none"),
     "#,
-    "propagated none\n0\n"
+    "propagated none\n8\n"
 );
 
 tricti::tri_test_with_prelude!(

@@ -3317,15 +3317,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if arguments.len() != 1 {
                     return Ok(None);
                 }
-                if let Expression::Identifier(capture) = &arguments[0].value {
-                    capture.clone()
+                if let Expression::Identifier(ident) = &arguments[0].value {
+                    ident.clone()
                 } else {
                     return Ok(None);
                 }
             }
-            _ => {
-                return Ok(None);
-            }
+            _ => return Ok(None),
         };
 
         if !matches!(&none_arm.pattern, Expression::Identifier(name) if name == "none") {
@@ -3336,19 +3334,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             return Ok(None);
         }
 
-        eprintln!(
-            "question_else specialization engaged: some_body={:?}, none_body={:?}",
-            some_arm.body,
-            none_arm.body
-        );
-
         let enum_ty = match self.enum_struct {
             Some(st) => st,
             None => return Ok(None),
         };
 
         let current_fn = match self.current_function {
-            Some(f) => f,
+            Some(func) => func,
             None => {
                 return Err(CodegenError::CompilationError(
                     "question-else match outside function".to_string(),
@@ -3367,15 +3359,30 @@ impl<'ctx> CodeGenerator<'ctx> {
             return Ok(None);
         };
 
+        let opt_alloca = self
+            .create_entry_block_alloca("question_else_opt", enum_ty.into())?;
+        self.builder
+            .build_store(opt_alloca, opt_struct)
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+
+        let tag_ptr = self
+            .builder
+            .build_struct_gep(enum_ty, opt_alloca, 0, "question_else_tag_ptr")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
         let tag_val = self
             .builder
-            .build_extract_value(opt_struct, 0, "question_else_tag")
+            .build_load(self.context.i64_type(), tag_ptr, "question_else_tag")
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?
             .into_int_value();
+        let payload_ptr = self
+            .builder
+            .build_struct_gep(enum_ty, opt_alloca, 1, "question_else_payload_ptr")
+            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
         let payload_raw = self
             .builder
-            .build_extract_value(opt_struct, 1, "question_else_payload")
+            .build_load(self.context.i64_type(), payload_ptr, "question_else_payload")
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let none_tag = self.get_pattern_tag(&none_arm.pattern)?;
 
         let some_bb = self
             .context
@@ -3387,17 +3394,17 @@ impl<'ctx> CodeGenerator<'ctx> {
             .context
             .append_basic_block(current_fn, "question_else.cont");
 
-        let is_some = self
+        let is_none = self
             .builder
             .build_int_compare(
-                IntPredicate::NE,
+                IntPredicate::EQ,
                 tag_val,
-                self.context.i64_type().const_zero(),
-                "question_else_is_some",
+                none_tag,
+                "question_else_is_none",
             )
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
         self.builder
-            .build_conditional_branch(is_some, some_bb, none_bb)
+            .build_conditional_branch(is_none, none_bb, some_bb)
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
         let mut incoming: Vec<(BasicValueEnum<'ctx>, BasicBlock<'ctx>)> = Vec::new();
@@ -3425,13 +3432,15 @@ impl<'ctx> CodeGenerator<'ctx> {
             .builder
             .get_insert_block()
             .unwrap_or(some_bb);
-        let some_terminates = some_block.get_terminator().is_some();
-        if !some_terminates {
-            let casted = {
-                let value_ty = some_val_raw.get_type();
-                phi_result_ty = Some(value_ty);
-                some_val_raw
-            };
+        if some_block.get_terminator().is_none() {
+            let mut casted = some_val_raw;
+            if let Some(target_ty) = phi_result_ty {
+                if casted.get_type() != target_ty {
+                    casted = self.cast_basic_to_type(casted, target_ty)?;
+                }
+            } else {
+                phi_result_ty = Some(casted.get_type());
+            }
             self.builder
                 .build_unconditional_branch(cont_bb)
                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -3445,19 +3454,15 @@ impl<'ctx> CodeGenerator<'ctx> {
             .builder
             .get_insert_block()
             .unwrap_or(none_bb);
-        let none_terminates = none_block.get_terminator().is_some();
-        if !none_terminates {
-            let casted = if let Some(target_ty) = phi_result_ty {
-                if none_val_raw.get_type() != target_ty {
-                    self.cast_basic_to_type(none_val_raw, target_ty)?
-                } else {
-                    none_val_raw
+        if none_block.get_terminator().is_none() {
+            let mut casted = none_val_raw;
+            if let Some(target_ty) = phi_result_ty {
+                if casted.get_type() != target_ty {
+                    casted = self.cast_basic_to_type(casted, target_ty)?;
                 }
             } else {
-                let value_ty = none_val_raw.get_type();
-                phi_result_ty = Some(value_ty);
-                none_val_raw
-            };
+                phi_result_ty = Some(casted.get_type());
+            }
             self.builder
                 .build_unconditional_branch(cont_bb)
                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -3473,8 +3478,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Some(BasicTypeEnum::StructType(st)) => st.get_undef().into(),
                 Some(BasicTypeEnum::VectorType(vt)) => vt.const_zero().into(),
                 Some(BasicTypeEnum::ArrayType(at)) => at.const_zero().into(),
-                Some(_) => self.context.i64_type().const_zero().into(),
-                None => self.context.i64_type().const_zero().into(),
+                Some(_) | None => self.context.i64_type().const_zero().into(),
             };
             return Ok(Some(zero));
         }
@@ -4975,7 +4979,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                             ));
                         }
                         let arg_val = self.generate_expression(&arguments[0].value)?;
+                        eprintln!(
+                            "constructing some with arg type {}",
+                            arg_val.get_type().print_to_string().to_string()
+                        );
                         let payload = self.cast_to_int(arg_val, self.context.i64_type())?;
+                        eprintln!(
+                            "converted payload type {}",
+                            payload.get_type().print_to_string().to_string()
+                        );
                         if let Some(enum_ty) = self.enum_struct {
                             let undef = enum_ty.get_undef();
                             let tagged = self
@@ -4993,6 +5005,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 .build_insert_value(tagged, payload, 1, "some_payload")
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                                 .into_struct_value();
+                            eprintln!(
+                                "some payload set with struct type {}",
+                                with_payload.get_type().print_to_string().to_string()
+                            );
                             return Ok(with_payload.as_basic_value_enum());
                         } else {
                             return Ok(self.context.i64_type().const_int(1, false).into());
@@ -6554,6 +6570,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
             }
             Expression::FieldAccess { object, field } => {
+                let mut cached_object_value: Option<BasicValueEnum<'ctx>> = None;
+                if !matches!(object.as_ref(), Expression::Identifier(_)) {
+                    cached_object_value = Some(self.generate_expression(object)?);
+                }
+
                 // Method call lowering: expr.method(args) => Type_method(self, args)
                 // Only support when expr is an identifier bound to a known struct
                 if let Expression::Identifier(var_name) = object.as_ref() {
@@ -7184,7 +7205,19 @@ impl<'ctx> CodeGenerator<'ctx> {
                         }
                     }
                 }
+                if field == "to_string" && arguments.is_empty() {
+                    let value = match cached_object_value {
+                        Some(v) => v,
+                        None => self.generate_expression(object)?,
+                    };
+                    return Ok(value);
+                }
                 // Fallback when we can't lower method
+                if cached_object_value.is_some() {
+                    // Already evaluated for side effects
+                } else if !matches!(object.as_ref(), Expression::Identifier(_)) {
+                    let _ = self.generate_expression(object)?;
+                }
                 Ok(self.context.i64_type().const_zero().into())
             }
             _ => Err(CodegenError::InvalidOperation(

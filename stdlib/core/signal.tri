@@ -140,7 +140,7 @@ impl<T> Signal<T>:
             BufferingStrategy::Unbounded => SignalBuffer::Unbounded { queue: [] },
             _ => SignalBuffer::Unbounded { queue: [] },
 
-        ret Signal<T>:
+        ret Signal<T> {
             name: name,
             topology: topology,
             buffering: buffering,
@@ -150,6 +150,7 @@ impl<T> Signal<T>:
             messages_sent: 0,
             messages_received: 0,
             messages_dropped: 0,
+        }
 
     # Register a sender
     register_sender :: (&mut self) -> !SenderId => do
