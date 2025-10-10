@@ -26,7 +26,13 @@ fn type_name_str(ty: &Type) -> String {
                 format!("*{}", type_name_str(pointee))
             }
         }
-        Type::RawPointer { pointee } => format!("*raw {}", type_name_str(pointee)),
+        Type::RawPointer { pointee, is_raw } => {
+            if *is_raw {
+                format!("*raw {}", type_name_str(pointee))
+            } else {
+                format!("*{}", type_name_str(pointee))
+            }
+        }
         Type::Reference { is_mutable, inner } => {
             if *is_mutable {
                 format!("&mut {}", type_name_str(inner))
@@ -1703,10 +1709,12 @@ fn parse_type(pair: pest::iterators::Pair<Rule>) -> Type {
         } else if trimmed.starts_with("*raw") {
             Type::RawPointer {
                 pointee: Box::new(pointee),
+                is_raw: true,
             }
         } else if trimmed.starts_with('*') {
             Type::RawPointer {
                 pointee: Box::new(pointee),
+                is_raw: false,
             }
         } else {
             Type::Pointer {

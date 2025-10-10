@@ -596,8 +596,9 @@ impl SemanticContext {
                 is_mutable: *is_mutable,
                 pointee: Box::new(self.substitute_type(pointee, params, args)),
             },
-            Type::RawPointer { pointee } => Type::RawPointer {
+            Type::RawPointer { pointee, is_raw } => Type::RawPointer {
                 pointee: Box::new(self.substitute_type(pointee, params, args)),
+                is_raw: *is_raw,
             },
             Type::Optional { inner } => Type::Optional {
                 inner: Box::new(self.substitute_type(inner, params, args)),
@@ -1543,8 +1544,9 @@ fn types_match_with_assoc_and_self(
                 is_mutable: *is_mutable,
                 pointee: Box::new(subst(pointee, assoc, self_type)),
             },
-            Type::RawPointer { pointee } => Type::RawPointer {
+            Type::RawPointer { pointee, is_raw } => Type::RawPointer {
                 pointee: Box::new(subst(pointee, assoc, self_type)),
+                is_raw: *is_raw,
             },
             Type::Optional { inner } => Type::Optional {
                 inner: Box::new(subst(inner, assoc, self_type)),
@@ -2047,7 +2049,7 @@ fn infer_expression_type(
             let object_type = infer_expression_type(object, context)?;
             // Resolve through pointers
             let mut base_ty = object_type.clone();
-            if let Type::Pointer { pointee, .. } | Type::RawPointer { pointee } = &object_type {
+            if let Type::Pointer { pointee, .. } | Type::RawPointer { pointee, .. } = &object_type {
                 base_ty = (*pointee.clone()).clone();
             }
             // If base is an identifier type referring to a struct, pick field type
@@ -2469,7 +2471,7 @@ fn peel_to_identifier_name(t: &Type) -> Option<String> {
     loop {
         match cur {
             Type::Pointer { pointee, .. } => cur = pointee.as_ref(),
-            Type::RawPointer { pointee } => cur = pointee.as_ref(),
+            Type::RawPointer { pointee, .. } => cur = pointee.as_ref(),
             Type::Optional { inner } => cur = inner.as_ref(),
             Type::Result { inner } => cur = inner.as_ref(),
             Type::Identifier { name, type_args: _ } => return Some(name.clone()),
@@ -2621,7 +2623,7 @@ fn infer_unary_op_type(operator: &UnaryOperator, operand: &Type) -> Result<Type,
         }),
 
         UnaryOperator::Deref => match operand {
-            Type::Pointer { pointee, .. } | Type::RawPointer { pointee } => {
+            Type::Pointer { pointee, .. } | Type::RawPointer { pointee, .. } => {
                 Ok(pointee.as_ref().clone())
             }
             _ => Err(SemanticError::InvalidOperation {
@@ -3778,7 +3780,7 @@ fn validate_type(type_def: &Type, context: &SemanticContext) -> Result<(), Seman
             }
         }
         Type::Pointer { pointee, .. } => validate_type(pointee, context),
-        Type::RawPointer { pointee } => validate_type(pointee, context),
+    Type::RawPointer { pointee, .. } => validate_type(pointee, context),
         Type::Reference { inner, .. } => validate_type(inner, context),
         Type::Optional { inner } => validate_type(inner, context),
         Type::Result { inner } => validate_type(inner, context),

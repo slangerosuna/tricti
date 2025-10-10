@@ -841,8 +841,12 @@ impl SystemScheduler {
                     Self::type_to_resource_id(pointee)
                 )
             }
-            Type::RawPointer { pointee } => {
-                format!("raw*{}", Self::type_to_resource_id(pointee))
+            Type::RawPointer { pointee, is_raw } => {
+                if *is_raw {
+                    format!("raw*{}", Self::type_to_resource_id(pointee))
+                } else {
+                    format!("*{}", Self::type_to_resource_id(pointee))
+                }
             }
             Type::Optional { inner } => {
                 format!("Option[{}]", Self::type_to_resource_id(inner))

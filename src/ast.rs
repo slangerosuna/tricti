@@ -378,6 +378,7 @@ pub enum Type {
     },
     RawPointer {
         pointee: Box<Type>,
+        is_raw: bool,
     },
     Optional {
         inner: Box<Type>,
