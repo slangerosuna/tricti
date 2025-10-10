@@ -22,7 +22,7 @@ fn compiles_minimal_program_to_object() {
     match &program.statements[2] {
         tricti::ast::Statement::Expression(tricti::ast::Expression::Call {
             function,
-            type_args,
+            type_args: _type_args,
             arguments,
         }) => {
             match function.as_ref() {

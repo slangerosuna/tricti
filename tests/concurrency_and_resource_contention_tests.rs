@@ -1,9 +1,8 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tricti::{
     ast::*, async_runtime::*, async_scheduler_integration::*, scheduler::*,
-    semantic::SemanticContext, system_executor::*, table_runtime::*,
+    semantic::SemanticContext,
 };
 
 /// Focused integration tests for concurrent systems and resource contention scenarios

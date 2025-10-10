@@ -29,13 +29,6 @@ mod async_execution_tests {
         Expression::Literal(integer_literal(value))
     }
 
-    fn argument(expr: Expression) -> Argument {
-        Argument {
-            name: None,
-            value: expr,
-        }
-    }
-
     fn resource_param(name: &str, access: ResourceAccess) -> SystemParameter {
         SystemParameter::Resource {
             param_type: "resource".to_string(),
@@ -463,7 +456,7 @@ mod async_execution_tests {
         // Test async table statistics
         let stats = async_table.get_stats();
         assert!(
-            stats.total_queries_executed >= 0,
+            stats.total_queries_executed > 0,
             "Should track query statistics"
         );
     }
@@ -1237,15 +1230,6 @@ mod integration_tests {
 
         // Test multiple error scenarios
         let task_id = TaskId::new();
-        let context = ErrorContext {
-            task_id,
-            system_name: "resilience_test".to_string(),
-            error_count: 0,
-            last_success_time: None,
-            available_resources: Vec::new(),
-            dependent_tasks: Vec::new(),
-        };
-
         // Test retry recovery
         let retry_result = error_manager
             .attempt_recovery(task_id, "retry")

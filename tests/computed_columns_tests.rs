@@ -60,7 +60,7 @@ fn test_computed_column_with_annotations() {
     assert_eq!(program.statements.len(), 1);
 
     match &program.statements[0] {
-        Statement::ConstDecl { name, value, .. } => match value {
+        Statement::ConstDecl { name: _name, value, .. } => match value {
             ConstValue::TableDef(table) => {
                 assert_eq!(table.columns.len(), 3);
 
@@ -93,7 +93,7 @@ fn test_computed_column_complex_expression() {
     assert_eq!(program.statements.len(), 1);
 
     match &program.statements[0] {
-        Statement::ConstDecl { name, value, .. } => {
+        Statement::ConstDecl { name: _name, value, .. } => {
             match value {
                 ConstValue::TableDef(table) => {
                     assert_eq!(table.columns.len(), 6);
@@ -136,7 +136,7 @@ fn test_mixed_regular_and_computed_columns() {
     assert_eq!(program.statements.len(), 1);
 
     match &program.statements[0] {
-        Statement::ConstDecl { name, value, .. } => {
+        Statement::ConstDecl { name: _name, value, .. } => {
             match value {
                 ConstValue::TableDef(table) => {
                     assert_eq!(table.columns.len(), 7);
@@ -182,7 +182,7 @@ fn test_computed_column_with_function_calls() {
     assert_eq!(program.statements.len(), 1);
 
     match &program.statements[0] {
-        Statement::ConstDecl { name, value, .. } => match value {
+        Statement::ConstDecl { name: _name, value, .. } => match value {
             ConstValue::TableDef(table) => {
                 assert_eq!(table.columns.len(), 4);
 

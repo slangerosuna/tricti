@@ -649,6 +649,7 @@ fn test_max_concurrent_limit() {
 }
 
 /// Helper function to create a test system with specific resource type (instead of generic TestResource)
+#[allow(dead_code)]
 fn create_gui_system(name: &str, param_name: &str, access: ResourceAccess) -> SystemDef {
     let parameters = vec![SystemParameter::Resource {
         param_type: "resource".to_string(),

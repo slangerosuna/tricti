@@ -444,12 +444,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 } else if let Some((st, _)) = self.struct_types.get("Vec") {
                     Some((*st).into())
                 } else {
-                    Some(
-                        self.context
-                            .i64_type()
-                            .ptr_type(AddressSpace::default())
-                            .into(),
-                    )
+                    Some(self.context.ptr_type(AddressSpace::default()).into())
                 }
             }
             AstType::None => Some(self.context.i64_type().into()),
@@ -484,10 +479,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let st = self.context.opaque_struct_type("Vec");
         st.set_body(
             &[
-                self.context
-                    .i64_type()
-                    .ptr_type(AddressSpace::default())
-                    .into(),
+                self.context.ptr_type(AddressSpace::default()).into(),
                 self.context.i64_type().into(),
                 self.context.i64_type().into(),
             ],
@@ -566,7 +558,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .build_struct_gep(vec_struct, alloca, cap_idx, "vec_cap_ptr")
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
 
-        let elem_ptr_ty = self.context.i64_type().ptr_type(AddressSpace::default());
+    let elem_ptr_ty = self.context.ptr_type(AddressSpace::default());
         let data_ptr = self
             .builder
             .build_load(elem_ptr_ty, data_field_ptr, "vec_data_load")
@@ -883,7 +875,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.builder
                     .build_unconditional_branch(merge_bb)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                let none_end_bb = self.builder.get_insert_block().unwrap();
+                let _none_end_bb = self.builder.get_insert_block().unwrap();
 
                 self.builder.position_at_end(some_bb);
                 let elem_ptr = unsafe {
@@ -917,7 +909,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.builder
                     .build_unconditional_branch(merge_bb)
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                let some_end_bb = self.builder.get_insert_block().unwrap();
+                let _some_end_bb = self.builder.get_insert_block().unwrap();
 
                 self.builder.position_at_end(merge_bb);
                 let loaded = self
@@ -3637,7 +3629,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             } => {
                 let (vec_struct, data_idx, len_idx, cap_idx) = self.vector_field_indices()?;
                 let i64_ty = self.context.i64_type();
-                let ptr_ty = i64_ty.ptr_type(AddressSpace::default());
+                let ptr_ty = self.context.ptr_type(AddressSpace::default());
 
                 let mut total_len: Option<IntValue<'ctx>> = None;
                 if let Some(len_expr) = length.as_ref() {
@@ -3785,7 +3777,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::VecLiteral { elements } => {
                 let (vec_struct, data_idx, len_idx, cap_idx) = self.vector_field_indices()?;
                 let i64_ty = self.context.i64_type();
-                let ptr_ty = i64_ty.ptr_type(AddressSpace::default());
+                let ptr_ty = self.context.ptr_type(AddressSpace::default());
                 let n = elements.len();
                 let len_val = i64_ty.const_int(n as u64, false);
                 let capacity_val = if n == 0 {
@@ -3862,7 +3854,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Matrix { rows } => {
                 let (vec_struct, data_idx, len_idx, cap_idx) = self.vector_field_indices()?;
                 let i64_ty = self.context.i64_type();
-                let ptr_ty = i64_ty.ptr_type(AddressSpace::default());
+                let ptr_ty = self.context.ptr_type(AddressSpace::default());
                 if rows.len() > 1 {
                     let null_vec = {
                         let null_ptr = ptr_ty.const_null();
@@ -5523,7 +5515,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }
                         } else if val.is_pointer_value() {
                             let pv = val.into_pointer_value();
-                            let enum_ptr = enum_ty.ptr_type(AddressSpace::default());
+                            let enum_ptr = self.context.ptr_type(AddressSpace::default());
                             let casted = self
                                 .builder
                                 .build_pointer_cast(pv, enum_ptr, &format!("{}_enum_cast", label))
@@ -5641,7 +5633,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             }
                         } else if val.is_pointer_value() {
                             let pv = val.into_pointer_value();
-                            let enum_ptr = enum_ty.ptr_type(AddressSpace::default());
+                            let enum_ptr = self.context.ptr_type(AddressSpace::default());
                             let casted = self
                                 .builder
                                 .build_pointer_cast(pv, enum_ptr, &format!("{}_enum_cast", label))
