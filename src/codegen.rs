@@ -970,6 +970,18 @@ impl<'ctx> CodeGenerator<'ctx> {
             .or_else(|| self.semantic.get_variable_type(name).cloned())
     }
 
+    fn default_value_for_type(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
+        match ty {
+            BasicTypeEnum::IntType(it) => it.const_zero().into(),
+            BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
+            BasicTypeEnum::PointerType(pt) => pt.const_zero().into(),
+            BasicTypeEnum::StructType(st) => st.const_zero().as_basic_value_enum(),
+            BasicTypeEnum::ArrayType(at) => at.const_zero().as_basic_value_enum(),
+            BasicTypeEnum::VectorType(vt) => vt.const_zero().as_basic_value_enum(),
+            BasicTypeEnum::ScalableVectorType(svt) => svt.const_zero().as_basic_value_enum(),
+        }
+    }
+
     fn drop_target_type_name(&self, ty: &crate::ast::Type) -> Option<String> {
         use crate::ast::Type as AstType;
         match ty {
@@ -1000,19 +1012,24 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn type_is_owned(&self, ty: &crate::ast::Type) -> bool {
-        self.drop_function_for_type(ty).is_some()
+        self.drop_target_type_name(ty).is_some()
     }
 
     fn track_owned_binding(&mut self, name: &str) {
         if self.current_function.is_none() {
             return;
         }
+        if let Some(current_fn) = self.current_function {
+            let fname = current_fn.get_name().to_string_lossy();
+            if fname.contains("_drop") {
+                return;
+            }
+        }
         if self.owned_locals.iter().any(|n| n == name) {
             return;
         }
         if let Some(ty) = self.owned_type_of(name) {
             if self.type_is_owned(&ty) {
-                eprintln!("tracking owned binding {name} with type {:?}", ty);
                 self.owned_locals.push(name.to_string());
             }
         }
@@ -1028,9 +1045,6 @@ impl<'ctx> CodeGenerator<'ctx> {
         if self.current_function.is_none() {
             return Ok(());
         }
-        if !self.owned_locals.iter().any(|n| n == name) {
-            return Ok(());
-        }
         let ty = match self.owned_type_of(name) {
             Some(t) => t,
             None => return Ok(()),
@@ -1043,24 +1057,48 @@ impl<'ctx> CodeGenerator<'ctx> {
             Some(f) => f,
             None => return Ok(()),
         };
-        let (ptr, stored_ty) = match self.variables.get(name) {
+        let (ptr, _stored_ty) = match self.variables.get(name) {
             Some((alloca, ty)) => (*alloca, *ty),
             None => return Ok(()),
         };
-        let loaded = self
-            .builder
-            .build_load(stored_ty, ptr, &format!("{}_drop_load", name))
-            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+        let mut call_args: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
+        for (idx, param_ty) in drop_fn.get_type().get_param_types().iter().enumerate() {
+            match param_ty {
+                inkwell::types::BasicMetadataTypeEnum::PointerType(pt) => {
+                    if idx == 0 {
+                        let casted = self
+                            .builder
+                            .build_pointer_cast(
+                                ptr,
+                                *pt,
+                                &format!("{}_drop_ptrcast_{}", name, idx),
+                            )
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        call_args.push(casted.into());
+                    } else {
+                        call_args.push(pt.const_zero().into());
+                    }
+                }
+                inkwell::types::BasicMetadataTypeEnum::IntType(it) => {
+                    call_args.push(it.const_zero().into());
+                }
+                inkwell::types::BasicMetadataTypeEnum::FloatType(ft) => {
+                    call_args.push(ft.const_zero().into());
+                }
+                _ => {
+                    call_args.push(self.context.i64_type().const_zero().into());
+                }
+            }
+        }
         let _ = self
             .builder
-            .build_call(drop_fn, &[loaded.into()], &format!("drop_call_{}", name))
+            .build_call(drop_fn, &call_args, &format!("drop_call_{}", name))
             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
         Ok(())
     }
 
     fn drop_all_owned_locals(&mut self) -> Result<(), CodegenError> {
         while let Some(name) = self.owned_locals.pop() {
-            eprintln!("dropping {name}");
             self.emit_drop_for_variable(&name)?;
             self.local_types.remove(&name);
             self.variables.remove(&name);
@@ -1994,6 +2032,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             } else {
                 self.context.i32_type().const_zero()
             };
+            self.drop_all_owned_locals()?;
             self.builder
                 .build_return(Some(&code_i32))
                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -2019,6 +2058,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .build_load(self.context.i32_type(), code_alloca, "retcode")
                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                 .into_int_value();
+            self.drop_all_owned_locals()?;
             self.builder
                 .build_return(Some(&code_i32))
                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
@@ -2952,9 +2992,20 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                 } else {
                     self.drop_all_owned_locals()?;
-                    self.builder
-                        .build_return(None)
-                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    let ret_ast = self
+                        .current_function_return_ast
+                        .clone()
+                        .unwrap_or(crate::ast::Type::None);
+                    if let Some(ret_ty) = self.map_ast_type(&ret_ast) {
+                        let default_value = self.default_value_for_type(ret_ty);
+                        self.builder
+                            .build_return(Some(&default_value))
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    } else {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    }
                 }
             }
 
@@ -6497,25 +6548,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
 
                     let arg_expr = &arguments[0].value;
-                    let arg_value = self.generate_expression(arg_expr)?;
-
                     if let Expression::Identifier(var_name) = arg_expr {
-                        if let Some(type_name) = self.semantic_struct_name_of_var(var_name) {
-                            let drop_fn_name = format!("Drop_{}_drop", type_name);
-                            if let Some(drop_fn) = self.functions.get(&drop_fn_name).cloned() {
-                                self
-                                    .builder
-                                    .build_call(drop_fn, &[arg_value.into()], "calldrop")
-                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                                self.unregister_owned(var_name);
-                                self.local_types.remove(var_name);
-                                self.variables.remove(var_name);
-                            }
-                        }
+                        self.drop_current_value(var_name)?;
+                        self.unregister_owned(var_name);
+                        self.local_types.remove(var_name);
+                        self.variables.remove(var_name);
                         self.mark_expr_moved(arg_expr);
+                        return Ok(self.context.i64_type().const_zero().into());
+                    } else {
+                        return Err(CodegenError::InvalidOperation(
+                            "drop currently only supports identifier arguments".to_string(),
+                        ));
                     }
-
-                    return Ok(self.context.i64_type().const_zero().into());
                 }
 
                 // Built-in __memmov(dst: *none, src: *none, size: u64) -> none
@@ -8354,27 +8398,6 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                         }
                     } else if value.is_pointer_value() {
-                        let ty_tmp = value.get_type().print_to_string();
-                        let ty_str = ty_tmp.to_string_lossy();
-                        eprintln!("println pointer value type: {}", ty_str);
-                        if let Expression::Identifier(name) = &arg.value {
-                            if let Some(ty) = self.local_types.get(name) {
-                                eprintln!(
-                                    "println pointer arg {} local type {:?}, is_string_arg={}",
-                                    name, ty, is_string_arg
-                                );
-                            } else if let Some(ty) = self.semantic.get_variable_type(name) {
-                                eprintln!(
-                                    "println pointer arg {} semantic type {:?}, is_string_arg={}",
-                                    name, ty, is_string_arg
-                                );
-                            } else {
-                                eprintln!(
-                                    "println pointer arg {} type <unknown>, is_string_arg={}",
-                                    name, is_string_arg
-                                );
-                            }
-                        }
                         let mut did_matrix = false;
                         // If this is a matrix-typed identifier, prefer special handling
                         if let Expression::Identifier(name) = &arg.value {
@@ -8875,6 +8898,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.module.print_to_stderr();
     }
 
+    pub fn ir_to_string(&self) -> String {
+        self.module.print_to_string().to_string()
+    }
+
     pub fn write_object_file(&self, filename: &str) -> Result<(), CodegenError> {
         // Verify module before emitting object to avoid backend crashes
         if let Err(msg) = self.module.verify() {
@@ -9128,6 +9155,19 @@ impl<'ctx> CodeGenerator<'ctx> {
                     match body {
                         FunctionBody::Expression(expr) => {
                             let val = self.generate_expression(expr)?;
+                            if let Some(current_bb) = self.builder.get_insert_block() {
+                                if current_bb.get_terminator().is_some() {
+                                    // Body already emitted a terminator (e.g., return inside expression)
+                                    self.variables = prev_vars;
+                                    self.current_function = prev_fn;
+                                    self.current_function_return_ast = prev_ret_ast;
+                                    self.owned_locals = prev_owned;
+                                    if let Some(bb) = prev_insert_block {
+                                        self.builder.position_at_end(bb);
+                                    }
+                                    continue;
+                                }
+                            }
                             self.mark_expr_moved(expr);
                             self.drop_all_owned_locals()?;
                             self.builder
@@ -9139,11 +9179,22 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 self.generate_statement(stmt)?;
                             }
                             // If no return, add implicit return
-                            if !statements.iter().any(|s| matches!(s, Statement::Return(_))) {
+                            if !Self::statements_contain_return(statements) {
                                 self.drop_all_owned_locals()?;
-                                self.builder
-                                    .build_return(None)
-                                    .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                let ret_ast = self
+                                    .current_function_return_ast
+                                    .clone()
+                                    .unwrap_or(crate::ast::Type::None);
+                                if let Some(ret_ty) = self.map_ast_type(&ret_ast) {
+                                    let default_value = self.default_value_for_type(ret_ty);
+                                    self.builder
+                                        .build_return(Some(&default_value))
+                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                } else {
+                                    self.builder
+                                        .build_return(None)
+                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                }
                             }
                         }
                     }

@@ -1759,6 +1759,17 @@ fn infer_expression_type(
                         }
                         return Ok(Type::None);
                     }
+                    if name == "drop" {
+                        if arguments.len() != 1 {
+                            return Err(SemanticError::ArgumentCountMismatch {
+                                expected: 1,
+                                found: arguments.len(),
+                            });
+                        }
+                        // Ensure the argument is well-typed even though drop accepts any owned type
+                        let _ = infer_expression_type(&arguments[0].value, context)?;
+                        return Ok(Type::None);
+                    }
                     // Support trait static-path calls: Trait_method(x, ...)
                     if let Some((trait_name, method_name)) = name.split_once('_') {
                         // Require at least one argument as receiver
