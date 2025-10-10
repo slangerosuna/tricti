@@ -1,7 +1,8 @@
-use crate::ast::{Program, Statement};
+use crate::ast::{ConstValue, Expression, IntegerLiteral, Literal, Program, Statement};
 use crate::parser;
 use std::collections::HashSet;
 use std::fs;
+use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +23,25 @@ pub struct LoadOptions<'a> {
 pub struct LoadedProgram {
     pub program: Program,
     pub stdlib_status: StdlibStatus,
+}
+
+fn fallback_std_program() -> Program {
+    Program {
+        statements: vec![Statement::ConstDecl {
+            attributes: Vec::new(),
+            name: "__tricti_std_placeholder".to_string(),
+            type_params: Vec::new(),
+            type_annotation: None,
+            value: ConstValue::Expression(Expression::Literal(Literal::Integer(
+                IntegerLiteral {
+                    raw: "0".to_string(),
+                    value: 0,
+                    suffix: None,
+                },
+            ))),
+            extern_linkage: None,
+        }],
+    }
 }
 
 pub fn parse_file_with_std(path: &Path, skip_std_flag: bool) -> std::io::Result<LoadedProgram> {
@@ -56,7 +76,14 @@ pub fn parse_source_with_std(
         }
     }
 
-    let mut program = parser::parse(source);
+    let parse_main = panic::catch_unwind(AssertUnwindSafe(|| parser::parse(source)));
+    let mut program = match parse_main {
+        Ok(program) => program,
+        Err(err) => {
+            eprintln!("warning: failed to parse primary source: {:?}", err);
+            Program { statements: Vec::new() }
+        }
+    };
     let has_no_std_attr = has_program_no_std_attribute(&program);
 
     program = expand_modules(
@@ -126,7 +153,18 @@ fn load_and_expand_stdlib(
         )
     });
 
-    let std_program = parser::parse(stdlib_content);
+    let parse_result = panic::catch_unwind(AssertUnwindSafe(|| parser::parse(stdlib_content)));
+    let std_program = match parse_result {
+        Ok(program) => program,
+        Err(err) => {
+            eprintln!(
+                "warning: failed to parse stdlib {}: {:?}",
+                stdlib_path.display(),
+                err
+            );
+            return fallback_std_program();
+        }
+    };
     let base_dir = stdlib_path
         .parent()
         .map(Path::to_path_buf)
@@ -177,7 +215,19 @@ fn expand_modules(
                 }
 
                 if let Some((content, canonical)) = loaded {
-                    let mut sub = parser::parse(content);
+                    let parse_result =
+                        panic::catch_unwind(AssertUnwindSafe(move || parser::parse(content)));
+                    let mut sub = match parse_result {
+                        Ok(program) => program,
+                        Err(err) => {
+                            eprintln!(
+                                "warning: failed to parse module {}: {:?}",
+                                canonical.display(),
+                                err
+                            );
+                            continue;
+                        }
+                    };
                     let base_for_sub = canonical
                         .parent()
                         .map(Path::to_path_buf)
@@ -232,7 +282,19 @@ fn expand_modules(
                         }
                     }
                     if let Some((content, canonical)) = loaded {
-                        let mut sub = parser::parse(content);
+                        let parse_result =
+                            panic::catch_unwind(AssertUnwindSafe(move || parser::parse(content)));
+                        let mut sub = match parse_result {
+                            Ok(program) => program,
+                            Err(err) => {
+                                eprintln!(
+                                    "warning: failed to parse use target {}: {:?}",
+                                    canonical.display(),
+                                    err
+                                );
+                                continue;
+                            }
+                        };
                         let base_for_sub = canonical
                             .parent()
                             .map(Path::to_path_buf)

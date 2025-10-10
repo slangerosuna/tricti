@@ -6,13 +6,13 @@ use core::traits
 mod marshal;
 
 # C-compatible types
-CInt :: type = i32
-CUInt :: type = u32
-CLong :: type = i64
-CULong :: type = u64
-CSize :: type = u64
-CChar :: type = u8
-CVoid :: type = none
+CInt :: i32
+CUInt :: u32
+CLong :: i64
+CULong :: u64
+CSize :: u64
+CChar :: u8
+CVoid :: none
 
 # Dynamic library handle
 DynLib :: struct

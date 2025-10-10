@@ -22,7 +22,7 @@ impl File:
     open :: (path: String) -> ?File => do
         fd := posix_open(String::as_ptr(&path), O_RDONLY, 0)
         if fd < 0: ret none
-        
+
         ret some File { fd: fd, path: path, is_open: true }
 
     # Create file for writing (truncates if exists)

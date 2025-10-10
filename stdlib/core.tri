@@ -16,4 +16,3 @@ use core::string
 use core::system
 use core::table
 use core::traits
-use core::trigger

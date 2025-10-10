@@ -127,8 +127,8 @@ impl<T> RingBuffer<T>:
 impl<T> Signal<T>:
     # Create a new signal with specified configuration
     new :: (name: String, topology: SignalTopology, 
-            buffering: BufferingStrategy) -> Signal<T> => do
-        buffer := match buffering:
+            buffering: BufferingStrategy) -> Signal<T> => {
+        buffer := match buffering {
             BufferingStrategy::FIFO { capacity } => SignalBuffer::FIFO {
                 queue: RingBuffer::new(capacity),
                 capacity: capacity,
@@ -139,8 +139,9 @@ impl<T> Signal<T>:
             },
             BufferingStrategy::Unbounded => SignalBuffer::Unbounded { queue: [] },
             _ => SignalBuffer::Unbounded { queue: [] },
+        }
 
-        ret Signal<T> {
+        Signal<T> {
             name: name,
             topology: topology,
             buffering: buffering,
@@ -151,6 +152,7 @@ impl<T> Signal<T>:
             messages_received: 0,
             messages_dropped: 0,
         }
+    }
 
     # Register a sender
     register_sender :: (&mut self) -> !SenderId => do
@@ -195,7 +197,7 @@ impl<T> Signal<T>:
             }
         
         # Handle based on buffering strategy
-        sucess := match &mut self.buffer:
+        send_result := match &mut self.buffer:
             SignalBuffer::FIFO { queue, .. } =>
                 queue.push(message)
             SignalBuffer::Overwrite { queue, .. } => do
@@ -211,10 +213,10 @@ impl<T> Signal<T>:
                 queue.push(message)
                 ok none
             _ => ok none,
-        match sucess:
-            ok => do
+        match send_result:
+            ok _ => do
                 self.messages_sent += 1
-                ret ok value
+                ret ok none
             err err_ => ret err err_
 
     # Receive a message (blocking)
@@ -227,7 +229,7 @@ impl<T> Signal<T>:
             }
         
         # Get message from buffer
-        sucess := match &mut self.buffer:
+        receive_result := match &mut self.buffer:
             SignalBuffer::FIFO { queue, .. } => queue.pop(),
             SignalBuffer::Overwrite { queue, .. } => queue.pop(),
             SignalBuffer::Unbounded { queue } =>
@@ -235,7 +237,7 @@ impl<T> Signal<T>:
                     err StdError::Message { message: "No messages available" }
                 else: ok queue.remove(0)?
             _ => err StdError::Message { message: "Receive not supported" },
-        match sucess:
+        match receive_result:
             ok value => do
                 self.messages_received += 1
                 ret ok value

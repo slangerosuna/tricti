@@ -22,15 +22,20 @@ ColumnType :: enum
     Bool,
     String,
     Bytes,
-    Custom { type_name: string },
+    Custom :: struct
+        type_name: string,
 
 ColumnConstraint :: enum
     PrimaryKey,
     NotNull,
     Unique,
-    ForeignKey { table_: String, column: String },
-    Check { predicate: String },
-    Default { value: String },
+    ForeignKey :: struct
+        table_: String,
+        column: String,
+    Check :: struct
+        predicate: String,
+    Default :: struct
+        value: String,
 
 ColumnDef :: struct
     name: String,
@@ -64,9 +69,12 @@ RowVersion :: struct
     row_data: *none,  # pointer to actual row data
 
 TransactionState :: enum
-    Active { started_at: Timestamp },
-    Committed { committed_at: Timestamp },
-    Aborted { aborted_at: Timestamp },
+    Active :: struct
+        started_at: Timestamp,
+    Committed :: struct
+        committed_at: Timestamp,
+    Aborted :: struct
+        aborted_at: Timestamp,
 
 TransactionLog :: struct
     transaction_id: TransactionId,

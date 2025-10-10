@@ -6,72 +6,82 @@ use core::system
 use core::signal
 use core::errors
 
+# Duration millisecond type alias for optional handling
+DurationMillis :: u64
+
 # =============================================================================
 # TRIGGER DEFINITIONS
 # =============================================================================
 
-TriggerDef :: {
+TriggerDef :: struct
     name: String,
     trigger_type: TriggerType,
     composed_systems: CompositionGraph,
     
     # Execution semantics
     is_async: bool,
-    max_execution_time_ms: ?u64,
-}
+    max_execution_time_ms: ?DurationMillis,
 
-TriggerType :: enum {
+TriggerType :: enum
     # Triggered by a signal
-    Signal { signal_name: String },
+    Signal :: struct
+        signal_name: String,
     
     # Triggered by database change
-    Database { table_name: String, operation: DBOperation },
+    Database :: struct
+        table_name: String,
+        operation: DBOperation,
     
     # Periodic trigger
-    Scheduled { interval_ms: u64 },
+    Scheduled :: struct
+        interval_ms: u64,
     
     # Manual trigger
     Manual,
     
     # Application startup
     Init,
-}
 
-DBOperation :: enum {
+DBOperation :: enum
     Insert,
     Update,
     Delete,
     Any,
-}
 
 # =============================================================================
 # COMPOSITION GRAPH
 # =============================================================================
 
-CompositionGraph :: {
+CompositionGraph :: struct
     nodes: [CompositionNode],
     edges: [CompositionEdge],
-}
 
-CompositionNode :: enum {
-    System { name: string },
-    Fork { branches: [CompositionGraph] },
-    Merge { inputs: [String] },
-    Conditional { predicate: String, true_branch: *CompositionGraph, false_branch: ?*CompositionGraph },
-}
+CompositionGraphPtr :: *CompositionGraph
 
-CompositionEdge :: {
+CompositionNode :: enum
+    System :: struct
+        name: string,
+    Fork :: struct
+        branches: [CompositionGraph],
+    Merge :: struct
+        inputs: [String],
+    Conditional :: struct
+        predicate: String,
+        true_branch: CompositionGraphPtr,
+        false_branch: ?CompositionGraphPtr,
+
+CompositionEdge :: struct
     from: String,  # System or node name
     to: String,
     edge_semantics: EdgeSemantics,
-}
 
-EdgeSemantics :: enum {
+EdgeSemantics :: enum
     # Sequential: wait for completion
     Sequential,
     
     # Optional: may or may not execute based on result
-    Optional { on_condition: String },
+    Optional :: struct
+        on_condition: String,
     
     # Parallel: execute concurrently
     Parallel,
@@ -81,7 +91,6 @@ EdgeSemantics :: enum {
     
     # Fan-in: wait for all inputs
     FanIn,
-}
 
 # =============================================================================
 # COMPOSITION DSL PARSER
@@ -92,20 +101,19 @@ EdgeSemantics :: enum {
 # foo -> (a, b) -> merge
 # (a, b) -> c
 
-CompositionParser :: {
+CompositionParser :: struct
     tokens: [Token],
     position: u64,
-}
 
-Token :: enum {
-    Identifier { name: string },
+Token :: enum
+    Identifier :: struct
+        name: string,
     Arrow,           # ->
     OptionalArrow,   # ?->
     ParenOpen,       # (
     ParenClose,      # )
     Comma,           # ,
     Pipe,            # |
-}
 
 impl CompositionParser {
     new :: (source: string) -> CompositionParser => {
@@ -160,29 +168,29 @@ impl CompositionParser {
             name := self.previous_token_value()
             ok CompositionExpr::System { name: name }
         }
-        # Grouped expression (a, b)
-        else if self.match_token(Token::ParenOpen) {
-            systems := []
-            
-            loop {
-                if self.match_identifier() {
-                    systems.push(self.previous_token_value())
-                }
+            else {
+                # Grouped expression (a, b)
+                if self.match_token(Token::ParenOpen) {
+                    systems := []
                 
-                if ~self.match_token(Token::Comma) {
-                    break
+                    loop {
+                        if self.match_identifier() {
+                            systems.push(self.previous_token_value())
+                        }
+                    
+                        if ~self.match_token(Token::Comma) {
+                            break
+                        }
+                    }
+                
+                    self.expect_token(Token::ParenClose)?
+                
+                    ok CompositionExpr::Parallel { systems: systems }
+                } else {
+                    err StdError::Message {
+                        message: "Expected identifier or grouped expression",
+                    }
                 }
-            }
-            
-            self.expect_token(Token::ParenClose)?
-            
-            ok CompositionExpr::Parallel { systems: systems }
-        }
-        else {
-            err StdError::Message {
-                message: "Expected identifier or grouped expression",
-            }
-        }
     }
 
     match_token :: (&mut self, token_type: Token) -> bool => {
@@ -217,12 +225,17 @@ impl CompositionParser {
     }
 }
 
-CompositionExpr :: enum {
-    System { name: String },
-    Sequential { left: *CompositionExpr, right: *CompositionExpr },
-    Optional { left: *CompositionExpr, right: *CompositionExpr },
-    Parallel { systems: [String] },
-}
+CompositionExpr :: enum
+    System :: struct
+        name: String,
+    Sequential :: struct
+        left: *CompositionExpr,
+        right: *CompositionExpr,
+    Optional :: struct
+        left: *CompositionExpr,
+        right: *CompositionExpr,
+    Parallel :: struct
+        systems: [String],
 
 tokenize :: (source: String) -> [Token] => {
     # TODO: Implement lexer
@@ -233,27 +246,26 @@ tokenize :: (source: String) -> [Token] => {
 # TRIGGER EXECUTOR
 # =============================================================================
 
-TriggerExecutor :: {
+TriggerExecutor :: struct
     triggers: HashMap<String, TriggerDef>,
     active_executions: [TriggerExecution],
     
     # Signal subscriptions
     signal_subscribers: HashMap<String, [String]>,  # signal_name -> trigger_names
-}
 
-TriggerExecution :: {
+TriggerExecution :: struct
     trigger_name: String,
     started_at: u64,
     status: ExecutionStatus,
     current_system: ?String,
-}
 
-ExecutionStatus :: enum {
+ExecutionStatus :: enum
     Running,
-    Completed { result: *none },
-    Failed { error: StdError },
+    Completed :: struct
+        result: *none,
+    Failed :: struct
+        error: StdError,
     Cancelled,
-}
 
 impl TriggerExecutor {
     new :: () -> TriggerExecutor => {
@@ -334,9 +346,8 @@ compose :: () -> CompositionBuilder => {
     CompositionBuilder::new()
 }
 
-CompositionBuilder :: {
+CompositionBuilder :: struct
     graph: CompositionGraph,
-}
 
 impl CompositionBuilder {
     new :: () -> CompositionBuilder => {
@@ -385,3 +396,4 @@ impl CompositionBuilder {
         self.graph.clone()
     }
 }
+

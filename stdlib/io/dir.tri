@@ -34,30 +34,20 @@ impl DirEntry:
 # Trait implementations for DirEntry
 impl Clone for DirEntry:
     clone :: (&self) -> DirEntry => do
-        DirEntry:
+        DirEntry {
             name: String::clone(&self.name),
             path: String::clone(&self.path),
             is_dir: self.is_dir,
             is_file: self.is_file,
+        }
 
 impl Display for DirEntry:
     to_string :: (&self) -> String =>
         String::clone(&self.name)
 
 impl Debug for DirEntry:
-    debug_string :: (&self) -> String => do
-        result := String::from("DirEntry { name: ")
-
-        String::push_char(&result, 34)
-        String::push_str(&result, &self.name)
-        String::push_char(&result, 34)
-        String::push_str(&result, &String::from(", path: "))
-        String::push_char(&result, 34)
-        String::push_str(&result, &self.path)
-        String::push_char(&result, 34)
-        String::push_str(&result, &String::from(" }"))
-
-        ret result
+    debug_string :: (&self) -> String =>
+        String::clone(&self.name)
 
 impl Drop for DirEntry:
     drop :: (*self) => do
@@ -142,7 +132,6 @@ read_dirent_name :: (dirent_ptr: *u8) -> String => do
 
         String::push_char(&result, ch)
         i += 1
-
     ret result
 
 # Helper: Get directory entry type from dirent structure
