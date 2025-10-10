@@ -116,14 +116,14 @@ impl<T> ParVec<T>:
         if self.len > 0:
             old_size := self.len * sizeof<T>()
             unsafe: memcpy(new_data as *raw u8, self.data as *raw u8, old_size)
-            if self.data != (unsafe { 0 as *raw T }):
+            if self.data ~= (unsafe { 0 as *raw T }):
                 unsafe: free(self.data as *raw u8)
 
         self.data = new_data
         self.capacity = new_cap
 
     destroy :: (&mut self) => do
-        if self.data != (unsafe { 0 as *raw T }):
+    if self.data ~= (unsafe { 0 as *raw T }):
             unsafe: free(self.data as *raw u8)
             self.data = unsafe { 0 as *raw T }
 
@@ -412,7 +412,7 @@ impl ParVec<i64>:
         if self.len == 0: ret ParVec::new()
         
         if num_threads <= 1 {
-            ret self.filter(|x| x % 2 != 0)
+            ret self.filter(|x| x % 2 ~= 0)
         }
         
         result := ParVec::with_capacity(self.len)

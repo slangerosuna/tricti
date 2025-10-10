@@ -309,7 +309,7 @@ impl Allocator {
 
     shutdown :: (&mut self) -> !none => {
         # Return heap to OS
-        if self.heap_start != unsafe { none as *u8 } {
+    if self.heap_start ~= unsafe { none as *u8 } {
             platform_deallocate_heap(self.heap_start, self.heap_size)?
         }
 

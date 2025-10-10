@@ -27,7 +27,7 @@ cstr_to_string :: (cstr: *raw u8) -> String => do
 
 # Free C string allocated by string_to_cstr
 free_cstr :: (cstr: *raw u8) => do
-    if cstr != (unsafe { 0 as *raw u8 }):
+    if cstr ~= (unsafe { 0 as *raw u8 }):
         ffi::free(cstr)
 
 # Convert TriCTI array to C array

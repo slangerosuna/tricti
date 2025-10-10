@@ -15,7 +15,8 @@ Path :: struct
 
 impl Path:
     # Create new path from string
-    new :: (path: String) -> Path => Path { path: path }
+    new :: (path: String) -> Path =>
+        Path { path: path }
     
     # Check if path exists (file or directory)
     exists :: (path: &Path) -> bool =>
@@ -24,7 +25,7 @@ impl Path:
     # Check if path is a regular file
     is_file :: (path: &Path) -> bool => do
         stat_buf: [u8; 144] = [0; 144]
-        if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) != 0:
+    if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) ~= 0:
             ret false
         
         mode_ptr := (&stat_buf[24]) as *u32
@@ -36,7 +37,7 @@ impl Path:
     # Check if path is a directory
     is_dir :: (path: &Path) -> bool => do
         stat_buf: [u8; 144] = [0; 144]
-        if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) != 0:
+    if posix_stat(String::as_ptr(&path.path), &stat_buf as *u8) ~= 0:
             ret false
         
         mode_ptr := (&stat_buf[24]) as *u32
@@ -90,33 +91,36 @@ impl Path:
     join :: (path: &Path, other: String) -> Path => do
         result := String::clone(&path.path)
         
-        if result.len > 0 and result.data[result.len - 1] != 47:
+    if result.len > 0 and result.data[result.len - 1] ~= 47:
             String::push_char(&result, 47)
         
         String::push_str(&result, &other)
         ret Path { path: result }
     
     # Convert to string
-    to_string :: (path: &Path) -> String => String::clone(&path.path)
+    to_string :: (path: &Path) -> String =>
+        String::clone(&path.path)
     
     # Get path as C string pointer
-    as_ptr :: (path: &Path) -> *u8 =>String::as_ptr(&path.path)
+    as_ptr :: (path: &Path) -> *u8 =>
+        String::as_ptr(&path.path)
 
 # Trait implementations for Path
 impl Clone for Path:
     clone :: (&self) -> Path =>
         Path { path: String::clone(&self.path) }
 
-impl Display for Path: to_string :: (&self) -> String => self.path.clone()
+impl Display for Path:
+    to_string :: (&self) -> String =>
+        String::clone(&self.path)
 
 impl Debug for Path:
     debug_string :: (&self) -> String => do
         result := String::from_cstr("Path(\"" as *u8)
-
         String::push_str(&result, &self.path)
         String::push_str(&result, &String::from_cstr("\")" as *u8))
+        ret result
 
-        result
-
-impl Drop for Path: drop :: (*self) =>
-    String::destroy(&mut self.path)
+impl Drop for Path:
+    drop :: (*self) => do
+        String::destroy(&mut self.path)
