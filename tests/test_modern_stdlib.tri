@@ -29,7 +29,7 @@ test_modern_errors :: () => do
 
     # Test result helper functions
     assert(std_result_is_ok(ok_result))
-    assert(!std_result_is_ok(err_result))
+    assert(not std_result_is_ok(err_result))
 
     assert_eq(std_result_unwrap(ok_result), 42)
     assert(std_result_error(err_result) ~= none)

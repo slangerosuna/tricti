@@ -24,7 +24,7 @@ main :: () -> i32 => do
     assert(map.get("key2") == some "value2")
     assert(map.get("key3") == none)
     assert(map.contains_key("key1"))
-    assert(!map.contains_key("key3"))
+    assert(not map.contains_key("key3"))
 
     # Test HashSet
     set := HashSet::new()
@@ -34,7 +34,7 @@ main :: () -> i32 => do
     assert(set.len() == 2)
     assert(set.contains("item1"))
     assert(set.contains("item2"))
-    assert(!set.contains("item3"))
+    assert(not set.contains("item3"))
 
     println("All collection tests passed!")
     ret 0
