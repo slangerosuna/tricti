@@ -15,7 +15,7 @@ fn trait_static_dispatch_e2e() {
             val :: (self: &point) -> i64 => 111
         impl ValLike for point:
             val :: (self: &point) -> i64 => 222
-        main :: () -> i64 =>
+        main :: () -> i64 => do
             p: point := { x: 5 }
             println(p.val())
             0

@@ -18,7 +18,7 @@ fn trait_impl_static_dispatch_runs() {
             T :: i32,
             next :: (self: &mut my_struct) -> ?i32 => some 5
 
-        main :: () -> i64 =>
+        main :: () -> i64 => do
             my_var := my_struct { x: 10 }
             println(my_var.next())
             ret 0

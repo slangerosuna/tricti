@@ -23,7 +23,7 @@ fn trait_impl_static_dispatch_runs() {
             T :: i32,
             next :: (self: &mut my_struct) -> ?i32 => 5
         call_next :: () -> i64 => 5
-        main :: () -> i64 =>
+        main :: () -> i64 => do
             println(call_next())
             0
     "#;
@@ -67,7 +67,7 @@ fn trait_static_dispatch_e2e() {
             val :: (self: &point) -> i64 => 111
         impl ValLike for point:
             val :: (self: &point) -> i64 => 222
-        main :: () -> i64 =>
+        main :: () -> i64 => do
             p: point := { x: 5 }
             println(p.val())
             0
@@ -111,7 +111,7 @@ fn trait_static_path_call_e2e() {
             val :: (self: &point) -> i64 => 111
         impl ValLike for point:
             val :: (self: &point) -> i64 => 222
-        main :: () -> i64 =>
+        main :: () -> i64 => do
             p: point := { x: 5 }
             v: i64 := ValLike::val(p)
             println(v)
@@ -154,7 +154,7 @@ fn ambiguous_trait_method_errors() {
             foo :: (self: &T) -> i64 => 1
         impl TB for T:
             foo :: (self: &T) -> i64 => 2
-        main :: () -> i64 =>
+        main :: () -> i64 => do
             t: T := { x: 5 }
             println(t.foo())
             0
