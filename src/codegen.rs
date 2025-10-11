@@ -1068,11 +1068,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     if idx == 0 {
                         let casted = self
                             .builder
-                            .build_pointer_cast(
-                                ptr,
-                                *pt,
-                                &format!("{}_drop_ptrcast_{}", name, idx),
-                            )
+                            .build_pointer_cast(ptr, *pt, &format!("{}_drop_ptrcast_{}", name, idx))
                             .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
                         call_args.push(casted.into());
                     } else {
@@ -2178,9 +2174,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     Expression::Identifier(name) => {
                         let (variable_ptr, var_ty) = match self.variables.get(name) {
                             Some((ptr, ty)) => (*ptr, *ty),
-                            None => {
-                                return Err(CodegenError::UndefinedVariable(name.clone()))
-                            }
+                            None => return Err(CodegenError::UndefinedVariable(name.clone())),
                         };
                         self.drop_current_value(name)?;
                         // Track rank/length if assigning a matrix literal
@@ -2995,10 +2989,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         Ok(v) => v,
                         Err(err) => {
                             if trace_return {
-                                eprintln!(
-                                    "TRACE_RETURN return expression codegen failed: {}",
-                                    err
-                                );
+                                eprintln!("TRACE_RETURN return expression codegen failed: {}", err);
                             }
                             return Err(err);
                         }
@@ -9195,10 +9186,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                                 .get(i - 1)
                                 .map(|p| p.name.clone())
                                 .unwrap_or(format!("arg{}", i - 1));
-                            self.variables.insert(param_name.clone(), (alloca, param_ty));
-                            if let Some(ast_ty) = parameters
-                                .get(i - 1)
-                                .and_then(|p| p.param_type.clone())
+                            self.variables
+                                .insert(param_name.clone(), (alloca, param_ty));
+                            if let Some(ast_ty) =
+                                parameters.get(i - 1).and_then(|p| p.param_type.clone())
                             {
                                 self.record_unsigned_binding(&param_name, &ast_ty);
                                 self.local_types.insert(param_name.clone(), ast_ty);
@@ -9243,13 +9234,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                                     .unwrap_or(crate::ast::Type::None);
                                 if let Some(ret_ty) = self.map_ast_type(&ret_ast) {
                                     let default_value = self.default_value_for_type(ret_ty);
-                                    self.builder
-                                        .build_return(Some(&default_value))
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                    self.builder.build_return(Some(&default_value)).map_err(
+                                        |e| CodegenError::CompilationError(e.to_string()),
+                                    )?;
                                 } else {
-                                    self.builder
-                                        .build_return(None)
-                                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                                    self.builder.build_return(None).map_err(|e| {
+                                        CodegenError::CompilationError(e.to_string())
+                                    })?;
                                 }
                             }
                         }
@@ -9719,37 +9710,31 @@ impl<'ctx> CodeGenerator<'ctx> {
                                         name,
                                         resource_type,
                                         access,
-                                    } => {
-                                        match access {
-                                            ResourceAccess::Immutable | ResourceAccess::Mutable => {
-                                                let ty = self
-                                                    .context
-                                                    .ptr_type(AddressSpace::default())
-                                                    .into();
-                                                (
-                                                    name.clone(),
-                                                    ty,
-                                                    Some(crate::ast::Type::Pointer {
-                                                        is_mutable: matches!(
-                                                            access,
-                                                            ResourceAccess::Mutable
-                                                        ),
-                                                        pointee: Box::new(resource_type.clone()),
-                                                    }),
-                                                )
-                                            }
-                                            ResourceAccess::Owned => {
-                                                let ty = self
-                                                    .map_ast_type(resource_type)
-                                                    .unwrap_or(self.context.i64_type().into());
-                                                (
-                                                    name.clone(),
-                                                    ty,
-                                                    Some(resource_type.clone()),
-                                                )
-                                            }
+                                    } => match access {
+                                        ResourceAccess::Immutable | ResourceAccess::Mutable => {
+                                            let ty = self
+                                                .context
+                                                .ptr_type(AddressSpace::default())
+                                                .into();
+                                            (
+                                                name.clone(),
+                                                ty,
+                                                Some(crate::ast::Type::Pointer {
+                                                    is_mutable: matches!(
+                                                        access,
+                                                        ResourceAccess::Mutable
+                                                    ),
+                                                    pointee: Box::new(resource_type.clone()),
+                                                }),
+                                            )
                                         }
-                                    }
+                                        ResourceAccess::Owned => {
+                                            let ty = self
+                                                .map_ast_type(resource_type)
+                                                .unwrap_or(self.context.i64_type().into());
+                                            (name.clone(), ty, Some(resource_type.clone()))
+                                        }
+                                    },
                                     SystemParameter::Regular {
                                         param_type: _,
                                         name,
@@ -9759,11 +9744,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                                         let ty = self
                                             .map_ast_type(&value_type)
                                             .unwrap_or(self.context.i64_type().into());
-                                        (
-                                            name.clone(),
-                                            ty,
-                                            Some(value_type.clone()),
-                                        )
+                                        (name.clone(), ty, Some(value_type.clone()))
                                     }
                                 };
 

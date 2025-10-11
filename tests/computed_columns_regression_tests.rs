@@ -8,12 +8,11 @@ use tricti::semantic;
 #[test]
 fn test_computed_column_with_function_calls() {
     let src = r#"
-        Analytics :: table {
+        Analytics :: table
             raw_data: String,
             processed_length: computed(len(raw_data)),
             normalized_data: computed(trim(raw_data)),
             is_valid: computed(processed_length > 0),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -56,13 +55,12 @@ fn test_computed_column_with_function_calls() {
 #[test]
 fn test_computed_column_with_math_functions_and_constants() {
     let src = r#"
-        Circle :: table {
+        Circle :: table
             radius: f64,
             area: computed(3.14159 * radius * radius),
             circumference: computed(2.0 * 3.14159 * radius),
             diameter: computed(2.0 * radius),
             volume_sphere: computed((4.0 / 3.0) * 3.14159 * radius * radius * radius),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -108,7 +106,7 @@ fn test_computed_column_with_math_functions_and_constants() {
 #[test]
 fn test_computed_column_with_string_functions() {
     let src = r#"
-        Users :: table {
+        Users :: table
             first_name: String,
             last_name: String,
             email: String,
@@ -117,7 +115,6 @@ fn test_computed_column_with_string_functions() {
             name_length: computed(len(full_name)),
             has_long_name: computed(name_length > 20),
             initials: computed(first_name + "." + last_name),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -166,7 +163,7 @@ fn test_computed_column_with_string_functions() {
 #[test]
 fn test_computed_column_with_conditionals() {
     let src = r#"
-        Orders :: table {
+        Orders :: table
             quantity: u64,
             unit_price: f64,
             discount_rate: f64,
@@ -175,7 +172,6 @@ fn test_computed_column_with_conditionals() {
             total: computed(subtotal - discount_amount),
             is_bulk_order: computed(quantity > 100),
             shipping_cost: computed(total > 50.0),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -214,7 +210,7 @@ fn test_computed_column_with_conditionals() {
 #[test]
 fn test_computed_column_with_nested_function_calls() {
     let src = r#"
-        Products :: table {
+        Products :: table
             name: String,
             description: String,
             price: f64,
@@ -223,7 +219,6 @@ fn test_computed_column_with_nested_function_calls() {
             total_text_length: computed(name_length + desc_length),
             avg_text_length: computed(total_text_length / 2),
             is_detailed: computed(desc_length > name_length),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -263,11 +258,10 @@ fn test_computed_column_with_nested_function_calls() {
 fn test_function_identifiers_not_treated_as_dependencies() {
     use tricti::computed_columns::DependencyGraph;
     let src = r#"
-        TestTable :: table {
+        TestTable :: table
             data: String,
             length: computed(len(data)),
             is_empty: computed(length == 0),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -332,7 +326,7 @@ fn test_function_identifiers_not_treated_as_dependencies() {
 #[test]
 fn test_computed_column_with_constants() {
     let src = r#"
-        Constants :: table {
+        Constants :: table
             base_value: f64,
             doubled: computed(base_value * 2.0),
             with_constant: computed(base_value + 100.0),
@@ -340,7 +334,6 @@ fn test_computed_column_with_constants() {
             boolean_const: computed(true),
             string_const: computed("constant_value"),
             mixed: computed(base_value * 2.0 + 10.0),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -376,10 +369,9 @@ fn test_computed_column_with_constants() {
 #[test]
 fn test_computed_column_invalid_reference() {
     let src = r#"
-        Invalid :: table {
+        Invalid :: table
             valid_column: String,
             invalid_computed: computed(non_existent_column + " suffix"),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -407,7 +399,7 @@ fn test_computed_column_invalid_reference() {
 #[test]
 fn test_computed_column_type_inference() {
     let src = r#"
-        TypeTest :: table {
+        TypeTest :: table
             int_col: u64,
             float_col: f64,
             string_col: String,
@@ -415,7 +407,6 @@ fn test_computed_column_type_inference() {
             computed_float: computed(float_col * 2.5),
             computed_string: computed(string_col + " suffix"),
             computed_bool: computed(int_col > 5),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -454,12 +445,11 @@ fn test_computed_column_type_inference() {
 #[test]
 fn test_computed_column_forward_references() {
     let src = r#"
-        ForwardRef :: table {
+        ForwardRef :: table
             base_value: i64,
             early_column: computed(later_column + 10),  # References later_column defined below
             middle_column: computed(base_value * 2),
             later_column: computed(base_value + 5),     # Referenced by early_column above
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -493,13 +483,12 @@ fn test_computed_column_forward_references() {
 #[test]
 fn test_computed_column_complex_forward_references() {
     let src = r#"
-        ComplexForward :: table {
+        ComplexForward :: table
             input: i64,
             final_result: computed(step_three * 2),      # References step_three (defined later)
             step_one: computed(input + 1),               # References input (regular column)
             step_three: computed(step_two + step_one),   # References step_two (defined later) and step_one (defined earlier)
             step_two: computed(step_one * 3),            # References step_one (defined earlier)
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -531,7 +520,7 @@ fn test_computed_column_complex_forward_references() {
 #[test]
 fn test_computed_column_mixed_references_with_types() {
     let src = r#"
-        MixedTypes :: table {
+        MixedTypes :: table
             count: i64,
             rate: f64,
             # Forward reference to count_float
@@ -542,7 +531,6 @@ fn test_computed_column_mixed_references_with_types() {
             is_high_value: computed(total_value > 100.0),
             # Forward reference to is_high_value
             description: computed(if is_high_value then "high" else "low"),
-        }
     "#;
 
     let program = parser::parse(src.to_string());
@@ -582,11 +570,10 @@ fn test_computed_column_mixed_references_with_types() {
 fn test_forward_references_vs_circular_dependencies() {
     // This should work - forward references but no cycles
     let valid_src = r#"
-        ValidForward :: table {
+        ValidForward :: table
             base: i64,
             derived_a: computed(derived_b + 1),  # Forward reference
             derived_b: computed(base * 2),       # No cycle
-        }
     "#;
 
     let program = parser::parse(valid_src.to_string());
@@ -598,11 +585,10 @@ fn test_forward_references_vs_circular_dependencies() {
 
     // This should fail - actual circular dependency
     let circular_src = r#"
-        CircularTest :: table {
+        CircularTest :: table
             base: i64,
             circular_a: computed(circular_b + 1),  # References circular_b
             circular_b: computed(circular_a * 2),  # References circular_a -> cycle!
-        }
     "#;
 
     let program2 = parser::parse(circular_src.to_string());
@@ -617,12 +603,11 @@ fn test_forward_references_vs_circular_dependencies() {
 #[test]
 fn test_forward_references_with_function_calls() {
     let src = r#"
-        FunctionForward :: table {
+        FunctionForward :: table
             text: String,
             processed_length: computed(len(processed_text)),  # Forward reference with function
             processed_text: computed(text + " processed"),     # Simple transformation
             is_long: computed(processed_length > 20),          # Forward reference chain with function
-        }
     "#;
 
     let program = parser::parse(src.to_string());

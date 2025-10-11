@@ -1,8 +1,7 @@
 use inkwell::context::Context;
 use tricti::{
     codegen::CodeGenerator,
-    parser,
-    semantic,
+    parser, semantic,
     tri_test_helpers::{clang_available, compile_and_run_tri, dedent},
 };
 

@@ -234,6 +234,221 @@ impl SemanticContext {
                 is_async: false,
             },
         );
+
+        // Minimal string constructor when stdlib is skipped
+        context.functions.insert(
+            "String_new".to_string(),
+            FunctionSignature {
+                parameters: vec![],
+                return_type: Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        // Additional String helpers used by tripm when skipping stdlib
+        context.functions.insert(
+            "String_trim".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Pointer {
+                    is_mutable: false,
+                    pointee: Box::new(Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    }),
+                }],
+                return_type: Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "String_clone".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Pointer {
+                    is_mutable: false,
+                    pointee: Box::new(Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    }),
+                }],
+                return_type: Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "String_equals".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(Type::Identifier {
+                            name: "String".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(Type::Identifier {
+                            name: "String".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                ],
+                return_type: Type::Identifier {
+                    name: "bool".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "String_from_cstr".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::RawPointer {
+                    pointee: Box::new(Type::Identifier {
+                        name: "u8".to_string(),
+                        type_args: vec![],
+                    }),
+                    is_raw: true,
+                }],
+                return_type: Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "String_from_i64".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier {
+                    name: "i64".to_string(),
+                    type_args: vec![],
+                }],
+                return_type: Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "String_from_u64".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier {
+                    name: "u64".to_string(),
+                    type_args: vec![],
+                }],
+                return_type: Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "String_push_str".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Pointer {
+                        is_mutable: true,
+                        pointee: Box::new(Type::Identifier {
+                            name: "String".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(Type::Identifier {
+                            name: "String".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                ],
+                return_type: Type::None,
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "String_push_char".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Pointer {
+                        is_mutable: true,
+                        pointee: Box::new(Type::Identifier {
+                            name: "String".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                    Type::Identifier {
+                        name: "u8".to_string(),
+                        type_args: vec![],
+                    },
+                ],
+                return_type: Type::None,
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "String_substring".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(Type::Identifier {
+                            name: "String".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                    Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
+                    Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
+                ],
+                return_type: Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "String_ends_with".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(Type::Identifier {
+                            name: "String".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(Type::Identifier {
+                            name: "String".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                ],
+                return_type: Type::Identifier {
+                    name: "bool".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
         // slice helpers (prototype): slice_len(s: slice_i64) -> i64; slice_is_empty(s: slice_i64) -> bool
         context.functions.insert(
             "slice_len".to_string(),
@@ -387,6 +602,20 @@ impl SemanticContext {
             },
         );
         context.types.insert(
+            "u8".to_string(),
+            Type::Identifier {
+                name: "u8".to_string(),
+                type_args: vec![],
+            },
+        );
+        context.types.insert(
+            "u64".to_string(),
+            Type::Identifier {
+                name: "u64".to_string(),
+                type_args: vec![],
+            },
+        );
+        context.types.insert(
             "string".to_string(),
             Type::Identifier {
                 name: "string".to_string(),
@@ -397,6 +626,13 @@ impl SemanticContext {
             "char".to_string(),
             Type::Identifier {
                 name: "char".to_string(),
+                type_args: vec![],
+            },
+        );
+        context.types.insert(
+            "String".to_string(),
+            Type::Identifier {
+                name: "String".to_string(),
                 type_args: vec![],
             },
         );
@@ -2045,15 +2281,21 @@ fn infer_expression_type(
 
         Expression::Match { value, arms } => {
             let value_type = infer_expression_type(value, context)?;
+            let mut result_type: Option<Type> = None;
+
             for arm in arms {
+                context.enter_scope();
                 analyze_pattern(&arm.pattern, context, &value_type)?;
-                let _ = infer_expression_type(&arm.body, context)?;
+                let arm_type = infer_expression_type(&arm.body, context)?;
+                context.exit_scope();
+
+                result_type = match result_type.take() {
+                    None => Some(arm_type),
+                    Some(current) => Some(merge_match_branch_type(current, arm_type)?),
+                };
             }
-            // For now matches yield i64 (we lower branches to i64 and phi them)
-            Ok(Type::Identifier {
-                name: "i64".to_string(),
-                type_args: vec![],
-            })
+
+            Ok(result_type.unwrap_or(Type::None))
         }
 
         Expression::FieldAccess { object, field } => {
@@ -2844,6 +3086,27 @@ fn analyze_pattern(
                 })
             }
         }
+        Expression::StructLiteral { type_name, fields } => {
+            let pattern_desc = type_name
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| "<anonymous struct>".to_string());
+            let field_list: Vec<String> = fields.keys().cloned().collect();
+            if let Some(struct_fields) = resolve_struct_pattern_field_types(
+                context,
+                &resolved_scrutinee,
+                type_name.as_ref(),
+                fields,
+            ) {
+                analyze_struct_pattern_fields(fields, &struct_fields, context)?;
+                return Ok(());
+            }
+
+            Err(SemanticError::UndefinedVariable(format!(
+                "invalid pattern: {} with fields {:?} for scrutinee {:?}",
+                pattern_desc, field_list, resolved_scrutinee
+            )))
+        }
         Expression::Call {
             function,
             type_args,
@@ -2852,6 +3115,60 @@ fn analyze_pattern(
             // Destructuring: Color_Green(x)
             match function.as_ref() {
                 Expression::Identifier(func_name) => {
+                    if func_name == "ok" {
+                        if let Type::Result { inner } = &resolved_scrutinee {
+                            if !type_args.is_empty() || arguments.len() != 1 {
+                                return Err(SemanticError::UndefinedVariable(
+                                    "invalid pattern".to_string(),
+                                ));
+                            }
+                            let arg = &arguments[0];
+                            if arg.name.is_some() {
+                                return Err(SemanticError::UndefinedVariable(
+                                    "named arg in pattern".to_string(),
+                                ));
+                            }
+                            analyze_pattern(&arg.value, context, inner)?;
+                            return Ok(());
+                        } else {
+                            return Err(SemanticError::TypeMismatch {
+                                expected: Type::Result {
+                                    inner: Box::new(Type::None),
+                                },
+                                found: scrutinee_type.clone(),
+                            });
+                        }
+                    }
+                    if func_name == "err" {
+                        if let Type::Result { .. } = &resolved_scrutinee {
+                            if !type_args.is_empty() || arguments.len() != 1 {
+                                return Err(SemanticError::UndefinedVariable(
+                                    "invalid pattern".to_string(),
+                                ));
+                            }
+                            let arg = &arguments[0];
+                            if arg.name.is_some() {
+                                return Err(SemanticError::UndefinedVariable(
+                                    "named arg in pattern".to_string(),
+                                ));
+                            }
+                            let error_type = context.types.get("StdError").cloned().unwrap_or(
+                                Type::Identifier {
+                                    name: "StdError".to_string(),
+                                    type_args: Vec::new(),
+                                },
+                            );
+                            analyze_pattern(&arg.value, context, &error_type)?;
+                            return Ok(());
+                        } else {
+                            return Err(SemanticError::TypeMismatch {
+                                expected: Type::Result {
+                                    inner: Box::new(Type::None),
+                                },
+                                found: scrutinee_type.clone(),
+                            });
+                        }
+                    }
                     if func_name == "some" {
                         if let Type::Optional { inner } = &resolved_scrutinee {
                             if !type_args.is_empty() || arguments.len() != 1 {
@@ -3172,6 +3489,190 @@ fn analyze_pattern(
             pattern
         ))),
     }
+}
+
+fn analyze_struct_pattern_fields(
+    pattern_fields: &HashMap<String, Expression>,
+    struct_fields: &HashMap<String, Type>,
+    context: &mut SemanticContext,
+) -> Result<(), SemanticError> {
+    for (field_name, field_pattern) in pattern_fields {
+        let field_type = struct_fields.get(field_name).ok_or_else(|| {
+            let available: Vec<&String> = struct_fields.keys().collect();
+            SemanticError::UndefinedVariable(format!(
+                "invalid struct pattern field '{}' (available: {:?})",
+                field_name, available
+            ))
+        })?;
+        analyze_pattern(field_pattern, context, field_type)?;
+    }
+    Ok(())
+}
+
+fn merge_match_branch_type(existing: Type, new_type: Type) -> Result<Type, SemanticError> {
+    if types_compatible(&existing, &new_type) {
+        if matches!(existing, Type::None) && !matches!(new_type, Type::None) {
+            Ok(new_type)
+        } else {
+            Ok(existing)
+        }
+    } else if types_compatible(&new_type, &existing) {
+        Ok(new_type)
+    } else if matches!(new_type, Type::None) {
+        Ok(existing)
+    } else if matches!(existing, Type::None) {
+        Ok(new_type)
+    } else {
+        Err(SemanticError::TypeMismatch {
+            expected: existing,
+            found: new_type,
+        })
+    }
+}
+
+fn resolve_struct_pattern_field_types(
+    context: &SemanticContext,
+    resolved_scrutinee: &Type,
+    type_name: Option<&String>,
+    pattern_fields: &HashMap<String, Expression>,
+) -> Option<HashMap<String, Type>> {
+    match resolved_scrutinee {
+        Type::Struct { fields } => return Some(fields.clone()),
+        Type::Identifier { name, type_args } if type_args.is_empty() => {
+            if let Some(Type::Struct { fields }) = context.types.get(name) {
+                return Some(fields.clone());
+            }
+        }
+        Type::Enum { variants, .. } => {
+            if let Some(name) = type_name {
+                if let Some(fields) =
+                    resolve_variant_fields_from_enum(context, variants, name.as_str())
+                {
+                    return Some(fields);
+                }
+            } else if let Some(fields) =
+                resolve_variant_fields_matching_pattern(context, variants, pattern_fields)
+            {
+                return Some(fields);
+            }
+        }
+        _ => {}
+    }
+
+    if let Some(name) = type_name {
+        if let Some(struct_fields) = context.types.get(name).and_then(|ty| match ty {
+            Type::Struct { fields } => Some(fields.clone()),
+            _ => None,
+        }) {
+            return Some(struct_fields);
+        }
+
+        if let Some(fields) = resolve_enum_variant_struct_by_name(context, name.as_str()) {
+            return Some(fields);
+        }
+    }
+
+    eprintln!(
+        "resolve_struct_pattern_field_types failed: type_name={:?} scrutinee={:?} pattern_fields={:?}",
+        type_name,
+        resolved_scrutinee,
+        pattern_fields.keys().collect::<Vec<_>>()
+    );
+
+    None
+}
+
+fn resolve_variant_fields_from_enum(
+    context: &SemanticContext,
+    variants: &HashMap<String, Option<Type>>,
+    type_name: &str,
+) -> Option<HashMap<String, Type>> {
+    let trimmed = type_name.strip_suffix("_struct").unwrap_or(type_name);
+    let (_, variant_name) = trimmed.rsplit_once('_')?;
+    resolve_enum_variant_payload(context, variants, variant_name)
+}
+
+fn resolve_variant_fields_matching_pattern(
+    context: &SemanticContext,
+    variants: &HashMap<String, Option<Type>>,
+    pattern_fields: &HashMap<String, Expression>,
+) -> Option<HashMap<String, Type>> {
+    for payload_ty_opt in variants.values() {
+        if let Some(payload_ty) = payload_ty_opt {
+            if let Type::Struct { fields } = resolve_concrete_type(context, payload_ty) {
+                if pattern_fields
+                    .keys()
+                    .all(|field| fields.contains_key(field))
+                {
+                    return Some(fields);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn resolve_enum_variant_struct_by_name(
+    context: &SemanticContext,
+    type_name: &str,
+) -> Option<HashMap<String, Type>> {
+    let trimmed = type_name.strip_suffix("_struct").unwrap_or(type_name);
+    let (enum_name, variant_name) = trimmed.rsplit_once('_')?;
+    let enum_ty = match context.types.get(enum_name) {
+        Some(ty) => ty,
+        None => {
+            eprintln!(
+                "resolve_enum_variant_struct_by_name missing enum {} (have {})",
+                enum_name,
+                context
+                    .types
+                    .keys()
+                    .take(10)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            return None;
+        }
+    };
+    if let Type::Enum { variants, .. } = enum_ty {
+        return resolve_enum_variant_payload(context, variants, variant_name);
+    }
+    None
+}
+
+fn resolve_enum_variant_payload(
+    context: &SemanticContext,
+    variants: &HashMap<String, Option<Type>>,
+    variant_name: &str,
+) -> Option<HashMap<String, Type>> {
+    let payload_ty_opt = variants.get(variant_name)?;
+    let payload_ty = payload_ty_opt.as_ref()?;
+    match resolve_concrete_type(context, payload_ty) {
+        Type::Struct { fields } => Some(fields),
+        _ => None,
+    }
+}
+
+fn resolve_concrete_type(context: &SemanticContext, ty: &Type) -> Type {
+    let mut current = context.resolve_type(ty);
+    loop {
+        match &current {
+            Type::Identifier { name, type_args } if type_args.is_empty() => {
+                if let Some(inner) = context.types.get(name) {
+                    let next = inner.clone();
+                    if next == current {
+                        break;
+                    }
+                    current = next;
+                    continue;
+                }
+            }
+            _ => {}
+        }
+        break;
+    }
+    current
 }
 
 const NUMERIC_PROMOTION_ORDER: [&str; 10] = [
@@ -3791,7 +4292,7 @@ fn validate_type(type_def: &Type, context: &SemanticContext) -> Result<(), Seman
             }
         }
         Type::Pointer { pointee, .. } => validate_type(pointee, context),
-    Type::RawPointer { pointee, .. } => validate_type(pointee, context),
+        Type::RawPointer { pointee, .. } => validate_type(pointee, context),
         Type::Reference { inner, .. } => validate_type(inner, context),
         Type::Optional { inner } => validate_type(inner, context),
         Type::Result { inner } => validate_type(inner, context),

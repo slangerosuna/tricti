@@ -1367,7 +1367,6 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
     let value_pair = it.next().expect("match missing value expression");
     let value = parse_expression(value_pair);
     let mut arms: Vec<MatchArm> = Vec::new();
-    let trace_match_arms = false;
     for arm_pair in it {
         if arm_pair.as_rule() != Rule::match_arm {
             continue;
@@ -1378,54 +1377,7 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
             .expect("match arm missing pattern expression");
         let body_pair = arm_inner.next().expect("match arm missing body expression");
         let pattern = if pattern_pair.as_rule() == Rule::match_arm_pattern_text {
-            let raw_pattern = pattern_pair.as_str();
-            if trace_match_arms {
-                eprintln!(
-                    "TRACE_MATCH_ARM raw pattern: {:?}",
-                    raw_pattern.replace('\n', "\\n")
-                );
-            }
-            let mut candidate = raw_pattern.trim();
-            let mut last_error: Option<String> = None;
-            let mut parsed_pairs = loop {
-                if candidate.is_empty() {
-                    if let Some(err) = last_error.take() {
-                        panic!(
-                            "failed to reparse match arm pattern '{}' (original '{}'): {:?}",
-                            candidate,
-                            raw_pattern.replace('\n', "\\n"),
-                            err
-                        );
-                    } else {
-                        panic!(
-                            "failed to reparse empty match arm pattern extracted from '{}'",
-                            raw_pattern.replace('\n', "\\n")
-                        );
-                    }
-                }
-                match PnParser::parse(Rule::pattern, candidate) {
-                    Ok(pairs) => break pairs,
-                    Err(err) => {
-                        last_error = Some(format!("{:?}", err));
-                        if let Some(idx) = candidate.rfind(|ch| ch == '\n' || ch == '\r') {
-                            candidate = candidate[idx + 1..].trim_start();
-                            continue;
-                        }
-                        let display = candidate.replace('\n', "\\n");
-                        let original = raw_pattern.replace('\n', "\\n");
-                        panic!(
-                            "failed to reparse match arm pattern '{}' (original '{}'): {:?}",
-                            display,
-                            original,
-                            last_error.take().unwrap()
-                        );
-                    }
-                }
-            };
-            let parsed_pattern_pair = parsed_pairs
-                .next()
-                .expect("reparse of match arm pattern produced no pairs");
-            parse_pattern(parsed_pattern_pair)
+            parse_match_arm_pattern_text(pattern_pair.as_str())
         } else {
             parse_pattern(pattern_pair)
         };
@@ -1436,6 +1388,257 @@ fn parse_match_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         value: Box::new(value),
         arms,
     }
+}
+
+enum PatternParseFailure {
+    Partial(String),
+    Error(String),
+}
+
+fn parse_match_arm_pattern_text(raw_pattern: &str) -> Expression {
+    const TRACE_MATCH_ARMS: bool = false;
+    let mut candidate = raw_pattern.trim().to_string();
+    if TRACE_MATCH_ARMS {
+        eprintln!(
+            "TRACE_MATCH_ARM raw pattern: {}",
+            candidate.replace('\n', "\\n")
+        );
+    }
+
+    if let Some(expr) = try_build_variant_pattern(candidate.as_str()) {
+        if TRACE_MATCH_ARMS {
+            eprintln!("TRACE_MATCH_ARM direct variant parse success");
+        }
+        return expr;
+    }
+
+    let mut attempt = candidate.clone();
+    let mut used_rewrite = false;
+    let mut last_error: Option<String> = None;
+
+    loop {
+        if attempt.trim().is_empty() {
+            let original = raw_pattern.replace('\n', "\\n");
+            let err = last_error.unwrap_or_else(|| "pattern text empty".to_string());
+            panic!(
+                "failed to reparse match arm pattern '{}' (original '{}'): {}",
+                attempt.replace('\n', "\\n"),
+                original,
+                err
+            );
+        }
+
+        match attempt_parse_pattern_text(attempt.as_str()) {
+            Ok(expr) => {
+                if TRACE_MATCH_ARMS {
+                    eprintln!(
+                        "TRACE_MATCH_ARM parsed '{}' successfully",
+                        attempt.replace('\n', "\\n")
+                    );
+                }
+                return expr;
+            }
+            Err(PatternParseFailure::Partial(consumed)) => {
+                last_error = Some(format!(
+                    "partial match for pattern '{}', consumed '{}'",
+                    attempt.replace('\n', "\\n"),
+                    consumed.replace('\n', "\\n")
+                ));
+            }
+            Err(PatternParseFailure::Error(err)) => {
+                last_error = Some(err);
+            }
+        }
+
+        if let Some(expr) = try_build_variant_pattern(candidate.as_str()) {
+            if TRACE_MATCH_ARMS {
+                eprintln!("TRACE_MATCH_ARM variant fallback success");
+            }
+            return expr;
+        }
+
+        if !used_rewrite {
+            if let Some(rewrite) = rewrite_variant_pattern(candidate.as_str()) {
+                if TRACE_MATCH_ARMS {
+                    eprintln!(
+                        "TRACE_MATCH_ARM rewrite '{}' -> '{}'",
+                        candidate.replace('\n', "\\n"),
+                        rewrite.replace('\n', "\\n")
+                    );
+                }
+                if rewrite != candidate {
+                    attempt = rewrite;
+                    used_rewrite = true;
+                    continue;
+                }
+            }
+        } else {
+            attempt = candidate.clone();
+        }
+
+        if let Some(idx) = candidate.rfind(|ch| ch == '\n' || ch == '\r') {
+            let next = candidate[idx + 1..].trim_start().to_string();
+            if next.is_empty() {
+                let original = raw_pattern.replace('\n', "\\n");
+                panic!(
+                    "failed to reparse match arm pattern '{}' (original '{}'): {}",
+                    attempt.replace('\n', "\\n"),
+                    original,
+                    last_error
+                        .clone()
+                        .unwrap_or_else(|| "no viable pattern candidate".to_string())
+                );
+            }
+            candidate = next;
+            attempt = candidate.clone();
+            used_rewrite = false;
+            if let Some(expr) = try_build_variant_pattern(candidate.as_str()) {
+                if TRACE_MATCH_ARMS {
+                    eprintln!("TRACE_MATCH_ARM variant success after trimming");
+                }
+                return expr;
+            }
+            continue;
+        }
+
+        let display = attempt.replace('\n', "\\n");
+        let original = raw_pattern.replace('\n', "\\n");
+        panic!(
+            "failed to reparse match arm pattern '{}' (original '{}'): {}",
+            display,
+            original,
+            last_error.unwrap_or_else(|| "no viable parse".to_string())
+        );
+    }
+}
+
+fn attempt_parse_pattern_text(attempt: &str) -> Result<Expression, PatternParseFailure> {
+    match PnParser::parse(Rule::pattern, attempt) {
+        Ok(mut pairs) => {
+            if let Some(pair) = pairs.next() {
+                let consumed = pair.as_str().trim();
+                if consumed == attempt.trim() {
+                    Ok(parse_pattern(pair))
+                } else {
+                    Err(PatternParseFailure::Partial(consumed.to_string()))
+                }
+            } else {
+                Err(PatternParseFailure::Error(
+                    "pattern parse produced no pairs".to_string(),
+                ))
+            }
+        }
+        Err(err) => Err(PatternParseFailure::Error(format!("{:?}", err))),
+    }
+}
+
+fn try_build_variant_pattern(candidate: &str) -> Option<Expression> {
+    let (head, tail) = split_variant_pattern_parts(candidate)?;
+    let function_expr = parse_variant_head_expression(&head)?;
+    let argument_expr = match attempt_parse_pattern_text(tail.as_str()) {
+        Ok(expr) => expr,
+        Err(_) => parse_match_arm_pattern_text(tail.as_str()),
+    };
+    Some(Expression::Call {
+        function: Box::new(function_expr),
+        type_args: vec![],
+        arguments: vec![Argument {
+            name: None,
+            value: argument_expr,
+        }],
+    })
+}
+
+fn parse_variant_head_expression(head: &str) -> Option<Expression> {
+    if PnParser::parse(Rule::identifier, head).is_ok() {
+        return Some(Expression::Identifier(head.to_string()));
+    }
+
+    if let Ok(mut pairs) = PnParser::parse(Rule::static_path, head) {
+        if let Some(pair) = pairs.next() {
+            return Some(parse_static_path_expression(pair));
+        }
+    }
+
+    None
+}
+
+fn split_variant_pattern_parts(candidate: &str) -> Option<(String, String)> {
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let mut angle_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut brace_depth = 0usize;
+    let mut split_index: Option<usize> = None;
+
+    for (idx, ch) in trimmed.char_indices() {
+        match ch {
+            '<' => angle_depth += 1,
+            '>' => {
+                if angle_depth > 0 {
+                    angle_depth -= 1;
+                }
+            }
+            '(' => paren_depth += 1,
+            ')' => {
+                if paren_depth > 0 {
+                    paren_depth -= 1;
+                }
+            }
+            '{' => brace_depth += 1,
+            '}' => {
+                if brace_depth > 0 {
+                    brace_depth -= 1;
+                }
+            }
+            ch if ch.is_whitespace() => {
+                if angle_depth == 0 && paren_depth == 0 && brace_depth == 0 {
+                    split_index = Some(idx);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let split = split_index?;
+    let (head_raw, tail_raw) = trimmed.split_at(split);
+    let head = head_raw.trim_end();
+    let tail = tail_raw.trim_start();
+
+    if head.is_empty() || tail.is_empty() {
+        return None;
+    }
+
+    if head == "_" || head == "some" || head == "none" {
+        return None;
+    }
+
+    if head.ends_with("::") || tail.starts_with("::") || tail.starts_with("struct") {
+        return None;
+    }
+
+    let head_is_identifier = PnParser::parse(Rule::identifier, head).is_ok();
+    let head_is_path = PnParser::parse(Rule::static_path, head).is_ok();
+
+    if !head_is_identifier && !head_is_path {
+        return None;
+    }
+
+    Some((head.to_string(), tail.to_string()))
+}
+
+fn rewrite_variant_pattern(candidate: &str) -> Option<String> {
+    let (head, tail) = split_variant_pattern_parts(candidate)?;
+    let mut rewritten = String::with_capacity(head.len() + tail.len() + 2);
+    rewritten.push_str(&head);
+    rewritten.push('(');
+    rewritten.push_str(&tail);
+    rewritten.push(')');
+    Some(rewritten)
 }
 
 fn parse_pattern(pair: pest::iterators::Pair<Rule>) -> Expression {
@@ -1566,6 +1769,11 @@ fn parse_struct_literal_fields(pair: pest::iterators::Pair<Rule>) -> HashMap<Str
                 let name = inner.next().unwrap().as_str().to_string();
                 let expr_pair = inner.next().expect("full_field missing expression");
                 let expr = parse_expression(expr_pair);
+                fields.insert(name, expr);
+            }
+            Rule::shorthand_field => {
+                let name = field_pair.into_inner().next().unwrap().as_str().to_string();
+                let expr = Expression::Identifier(name.clone());
                 fields.insert(name, expr);
             }
             _ => {
