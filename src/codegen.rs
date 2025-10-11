@@ -1012,7 +1012,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn type_is_owned(&self, ty: &crate::ast::Type) -> bool {
-        self.drop_target_type_name(ty).is_some()
+        self.drop_function_for_type(ty).is_some()
     }
 
     fn track_owned_binding(&mut self, name: &str) {
@@ -2983,13 +2983,56 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
 
             Statement::Return(expr) => {
+                let trace_return = std::env::var("TRACE_RETURN").is_ok();
+                if trace_return {
+                    eprintln!("codegen return stmt: {:?}", expr);
+                }
                 if let Some(expr) = expr {
-                    let value = self.generate_expression(expr)?;
+                    if trace_return {
+                        eprintln!("TRACE_RETURN evaluating return expression");
+                    }
+                    let value = match self.generate_expression(expr) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            if trace_return {
+                                eprintln!(
+                                    "TRACE_RETURN return expression codegen failed: {}",
+                                    err
+                                );
+                            }
+                            return Err(err);
+                        }
+                    };
+                    if trace_return {
+                        eprintln!("TRACE_RETURN expression evaluated, building return");
+                        eprintln!(
+                            "return expr evaluated to type {}",
+                            value.get_type().print_to_string().to_string()
+                        );
+                    }
                     self.mark_expr_moved(expr);
+                    if trace_return {
+                        eprintln!("TRACE_RETURN dropping owned locals before return");
+                    }
                     self.drop_all_owned_locals()?;
+                    if trace_return {
+                        eprintln!("TRACE_RETURN emitting LLVM return");
+                    }
                     self.builder
                         .build_return(Some(&value))
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                    if trace_return {
+                        if let Some(block) = self.builder.get_insert_block() {
+                            eprintln!(
+                                "post-return block name: {}",
+                                block.get_name().to_string_lossy()
+                            );
+                            eprintln!(
+                                "after build_return, terminator present? {}",
+                                block.get_terminator().is_some()
+                            );
+                        }
+                    }
                 } else {
                     self.drop_all_owned_locals()?;
                     let ret_ast = self
@@ -4390,6 +4433,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                 then_branch,
                 else_branch,
             } => {
+                if std::env::var("TRACE_RETURN").is_ok() {
+                    eprintln!(
+                        "codegen if: then {} stmts, else present? {}",
+                        then_branch.len(),
+                        else_branch.as_ref().map(|b| b.len()).unwrap_or(0)
+                    );
+                }
                 // Evaluate condition to i1
                 let cond_val = self.generate_expression(condition)?;
                 let cond_bool = if cond_val.is_int_value() {
@@ -4911,6 +4961,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if matches!(operator, BinaryOperator::Equal | BinaryOperator::NotEqual) {
                     self.current_binary_context =
                         Some(format!("{:?} {:?} {:?}", left, operator, right));
+                }
+                if std::env::var("TRACE_BINARY").is_ok() {
+                    eprintln!("generate_expression BinaryOp operator: {:?}", operator);
                 }
                 let left_val = self.generate_expression(left)?;
                 let right_val = self.generate_expression(right)?;
@@ -5482,6 +5535,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
 
             _ => {
+                if std::env::var("TRACE_BINARY").is_ok() {
+                    eprintln!("generate_binary_op fallback reached");
+                }
                 // Other expressions not implemented yet
                 Ok(self.context.i64_type().const_zero().into())
             }
