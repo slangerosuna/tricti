@@ -188,3 +188,59 @@ fn enum_payload_basic() {
     );
     assert_eq!(stdout, "100\n");
 }
+
+#[test]
+fn enum_match_struct_fields() {
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
+    let src = r#"
+        Data :: enum
+            Idle,
+            Pair :: struct
+                first: i64,
+                second: i64,
+
+        main :: () => do
+            value := Data::Pair { first: 4, second: 5 }
+            total := match value:
+                Data::Pair :: struct { first, second } => first + second
+                _ => -1
+            println(total)
+    "#;
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_enum_struct_fields.o",
+        "tests/tmp_enum_struct_fields.out",
+    );
+    assert_eq!(stdout, "9\n");
+}
+
+#[test]
+fn enum_match_struct_with_field_wildcard() {
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
+    let src = r#"
+        Data :: enum
+            Idle,
+            Pair :: struct
+                left: i64,
+                right: i64,
+
+        main :: () => do
+            current := Data::Pair { left: 12, right: 34 }
+            only_left := match current:
+                Data::Pair :: struct { left, right: _ } => left
+                _ => -100
+            println(only_left)
+    "#;
+    let stdout = compile_and_run(
+        src,
+        "tests/tmp_enum_struct_wildcard.o",
+        "tests/tmp_enum_struct_wildcard.out",
+    );
+    assert_eq!(stdout, "12\n");
+}

@@ -13,11 +13,11 @@ pub enum StdlibStatus {
     SkippedAttribute,
 }
 
-pub struct LoadOptions<'a> {
+pub struct LoadOptions {
     pub skip_std_env: bool,
     pub skip_std_flag: bool,
-    pub stdlib_path: &'a Path,
-    pub base_dir: &'a Path,
+    pub stdlib_path: PathBuf,
+    pub base_dir: PathBuf,
 }
 
 pub struct LoadedProgram {
@@ -49,13 +49,13 @@ pub fn parse_file_with_std(path: &Path, skip_std_flag: bool) -> std::io::Result<
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| cwd.clone());
-    let stdlib_path_buf = cwd.join("stdlib").join("std.tri");
+    let stdlib_path_buf = resolve_stdlib_path(&cwd);
 
     let options = LoadOptions {
         skip_std_env: std::env::var("SKIP_STDLIB").unwrap_or_default() == "1",
         skip_std_flag,
-        stdlib_path: &stdlib_path_buf,
-        base_dir: &base_dir_buf,
+        stdlib_path: stdlib_path_buf,
+        base_dir: base_dir_buf,
     };
 
     Ok(parse_source_with_std(source, Some(path), options))
@@ -64,7 +64,7 @@ pub fn parse_file_with_std(path: &Path, skip_std_flag: bool) -> std::io::Result<
 pub fn parse_source_with_std(
     source: String,
     primary_path: Option<&Path>,
-    options: LoadOptions<'_>,
+    options: LoadOptions,
 ) -> LoadedProgram {
     let mut visited_modules: HashSet<PathBuf> = HashSet::new();
 
@@ -88,8 +88,8 @@ pub fn parse_source_with_std(
 
     program = expand_modules(
         program,
-        options.base_dir,
-        options.base_dir,
+        options.base_dir.as_path(),
+        options.base_dir.as_path(),
         None,
         &mut visited_modules,
     );
@@ -110,9 +110,13 @@ pub fn parse_source_with_std(
         let std_root = options
             .stdlib_path
             .parent()
-            .unwrap_or_else(|| std::path::Path::new(""));
-        let mut std_program =
-            load_and_expand_stdlib(options.stdlib_path, std_root, &mut visited_modules);
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from(""));
+        let mut std_program = load_and_expand_stdlib(
+            options.stdlib_path.as_path(),
+            std_root.as_path(),
+            &mut visited_modules,
+        );
         statements.append(&mut std_program.statements);
     }
 
@@ -121,6 +125,50 @@ pub fn parse_source_with_std(
     LoadedProgram {
         program: Program { statements },
         stdlib_status,
+    }
+}
+
+fn resolve_stdlib_path(cwd: &Path) -> PathBuf {
+    if let Ok(explicit_file) = std::env::var("TRICTI_STDLIB_PATH") {
+        let path = PathBuf::from(&explicit_file);
+        if path.exists() {
+            return path;
+        }
+    }
+
+    if let Ok(explicit_dir) = std::env::var("TRICTI_STDLIB_DIR") {
+        let dir_candidate = PathBuf::from(&explicit_dir).join("std.tri");
+        if dir_candidate.exists() {
+            return dir_candidate;
+        }
+    }
+
+    let mut current = cwd.to_path_buf();
+    loop {
+        let direct = current.join("stdlib").join("std.tri");
+        if direct.exists() {
+            return direct;
+        }
+
+        let compiler_relative = current
+            .join("tricti-compiler")
+            .join("stdlib")
+            .join("std.tri");
+        if compiler_relative.exists() {
+            return compiler_relative;
+        }
+
+        if !current.pop() {
+            break;
+        }
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest_candidate = manifest_dir.join("stdlib").join("std.tri");
+    if manifest_candidate.exists() {
+        manifest_candidate
+    } else {
+        cwd.join("stdlib").join("std.tri")
     }
 }
 
@@ -394,8 +442,8 @@ mod tests {
         let options = LoadOptions {
             skip_std_env: false,
             skip_std_flag: false,
-            stdlib_path: &stdlib_path,
-            base_dir: &current_dir,
+            stdlib_path,
+            base_dir: current_dir.clone(),
         };
         let loaded = parse_source_with_std("main :: () => do {}".to_string(), None, options);
         assert_eq!(loaded.stdlib_status, StdlibStatus::Included);
@@ -409,8 +457,8 @@ mod tests {
         let options = LoadOptions {
             skip_std_env: false,
             skip_std_flag: false,
-            stdlib_path: &stdlib_path,
-            base_dir: &current_dir,
+            stdlib_path,
+            base_dir: current_dir.clone(),
         };
         let loaded = parse_source_with_std("@no_std\nmain :: () => {}".to_string(), None, options);
         assert_eq!(loaded.stdlib_status, StdlibStatus::SkippedAttribute);

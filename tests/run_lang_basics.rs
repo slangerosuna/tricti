@@ -202,6 +202,87 @@ fn for_loop_dynamic_step() {
 }
 
 #[test]
+fn logical_and_or_short_circuit() {
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
+
+    let src = tri_test_helpers::dedent(
+        r#"
+        use prelude
+        rhs_and :: () -> bool => do
+            println("rhs-and")
+            ret true
+
+        rhs_or :: () -> bool => do
+            println("rhs-or")
+            ret false
+
+        main :: () => do
+            if false and rhs_and():
+                println("and fail")
+            else:
+                println("and ok")
+            if true or rhs_or():
+                println("or ok")
+            else:
+                println("or fail")
+    "#,
+    );
+
+    let stdout = compile_and_run(
+        &src,
+        "tests/tmp_short_circuit.o",
+        "tests/tmp_short_circuit.out",
+    );
+    assert_eq!(stdout, ["and ok\n", "or ok\n"].concat());
+    assert!(!stdout.contains("rhs-and"));
+    assert!(!stdout.contains("rhs-or"));
+}
+
+#[test]
+fn question_operator_propagates_result() {
+    if !clang_available() {
+        eprintln!("clang not found; skipping");
+        return;
+    }
+
+    let src = tri_test_helpers::dedent(
+        r#"
+        use prelude
+    use core::errors
+    use core::errors::StdError
+    use core::errors::StdError_InvalidArgument
+
+        parse_positive :: (value: i64) -> !i64 => do
+            if value < 0:
+                ret err StdError_InvalidArgument("negative value")
+            ret ok value
+
+        double_positive :: (value: i64) -> !i64 => do
+            value_ := parse_positive(value)?
+            ret ok (value_ * 2)
+
+        main :: () => do
+            match double_positive(3):
+                ok value => println(value.to_string()),
+                err _ => println("unexpected"),
+            match double_positive(-5):
+                ok value => println(value.to_string()),
+                err _ => println("negative value"),
+    "#,
+    );
+
+    let stdout = compile_and_run(
+        &src,
+        "tests/tmp_question.o",
+        "tests/tmp_question.out",
+    );
+    assert_eq!(stdout, ["6\n", "negative value\n"].concat());
+}
+
+#[test]
 fn for_loop_with_dynamic_negative_step() {
     if !clang_available() {
         eprintln!("clang not found; skipping");

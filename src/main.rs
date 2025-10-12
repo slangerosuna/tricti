@@ -34,17 +34,20 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
-        println!("Usage: tricti [--no-std] [source_file]");
+        println!("Usage: tricti [--no-std] [--no-run] [source_file]");
         println!("If no source_file is provided, defaults to 'src.tri'.");
+        println!("Use --no-run to skip executing the generated binary.");
         return;
     }
 
     let mut skip_std_flag = false;
+    let mut no_run_flag = false;
     let mut source_path: Option<String> = None;
 
     for arg in args {
         match arg.as_str() {
             "--no-std" => skip_std_flag = true,
+            "--no-run" => no_run_flag = true,
             _ if arg.starts_with('-') => {
                 eprintln!("Unknown option: {}", arg);
                 println!("Use --help to see available options.");
@@ -149,17 +152,22 @@ fn main() {
             if result.status.success() {
                 println!("Successfully created executable 'output.out'");
 
-                println!("\nRunning the program:");
-                let run_result = Command::new("./output.out").output();
-                match run_result {
-                    Ok(run_output) => {
-                        println!("Program output:");
-                        println!("{}", String::from_utf8_lossy(&run_output.stdout));
-                        if !run_output.stderr.is_empty() {
-                            eprintln!("Stderr: {}", String::from_utf8_lossy(&run_output.stderr));
+                if !no_run_flag {
+                    println!("\nRunning the program:");
+                    let run_result = Command::new("./output.out").output();
+                    match run_result {
+                        Ok(run_output) => {
+                            println!("Program output:");
+                            println!("{}", String::from_utf8_lossy(&run_output.stdout));
+                            if !run_output.stderr.is_empty() {
+                                eprintln!(
+                                    "Stderr: {}",
+                                    String::from_utf8_lossy(&run_output.stderr)
+                                );
+                            }
                         }
+                        Err(e) => eprintln!("Failed to run executable: {}", e),
                     }
-                    Err(e) => eprintln!("Failed to run executable: {}", e),
                 }
             } else {
                 eprintln!("Linking failed:");
