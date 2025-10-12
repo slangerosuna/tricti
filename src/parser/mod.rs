@@ -810,6 +810,7 @@ fn parse_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
         Rule::primary | Rule::primary_no_block => parse_primary_expression(pair),
         Rule::vec_new => parse_vec_new(pair),
         Rule::vec_literal => parse_vec_literal(pair),
+        Rule::r#loop => parse_loop_expression(pair),
         Rule::function => parse_function(pair),
         Rule::literal | Rule::literal_no_struct => parse_literal(pair),
         Rule::identifier => Expression::Identifier(pair.as_str().to_string()),
@@ -870,9 +871,9 @@ fn parse_unary(pair: pest::iterators::Pair<Rule>) -> Expression {
                     }
                     _ => parse_expression(operand_pair),
                 };
-                if op_str == "some" {
+                if matches!(op_str, "some" | "ok" | "err") {
                     return Expression::Call {
-                        function: Box::new(Expression::Identifier("some".to_string())),
+                        function: Box::new(Expression::Identifier(op_str.to_string())),
                         type_args: vec![],
                         arguments: vec![Argument {
                             name: None,
@@ -882,7 +883,7 @@ fn parse_unary(pair: pest::iterators::Pair<Rule>) -> Expression {
                 }
                 let op = match op_str {
                     "-" => UnaryOperator::Negate,
-                    "!" => UnaryOperator::Not,
+                    "not" => UnaryOperator::Not,
                     "~" => UnaryOperator::BitwiseNot,
                     "*" => UnaryOperator::Deref,
                     s if s.starts_with("&mut") => UnaryOperator::MutAddressOf,
@@ -1259,6 +1260,16 @@ fn parse_vec_literal(pair: pest::iterators::Pair<Rule>) -> Expression {
         .map(parse_expression)
         .collect();
     Expression::VecLiteral { elements }
+}
+
+fn parse_loop_expression(pair: pest::iterators::Pair<Rule>) -> Expression {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::block {
+            let body = parse_block(inner);
+            return Expression::Loop { body };
+        }
+    }
+    Expression::Loop { body: Vec::new() }
 }
 
 fn parse_matrix(pair: pest::iterators::Pair<Rule>) -> Expression {

@@ -424,6 +424,240 @@ impl SemanticContext {
             },
         );
         context.functions.insert(
+            "marshal_string_to_cstr".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                }],
+                return_type: Type::RawPointer {
+                    pointee: Box::new(Type::Identifier {
+                        name: "u8".to_string(),
+                        type_args: vec![],
+                    }),
+                    is_raw: true,
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "marshal_free_cstr".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::RawPointer {
+                    pointee: Box::new(Type::Identifier {
+                        name: "u8".to_string(),
+                        type_args: vec![],
+                    }),
+                    is_raw: true,
+                }],
+                return_type: Type::None,
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "Path_new".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                }],
+                return_type: Type::Identifier {
+                    name: "Path".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "Path_exists".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Pointer {
+                    is_mutable: false,
+                    pointee: Box::new(Type::Identifier {
+                        name: "Path".to_string(),
+                        type_args: vec![],
+                    }),
+                }],
+                return_type: Type::Identifier {
+                    name: "bool".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "io_dir_exists".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                }],
+                return_type: Type::Identifier {
+                    name: "bool".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "io_dir_create_dir".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                }],
+                return_type: Type::Identifier {
+                    name: "bool".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "io_dir_remove_file".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Identifier {
+                    name: "String".to_string(),
+                    type_args: vec![],
+                }],
+                return_type: Type::Identifier {
+                    name: "bool".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "io_dir_rename".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    },
+                    Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    },
+                ],
+                return_type: Type::Identifier {
+                    name: "bool".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "CommandLine_current".to_string(),
+            FunctionSignature {
+                parameters: vec![],
+                return_type: Type::Identifier {
+                    name: "CommandLine".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "CommandLine_len".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Pointer {
+                    is_mutable: false,
+                    pointee: Box::new(Type::Identifier {
+                        name: "CommandLine".to_string(),
+                        type_args: vec![],
+                    }),
+                }],
+                return_type: Type::Identifier {
+                    name: "u64".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "CommandLine_is_empty".to_string(),
+            FunctionSignature {
+                parameters: vec![Type::Pointer {
+                    is_mutable: false,
+                    pointee: Box::new(Type::Identifier {
+                        name: "CommandLine".to_string(),
+                        type_args: vec![],
+                    }),
+                }],
+                return_type: Type::Identifier {
+                    name: "bool".to_string(),
+                    type_args: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "CommandLine_get".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(Type::Identifier {
+                            name: "CommandLine".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                    Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
+                ],
+                return_type: Type::Optional {
+                    inner: Box::new(Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    }),
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "CommandLine_slice_from".to_string(),
+            FunctionSignature {
+                parameters: vec![
+                    Type::Pointer {
+                        is_mutable: false,
+                        pointee: Box::new(Type::Identifier {
+                            name: "CommandLine".to_string(),
+                            type_args: vec![],
+                        }),
+                    },
+                    Type::Identifier {
+                        name: "u64".to_string(),
+                        type_args: vec![],
+                    },
+                ],
+                return_type: Type::Matrix {
+                    element_type: Box::new(Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    }),
+                    dimensions: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
+            "CommandLine_load_args".to_string(),
+            FunctionSignature {
+                parameters: vec![],
+                return_type: Type::Matrix {
+                    element_type: Box::new(Type::Identifier {
+                        name: "String".to_string(),
+                        type_args: vec![],
+                    }),
+                    dimensions: vec![],
+                },
+                is_async: false,
+            },
+        );
+        context.functions.insert(
             "String_ends_with".to_string(),
             FunctionSignature {
                 parameters: vec![
@@ -634,6 +868,41 @@ impl SemanticContext {
             Type::Identifier {
                 name: "String".to_string(),
                 type_args: vec![],
+            },
+        );
+        context.types.insert(
+            "Path".to_string(),
+            Type::Struct {
+                fields: {
+                    let mut m = HashMap::new();
+                    m.insert(
+                        "path".to_string(),
+                        Type::Identifier {
+                            name: "String".to_string(),
+                            type_args: vec![],
+                        },
+                    );
+                    m
+                },
+            },
+        );
+        context.types.insert(
+            "CommandLine".to_string(),
+            Type::Struct {
+                fields: {
+                    let mut m = HashMap::new();
+                    m.insert(
+                        "args".to_string(),
+                        Type::Matrix {
+                            element_type: Box::new(Type::Identifier {
+                                name: "String".to_string(),
+                                type_args: vec![],
+                            }),
+                            dimensions: vec![],
+                        },
+                    );
+                    m
+                },
             },
         );
         // Minimal built-in slice for i64: { ptr: &i64, len: i64 }
@@ -1988,6 +2257,38 @@ fn infer_expression_type(
                             inner: Box::new(arg_ty),
                         });
                     }
+                    if name == "ok" {
+                        if arguments.len() != 1 {
+                            return Err(SemanticError::ArgumentCountMismatch {
+                                expected: 1,
+                                found: arguments.len(),
+                            });
+                        }
+                        let arg_ty = infer_expression_type(&arguments[0].value, context)?;
+                        return Ok(Type::Result {
+                            inner: Box::new(arg_ty),
+                        });
+                    }
+                    if name == "err" {
+                        if arguments.len() != 1 {
+                            return Err(SemanticError::ArgumentCountMismatch {
+                                expected: 1,
+                                found: arguments.len(),
+                            });
+                        }
+                        let arg_ty = infer_expression_type(&arguments[0].value, context)?;
+                        if let Some(expected_error) = context.types.get("StdError") {
+                            if !types_compatible(expected_error, &arg_ty) {
+                                return Err(SemanticError::TypeMismatch {
+                                    expected: expected_error.clone(),
+                                    found: arg_ty,
+                                });
+                            }
+                        }
+                        return Ok(Type::Result {
+                            inner: Box::new(Type::None),
+                        });
+                    }
                     if name == "println" {
                         // Special handling for println - it's variadic, but still analyze args
                         for arg in arguments {
@@ -2429,6 +2730,17 @@ fn infer_expression_type(
             }
         }
 
+        Expression::Loop { body } => {
+            context.enter_scope();
+            context.loop_depth += 1;
+            for stmt in body {
+                analyze_statement(stmt, context)?;
+            }
+            context.loop_depth -= 1;
+            context.exit_scope();
+            Ok(Type::None)
+        }
+
         Expression::Block { statements: _ } => {
             // For now, assume blocks return none
             Ok(Type::None)
@@ -2707,6 +3019,24 @@ fn infer_expression_type(
                     }
                     Ok(payload_type)
                 }
+                Type::Result { inner } => {
+                    if let Some(expected_ret) = context.current_function_return_type.as_ref() {
+                        if !matches!(expected_ret, Type::Result { .. }) {
+                            return Err(SemanticError::InvalidOperation {
+                                operator: "?".to_string(),
+                                operand_types: vec![expected_ret.clone()],
+                            });
+                        }
+                    } else {
+                        return Err(SemanticError::InvalidOperation {
+                            operator: "?".to_string(),
+                            operand_types: vec![Type::Result {
+                                inner: inner.clone(),
+                            }],
+                        });
+                    }
+                    Ok(inner.as_ref().clone())
+                }
                 other => Err(SemanticError::InvalidOperation {
                     operator: "?".to_string(),
                     operand_types: vec![other],
@@ -2944,6 +3274,16 @@ fn types_compatible(expected: &Type, found: &Type) -> bool {
                 || matches!(**expected_inner, Type::None)
                 || types_compatible(expected_inner.as_ref(), found_inner.as_ref())
         }
+        (
+            Type::Result {
+                inner: expected_inner,
+            },
+            Type::Result { inner: found_inner },
+        ) => {
+            matches!(**found_inner, Type::None)
+                || matches!(**expected_inner, Type::None)
+                || types_compatible(expected_inner.as_ref(), found_inner.as_ref())
+        }
         (Type::Optional { .. }, Type::None) | (Type::None, Type::Optional { .. }) => true,
         (
             Type::Identifier {
@@ -3170,7 +3510,13 @@ fn analyze_pattern(
                         }
                     }
                     if func_name == "some" {
-                        if let Type::Optional { inner } = &resolved_scrutinee {
+                        let inner_type = match &resolved_scrutinee {
+                            Type::Optional { inner } => Some(inner.as_ref().clone()),
+                            Type::None => Some(Type::None),
+                            _ => None,
+                        };
+
+                        if let Some(inner_ty) = inner_type {
                             if !type_args.is_empty() || arguments.len() != 1 {
                                 return Err(SemanticError::UndefinedVariable(
                                     "invalid pattern".to_string(),
@@ -3185,10 +3531,7 @@ fn analyze_pattern(
                             match &arg.value {
                                 Expression::Identifier(var_name) => {
                                     if var_name != "_" {
-                                        context.define_variable(
-                                            var_name.clone(),
-                                            inner.as_ref().clone(),
-                                        );
+                                        context.define_variable(var_name.clone(), inner_ty.clone());
                                     }
                                     return Ok(());
                                 }
@@ -3214,9 +3557,7 @@ fn analyze_pattern(
                                                         context.define_variable(
                                                             var_name.clone(),
                                                             Type::Reference {
-                                                                inner: Box::new(
-                                                                    inner.as_ref().clone(),
-                                                                ),
+                                                                inner: Box::new(inner_ty.clone()),
                                                                 is_mutable: false,
                                                             },
                                                         );
@@ -3347,6 +3688,10 @@ fn analyze_pattern(
                             })
                         }
                     } else {
+                        eprintln!(
+                            "invalid pattern fallback (call identifier): pattern={:?} expected={:?}",
+                            pattern, scrutinee_type
+                        );
                         Err(SemanticError::UndefinedVariable(
                             "invalid pattern".to_string(),
                         ))

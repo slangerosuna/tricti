@@ -312,6 +312,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                         if func_name == "some" {
                             return Ok(self.context.i64_type().const_int(1, false));
                         }
+                        if func_name == "ok" {
+                            return Ok(self.context.i64_type().const_zero());
+                        }
+                        if func_name == "err" {
+                            return Ok(self.context.i64_type().const_int(1, false));
+                        }
                         if let Some((tname, vname)) = func_name.split_once('_') {
                             if let Some(Type::Enum { variants, order }) =
                                 self.semantic.types.get(tname)
@@ -4766,6 +4772,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                             Expression::Identifier(func_name) => {
                                 if func_name == "some" {
                                     needs_payload = true;
+                                } else if func_name == "ok" || func_name == "err" {
+                                    needs_payload = true;
                                 } else if let Some((tname, vname)) = func_name.split_once('_') {
                                     if let Some(Type::Enum { variants, .. }) =
                                         self.semantic.types.get(tname)
@@ -4803,7 +4811,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         if needs_payload {
                             for arg in arguments.iter() {
                                 if let Expression::Identifier(var_name) = &arg.value {
-                                    if var_name != "_" {
+                                    if var_name != "_" && var_name != "none" {
                                         let payload_val: BasicValueEnum<'ctx> =
                                             if let Some(enum_alloca) = temp_alloca {
                                                 let payload_ptr = self
