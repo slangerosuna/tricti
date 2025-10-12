@@ -8530,26 +8530,44 @@ impl<'ctx> CodeGenerator<'ctx> {
                         "enum representation not available for question operator".to_string(),
                     )
                 })?;
+                let enum_ptr_ty = enum_ty.ptr_type(AddressSpace::default());
                 let current_fn = self.current_function.ok_or_else(|| {
                     CodegenError::CompilationError(
                         "question operator used outside of a function".to_string(),
                     )
                 })?;
+
                 let result_struct = if source_val.is_struct_value() {
                     let sv = source_val.into_struct_value();
                     if sv.get_type() == enum_ty {
                         sv
                     } else {
-                        return Err(CodegenError::InvalidOperation(
-                            "question operator requires optional or result value".to_string(),
-                        ));
+                        let src_ty: BasicTypeEnum<'ctx> = sv.get_type().into();
+                        let tmp_src = self
+                            .create_entry_block_alloca("question_src", src_ty)
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        self.builder
+                            .build_store(tmp_src, sv)
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        let cast_ptr = self
+                            .builder
+                            .build_pointer_cast(tmp_src, enum_ptr_ty, "question_src_cast")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
+                        self.builder
+                            .build_load(enum_ty, cast_ptr, "question_load_from_struct")
+                            .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                            .into_struct_value()
                     }
                 } else if source_val.is_pointer_value() {
-                    let loaded = self
+                    let ptr_val = source_val.into_pointer_value();
+                    let cast_ptr = self
                         .builder
-                        .build_load(enum_ty, source_val.into_pointer_value(), "question_load")
+                        .build_pointer_cast(ptr_val, enum_ptr_ty, "question_ptr_cast")
                         .map_err(|e| CodegenError::CompilationError(e.to_string()))?;
-                    loaded.into_struct_value()
+                    self.builder
+                        .build_load(enum_ty, cast_ptr, "question_load")
+                        .map_err(|e| CodegenError::CompilationError(e.to_string()))?
+                        .into_struct_value()
                 } else {
                     return Err(CodegenError::InvalidOperation(
                         "question operator requires optional or result value".to_string(),
