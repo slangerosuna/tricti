@@ -17,15 +17,13 @@ generic_identity<T> :: (value: T) -> T => value
 
 add :: (x: i32, y: i32) => x + y
 # !i32 is syntax sugar for Result<i32, *dyn Error>
-div :: (x: i32, y: i32) -> !i32 => {
-    if y == 0 {
-        # `!expr` wraps the type of expr (which has to impl `Error`) in an owned pointer to a trait object (*dyn Error)
+div :: (x: i32, y: i32) -> !i32 => do
+    if y == 0:
+        # `err expr` wraps the type of expr (which has to impl `Error`) in an owned pointer to a trait object (*dyn Error)
         # this would be equivalent to `return Err(Box::new("Cannot divide by zero"))` in Rust
-        ret !"Cannot divide by zero"
-    }
+        ret err "Cannot divide by zero"
     # Wrapping in Ok or Some is implicit unless you use the `some` or `ok` keywords explicitly
     x / y
-}
 
 # -------------------------------
 # Compile-time evaluation
@@ -37,28 +35,27 @@ PI_APPROX :: f32 := 3.14159
 # that is allocated to the heap at runtime
 # [i32] here is just syntax sugar for std::core::collections::Vec<i32>
 @par_const
-make_array :: (n: i32) -> [i32] => {
+make_array :: (n: i32) -> [i32] => do
     arr := [0; n]
-    for i in 0..n { arr[i] = i * i }
+    for i in 0..n: arr[i] = i * i
     arr
-}
 
 # -------------------------------
 # Memoized functions
 # -------------------------------
 @memoize
-fib :: (n: i32) -> i32 => match n {
+fib :: (n: i32) -> i32 => match n:
     0 => 0,
     1 => 1,
     n => fib(n - 1) + fib(n - 2),
-}
 
-default_args :: (a: i32 = 17) => {}
+default_args :: (a: i32 = 17) => do
+    println("a is {}", a)
 
 # -------------------------------
 # Structs, enums, references
 # -------------------------------
-MyStruct :: {
+MyStruct :: struct:
     # There are four types of pointers in Tricti that interact different ways with the borrow checker:
     # 1. Owned pointers: `*T` - own the data they point to, frees the data when they go out of scope
     # 2. Shared pointers: `&T` - shared immutable references to data owned by someone else
@@ -76,31 +73,30 @@ MyStruct :: {
     b: ?&i32,
     c: &mut i32,
     d: ?*MyStruct,
-}
 
-impl MyStruct {
+impl MyStruct:
     foo :: (&self) -> ?i32 => self.a? + *self.b?
-}
 
-MyEnum :: enum {
+MyEnum :: enum
     A: MyStruct,
-    B: { a: ?i32, b: ?i32 },
-}
+    # here, you could either have the inline `struct { [fields] }` as seen below, or expand onto multiple lines like in Haskell
+    B: struct { a: ?i32, b: ?i32 },
 
-Image :: {}
-Gui :: @resource {}
+Image :: struct {} # you need the braces for the empty struct as, without it, you'll have an expected intendation error
+Gui :: @resource struct {}
 
 # -------------------------------
 # Database and tables
 # -------------------------------
-Apps :: table {
+Apps :: table:
     @primary id: u64,
     title: String,
     image: Image,
     display: bool = false,
-}
 
-Database :: db { Apps: Apps, Gui }
+Database :: db 
+  Apps: Apps,
+  Gui: Gui,
 
 # -------------------------------
 # Signals
@@ -115,11 +111,8 @@ display_apps :: sys (
    query: select (image: &Image, title: &String) from Apps where display == true,
    gui: res &mut Gui,
    @sys_input input_size: f32
-) -> !none => {
-  query.for_each((row: (image: &Image, title: &string)) => {
-      gui.display(image, title)
-  })
-}
+) -> !none => do
+  query.for_each((row: (image: &Image, title: &string)) => gui.display(image, title))
 
 # Example function offloaded to GPU for vectorized computation
 # @gpu hands it off to an OpenCL kernel explicitly, but in future
@@ -129,53 +122,52 @@ vector_add :: (arr_a: [f32], arr_b: [f32]) -> [f32] => arr_a .+ arr_b
 
 ExampleSignal :: Signal<Mpsc, Buffer, String>
 
-emitter_sys :: sys () => { emit(ExampleSignal, "Frame Finalized") }
+emitter_sys :: sys () => do
+  emit(ExampleSignal, "Frame Finalized")
 
 @trigger ExampleSignal
-receiver_sys :: sys (@trigger_recv msg: String) => { println("Received: {}", msg) }
+receiver_sys :: (@trigger_recv msg: String) => do
+  println("Received: {}", msg)
 
 # -------------------------------
 # Interaction composition
 # -------------------------------
-Table :: table {
+Table :: table:
     @primary id: u64,
     foo: Foo,
     bar: Bar,
-}
 
-Foo :: {}
-Bar :: {}
-Quux :: {}
+Foo :: struct {}
+Bar :: struct {}
+Quux :: struct {}
 
 # here the expression `Quux { }` is wrapped in Some explicitly with the `some` keyword
 # however, this is not necessary in the return statement of functions that return Option types
 # e.g. `Quux { }` would be equivalent
 #
 # wrapping in Some explicitly is really just there if the end user prefers it
-init_foobar :: sys (query: select (Bar) from Table) -> ?Quux { some Quux { } }
-foo :: sys (query: select (Foo) from Table, @sys_input quux: Quux) -> Baz { Baz { } }
-bar :: sys (query: select (Bar) from Table, @sys_input baz: Baz) -> ?Quux { none }
+init_foobar :: sys (query: select (Bar) from Table) -> ?Quux => some Quux { }
+foo :: sys (query: select (Foo) from Table, @sys_input quux: Quux) -> Baz => Baz { }
+bar :: sys (query: select (Bar) from Table, @sys_input baz: Baz) -> ?Quux => none
 
-foobar :: compose {
+foobar :: compose
     # runs init_foobar, if it returns a Quux, passes it to foo
     # takes the Baz result from foo and passes it to bar
     # if bar returns a Quux, passes it back to foo, creating a feedback loop
     # that terminates when bar returns none
     init_foobar ?-> (a: foo) -> (b: bar),
     (b: bar) ?-> (a: foo),
-}
 
 # -------------------------------
 # Triggers
 # -------------------------------
 @trigger(Init)
-setup_signals :: () => {
+setup_signals :: () => do
     println("Initializing signals and DAGs")
-}
 
 RedrawRequested :: Signal<Spmc, Overwrite, none>
 @trigger(RedrawRequested, Database)
-redraw :: compose {
+redraw :: compose
     display_apps -> emitter_sys,
 
     # fan out, merge
@@ -190,12 +182,11 @@ redraw :: compose {
     # and there is also dynamic fanout and merge via decomposing and composing vectors
     # foo -> [bar], # runs bar for each element of the vector returned by foo
     # [bar] -> quux, # merges the results of all bar instances into a vector and passes to quux
-}
 
 # -------------------------------
 # Vector and matrix operations
 # -------------------------------
-example_arrays :: () => {
+example_arrays :: () => do
     arr := [1, 2, 3]
     println(arr.map(add.bind(y: 1)))
     println(arr.filter((x) => x % 2 == 0))
@@ -203,17 +194,15 @@ example_arrays :: () => {
     matrix := [1 0 0; 0 1 0; 0 0 1]
     matrix *= [0 1 0; 1 0 1; 0 1 0]
     println(matrix)
-}
 
 # -------------------------------
 # GPGPU example usage
 # -------------------------------
-gpu_example :: () => {
+gpu_example :: () =>
     a := [1.0, 2.0, 3.0]
     b := [4.0, 5.0, 6.0]
-    c := vector_add(a, b) # executed on GPU via OpenCL kernel
+    c := @gpu a + b # executed on GPU via OpenCL kernel
     println(c)
-}
 ```
 
 ## Quick Start
