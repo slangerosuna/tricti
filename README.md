@@ -88,7 +88,7 @@ Gui :: @resource struct {}
 # -------------------------------
 # Database and tables
 # -------------------------------
-Apps :: table:
+Apps :: table
     @primary id: u64,
     title: String,
     image: Image,
@@ -129,10 +129,7 @@ emitter_sys :: sys () => do
 receiver_sys :: (@trigger_recv msg: String) => do
   println("Received: {}", msg)
 
-# -------------------------------
-# Interaction composition
-# -------------------------------
-Table :: table:
+Table :: table
     @primary id: u64,
     foo: Foo,
     bar: Bar,
