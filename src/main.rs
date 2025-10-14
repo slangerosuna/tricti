@@ -51,12 +51,12 @@ fn main() {
             _ if arg.starts_with('-') => {
                 eprintln!("Unknown option: {}", arg);
                 println!("Use --help to see available options.");
-                return;
+                std::process::exit(1);
             }
             _ => {
                 if source_path.is_some() {
                     eprintln!("Multiple source files provided. Only one is supported.");
-                    return;
+                    std::process::exit(1);
                 }
                 source_path = Some(arg);
             }
@@ -71,7 +71,7 @@ fn main() {
         Ok(loaded) => loaded,
         Err(error) => {
             eprintln!("Failed to load source file {}: {}", path, error);
-            return;
+            std::process::exit(1);
         }
     };
 
@@ -89,7 +89,7 @@ fn main() {
     }
 
     let program = loaded.program;
-    println!("AST: {:#?}", program);
+    //println!("AST: {:#?}", program);
 
     println!("\nPerforming semantic analysis...");
     let semantic_context = match semantic::analyze_program(&program) {
@@ -99,7 +99,7 @@ fn main() {
         }
         Err(error) => {
             eprintln!("Semantic error: {:?}", error);
-            return;
+            std::process::exit(1);
         }
     };
 
@@ -112,7 +112,7 @@ fn main() {
 
         if let Err(error) = run_async_systems(async_systems, semantic_context.clone()) {
             eprintln!("Async execution error: {:?}", error);
-            return;
+            std::process::exit(1);
         }
 
         println!("Async execution completed successfully!");
@@ -124,13 +124,13 @@ fn main() {
         Ok(generator) => generator,
         Err(error) => {
             eprintln!("Codegen initialization error: {}", error);
-            return;
+            std::process::exit(1);
         }
     };
 
     if let Err(error) = codegen.generate_program(&program) {
         eprintln!("Code generation error: {}", error);
-        return;
+        std::process::exit(1);
     }
 
     println!("Generated LLVM IR:");
@@ -139,7 +139,7 @@ fn main() {
     println!("\nWriting object file...");
     if let Err(error) = codegen.write_object_file("output.o") {
         eprintln!("Failed to write object file: {}", error);
-        return;
+        std::process::exit(1);
     }
 
     println!("Linking with clang...");

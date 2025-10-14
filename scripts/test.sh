@@ -159,6 +159,7 @@ if $RUN_TRI; then
     run_all_path="$dir_name/run_all.sh"
 
     if [[ -f "$run_all_path" ]]; then
+      echo "test"
       if [[ -z "${RUN_ALL_EXECUTED["$dir_name"]:-}" ]]; then
         echo "[tools] running $run_all_path"
         if [[ -x "$run_all_path" ]]; then
