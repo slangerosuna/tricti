@@ -5,44 +5,44 @@
 
 test_infer_i64 :: () -> bool => do
     x := 42
-    (x == 42)
+    ret x == 42
 
 test_infer_arithmetic :: () -> bool => do
     x := 10 + 20
-    (x == 30)
+    ret x == 30
 
 test_infer_comparison :: () -> bool => do
     x := (5 > 3)
-    x
+    ret x
 
 test_infer_bool :: () -> bool => do
     x := true
-    x
+    ret x
 
 test_infer_string :: () -> bool => do
     s := "hello"
-    streq(s, "hello")
+    ret streq(s, "hello")
 
 test_infer_chain :: () -> bool => do
     a := 42
     b := a
-    (b == 42)
+    ret (b == 42)
 
 test_infer_negation :: () -> bool => do
     x := -10
-    (x == -10)
+    ret (x == -10)
 
 test_infer_mul :: () -> bool => do
     x := 6 * 7
-    (x == 42)
+    ret (x == 42)
 
 test_infer_div :: () -> bool => do
     x := 84 / 2
-    (x == 42)
+    ret (x == 42)
 
 test_infer_complex :: () -> bool => do
     x := (10 + 20) * 2
-    (x == 60)
+    ret (x == 60)
 
 # ============ GENERIC FUNCTIONS (10 tests) ============
 
@@ -50,7 +50,7 @@ identity :: <T>(x: T) -> T => do x }
 
 test_generic_i64 :: () -> bool => do
     x := identity(42)
-    (x == 42)
+    ret (x == 42)
 
 test_generic_bool :: () -> bool => do
     x := identity(true)
@@ -58,84 +58,92 @@ test_generic_bool :: () -> bool => do
 
 test_generic_string :: () -> bool => do
     x := identity("test")
-    streq(x, "test")
+    ret streq(x, "test")
 
-first :: <T>(a: T, b: T) -> T => do a }
+first :: <T>(a: T, b: T) -> T => a
 
 test_generic_first :: () -> bool => do
     x := first(10, 20)
-    (x == 10)
+    ret (x == 10)
 
-second :: <T>(a: T, b: T) -> T => do b }
+second :: <T>(a: T, b: T) -> T => b
 
 test_generic_second :: () -> bool => do
     x := second(10, 20)
-    (x == 20)
+    ret (x == 20)
 
 test_generic_nested :: () -> bool => do
     x := identity(identity(42))
-    (x == 42)
+    ret (x == 42)
 
-pair_first :: <A, B>(a: A, b: B) -> A => do a }
+pair_first :: <A, B>(a: A, b: B) -> A => a
 
 test_two_type_params :: () -> bool => do
     x := pair_first(42, true)
-    (x == 42)
+    ret (x == 42)
 
 test_generic_multi_inst :: () -> bool => do
     a := identity(10)
     b := identity(true)
-        ((a == 10) and b)
+    ret (a == 10) and b
 
 test_generic_expr :: () -> bool => do
     x := identity(10 + 20)
-    (x == 30)
+    ret x == 30
 
 test_generic_if :: () -> bool => do
-    x := if (true) { identity(42) } else { identity(0) }
-    (x == 42)
+    x := if true: identity(42) else: identity(0)
+    ret x == 42
 
 # ============ CONTROL FLOW (10 tests) ============
 
 test_if_expr :: () -> bool => do
-    x := if (true) { 42 } else { 0 }
-    (x == 42)
+    x := if true: 42 else: 0
+    ret x == 42
 
 test_if_else_bool :: () -> bool => do
-    x := if ((5 > 3)) { true } else { false }
-    x
+    x := if 5 > 3: true else: false
+    ret x
 
 test_nested_if :: () -> bool => do
-    x := if (true) { if (true) { 42 } else { 0 } } else { 0 }
-    (x == 42)
+    x := do
+        if true:
+            if true: 42
+            else: 0
+        else: 0
+    ret x == 42
 
 test_if_computation :: () -> bool => do
-    x := if (true) { 10 + 20 } else { 0 }
-    (x == 30)
+    x := if true: 10 + 20 else: 0
+    ret x == 30
 
 test_if_string :: () -> bool => do
-    s := if (true) { "yes" } else { "no" }
-    streq(s, "yes")
+    s := if true: "yes" else: "no"
+    ret streq(s, "yes")
 
 test_block_return :: () -> bool => do
     x := do
         a := 10
         b := 20
         a + b
-    (x == 30)
+    ret x == 30
 
 test_early_return :: () -> bool => do
     f :: (x: i64) -> i64 => do
         if x < 0:
             ret 0
-        x
+        ret x
     result := f(42)
-    (result == 42)
+    ret result == 42
 
 test_if_chain :: () -> bool => do
     val := 2
-    x := if ((val == 1)) { 10 } else { if ((val == 2)) { 20 } else { 30 } }
-    (x == 20)
+    x := do 
+        if val == 1: 10
+        else: 
+            if val == 2: 20
+            else: 30
+    ret x == 20
 
 test_nested_blocks :: () -> bool => do
     x := do
@@ -166,27 +174,16 @@ test_div_op :: () -> bool => do
     x := 84 / 2
     (x == 42)
 
-test_eq_op :: () -> bool => do
-    (42 == 42)
-
-test_neq_op :: () -> bool => do
-    (10 ~= 20)
-
-test_gt_op :: () -> bool => do
-    (42 > 10)
-
-test_lt_op :: () -> bool => do
-    (10 < 42)
-
-test_and_op :: () -> bool => do
-    (true and true)
-
-test_or_op :: () -> bool => do
-    (false or true)
+test_eq_op :: () -> bool => 42 == 42
+test_neq_op :: () -> bool => 10 ~= 20
+test_gt_op :: () -> bool => 42 > 10
+test_lt_op :: () -> bool => 10 < 42
+test_and_op :: () -> bool => true and true
+test_or_op :: () -> bool => false or true
 
 # ============ FUNCTIONS (10 tests) ============
 
-add :: (a: i64, b: i64) -> i64 => do a + b }
+add :: (a: i64, b: i64) -> i64 => a + b
 
 test_func_call :: () -> bool => do
     x := add(10, 32)
@@ -196,7 +193,7 @@ test_func_nested :: () -> bool => do
     x := add(add(1, 2), add(3, 4))
     (x == 10)
 
-get_true :: () -> bool => do true }
+get_true :: () -> bool => true
 
 test_func_no_param :: () -> bool => do
     x := get_true()
@@ -207,15 +204,15 @@ test_func_param_infer :: () -> bool => do
     y := add(x, 0)
     (y == 42)
 
-multiply :: (a: i64, b: i64) -> i64 => do a * b }
+multiply :: (a: i64, b: i64) -> i64 => a * b
 
 test_func_composition :: () -> bool => do
     x := add(10, 20)
     y := multiply(x, 2)
     (y == 60)
 
-factorial :: (n: i64) -> i64 => do
-    if ((n <= 1)) { 1 } else { n * factorial(n - 1) }
+factorial :: (n: i64) -> i64 =>
+    if n <= 1: 1 else: n * factorial(n - 1)
 
 test_recursion :: () -> bool => do
     x := factorial(5)

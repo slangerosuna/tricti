@@ -1,3 +1,3 @@
-# Core namespace entry point for the TriCTI stdlib.
-# Until scoped module imports are supported, this file serves as documentation for the intended layering.
-# Individual modules (errors/result/logging/config/collections) can be referenced directly by the compiler's flat namespace.
+# Deprecated compatibility shim.
+# Module discovery now reads `core/core.tri` directly.
+# This file remains for older code that referenced `core::mod`.

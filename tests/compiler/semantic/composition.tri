@@ -35,18 +35,18 @@ semantic_pipeline :: compose
 # Semantic-level assertion to ensure optional chaining compiles
 # and resources referenced in the database can be accessed.
 test_semantic_compose_optional :: () -> bool => do
-	match produce_event() {
-		ok some payload => {
-			match decode_event(payload) {
-				ok decoded => {
-					match persist_event(decoded) {
-						ok _ => ret true
-						err _ => ret false
-					}
-				}
-				err _ => false
-			}
-		}
-		ok none => false
-		err _ => false
-	}
+	match produce_event():
+		ok some payload => do
+			match decode_event(payload):
+				ok decoded => do
+					match persist_event(decoded):
+						ok _ => do
+							ret true
+						err _ => do
+							ret false
+				err _ => do
+					ret false
+		ok none => do
+			ret false
+		err _ => do
+			ret false

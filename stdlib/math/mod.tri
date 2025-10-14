@@ -1,2 +1,2 @@
-# Math namespace placeholder.
-# Vector, matrix, and numeric analysis helpers will be added in future phases.
+# Deprecated compatibility shim for legacy `math::mod` imports.
+# Module surface now lives in `math/math.tri`.

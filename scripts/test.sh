@@ -11,6 +11,7 @@ fi
 
 export RUSTFLAGS="-Awarnings"
 mkdir -p tmp
+REPO_ROOT="$(pwd)"
 trap 'echo "[tools] cleaning tmp artifacts"; rm -f tmp/output tests/tmp_*.o tests/tmp_*.out || true' EXIT
 
 # Array of stdlib test files
@@ -128,15 +129,54 @@ if $RUN_TRI; then
     TRI_ARGS=("${expanded[@]}")
   fi
 
+  declare -A RUN_ALL_DIRECTORIES=()
+
   for tri_file in "${TRI_ARGS[@]}"; do
     if [[ ! -f "$tri_file" ]]; then
       echo "[tools] warning: test file '$tri_file' does not exist, skipping"
       continue
     fi
+
+    dir_name=$(dirname "$tri_file")
+    run_all_path="$dir_name/run_all.sh"
+    if [[ -f "$run_all_path" ]]; then
+      RUN_ALL_DIRECTORIES["$dir_name"]=1
+      echo "[tools] found run_all.sh in $dir_name"
+      continue
+    fi
+
     echo "[tools] found test file $tri_file"
   done
 
+  declare -A RUN_ALL_EXECUTED=()
+
   for tri_file in "${TRI_ARGS[@]}"; do
+    if [[ ! -f "$tri_file" ]]; then
+      continue
+    fi
+
+    dir_name=$(dirname "$tri_file")
+    run_all_path="$dir_name/run_all.sh"
+
+    if [[ -f "$run_all_path" ]]; then
+      if [[ -z "${RUN_ALL_EXECUTED["$dir_name"]:-}" ]]; then
+        echo "[tools] running $run_all_path"
+        if [[ -x "$run_all_path" ]]; then
+          if ! (cd "$dir_name" && ./run_all.sh) &>"$REPO_ROOT/tmp/test_output"; then
+            cat tmp/test_output
+            exit 1
+          fi
+        else
+          if ! (cd "$dir_name" && bash ./run_all.sh) &>"$REPO_ROOT/tmp/test_output"; then
+            cat tmp/test_output
+            exit 1
+          fi
+        fi
+        RUN_ALL_EXECUTED["$dir_name"]=1
+      fi
+      continue
+    fi
+
     echo "[tools] running $tri_file"
     if ! ./target/debug/tricti "$tri_file" &>tmp/test_output; then
       cat tmp/test_output

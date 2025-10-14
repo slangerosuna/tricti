@@ -227,6 +227,10 @@ fn resolve_stdlib_path(cwd: &Path) -> PathBuf {
         return path;
     }
 
+    if let Some(path) = resolve_stdlib_path_from_executable() {
+        return path;
+    }
+
     if let Some(path) = search_stdlib_near(cwd.to_path_buf()) {
         return path;
     }
@@ -236,11 +240,12 @@ fn resolve_stdlib_path(cwd: &Path) -> PathBuf {
         return path;
     }
 
-    if let Some(path) = resolve_stdlib_path_from_executable() {
-        return path;
+    let manifest_candidate = manifest_dir.join("stdlib").join("std.tri");
+    if manifest_candidate.exists() {
+        manifest_candidate
+    } else {
+        cwd.join("stdlib").join("std.tri")
     }
-
-    manifest_dir.join("stdlib").join("std.tri")
 }
 
 fn has_program_no_std_attribute(program: &Program) -> bool {
@@ -290,14 +295,22 @@ fn load_and_expand_stdlib(
         .map(Path::to_path_buf)
         .unwrap_or_else(|| std::env::current_dir().expect("failed to get current dir"));
 
-    expand_modules(
+    let expanded = expand_modules(
         std_program,
         &base_dir,
         stdlib_root,
         Some(stdlib_path),
         stdlib_root,
         visited_modules,
-    )
+    );
+
+    Program {
+        statements: vec![Statement::ModuleDecl {
+            is_public: true,
+            name: "std".to_string(),
+            items: Some(expanded.statements),
+        }],
+    }
 }
 
 fn expand_modules(
@@ -308,13 +321,35 @@ fn expand_modules(
     stdlib_root: &Path,
     visited: &mut HashSet<PathBuf>,
 ) -> Program {
+    let mut statements = program.statements;
+    let explicit_modules: HashSet<String> = statements
+        .iter()
+        .filter_map(|stmt| match stmt {
+            Statement::ModuleDecl { name, .. } => Some(name.clone()),
+            _ => None,
+        })
+        .collect();
+
+    let search_dir = current_file
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| base_dir.to_path_buf());
+
+    let implicit_modules = discover_implicit_modules(&search_dir, current_file, &explicit_modules);
+    for module_name in implicit_modules {
+        statements.push(Statement::ModuleDecl {
+            is_public: true,
+            name: module_name,
+            items: None,
+        });
+    }
+
     let mut expanded: Vec<Statement> = Vec::new();
-    for stmt in program.statements.into_iter() {
+    for stmt in statements.into_iter() {
         match &stmt {
             Statement::ModuleDecl {
                 name,
                 items,
-                is_public: _,
+                ..
             } if items.is_none() => {
                 let module_file = format!("{}.tri", name);
                 let mut roots: Vec<PathBuf> = vec![
@@ -344,8 +379,8 @@ fn expand_modules(
                 let mut tried: Vec<PathBuf> = Vec::new();
                 for root in roots {
                     tried.push(root.join(Path::new(&module_file)));
-                    tried.push(root.join(Path::new(name)).join("mod.tri"));
                     tried.push(root.join(Path::new(name)).join(Path::new(&module_file)));
+                    tried.push(root.join(Path::new(name)).join("mod.tri"));
                 }
 
                 let mut loaded: Option<(String, PathBuf)> = None;
@@ -394,7 +429,11 @@ fn expand_modules(
                         stdlib_root,
                         visited,
                     );
-                    expanded.extend(sub.statements);
+                    expanded.push(Statement::ModuleDecl {
+                        is_public: true,
+                        name: name.clone(),
+                        items: Some(sub.statements),
+                    });
                 } else if already_loaded {
                     continue;
                 } else {
@@ -457,11 +496,11 @@ fn expand_modules(
                     let mut tried: Vec<PathBuf> = Vec::new();
                     for root in roots {
                         tried.push(root.join(Path::new(&joined_file)));
-                        tried.push(root.join(joined_path).join("mod.tri"));
                         tried.push(root.join(joined_path).join(Path::new(&module_file)));
+                        tried.push(root.join(joined_path).join("mod.tri"));
                         tried.push(root.join(Path::new(&module_file)));
-                        tried.push(root.join(Path::new(name)).join("mod.tri"));
                         tried.push(root.join(Path::new(name)).join(Path::new(&module_file)));
+                        tried.push(root.join(Path::new(name)).join("mod.tri"));
                     }
 
                     let mut loaded: Option<(String, PathBuf)> = None;
@@ -518,13 +557,15 @@ fn expand_modules(
                 }
             }
             Statement::ModuleDecl {
-                name: _,
+                name,
                 items: Some(items),
-                is_public: _,
+                ..
             } => {
-                for s in items {
-                    expanded.push(s.clone());
-                }
+                expanded.push(Statement::ModuleDecl {
+                    is_public: true,
+                    name: name.clone(),
+                    items: Some(items.clone()),
+                });
             }
             _ => expanded.push(stmt.clone()),
         }
@@ -532,6 +573,81 @@ fn expand_modules(
     Program {
         statements: expanded,
     }
+}
+
+fn discover_implicit_modules(
+    search_dir: &Path,
+    current_file: Option<&Path>,
+    explicit_modules: &HashSet<String>,
+) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let current_stem = current_file
+        .and_then(|path| path.file_stem())
+        .and_then(|stem| stem.to_str())
+        .map(|s| s.to_string());
+    let current_path = current_file.map(|p| p.to_path_buf());
+
+    let mut dirs_to_scan = vec![search_dir.to_path_buf()];
+    if let Some(stem) = current_stem.as_deref() {
+        let nested = search_dir.join(stem);
+        if nested.is_dir() {
+            dirs_to_scan.push(nested);
+        }
+    }
+
+    for dir in dirs_to_scan {
+        if let Ok(entries) = fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if path.extension().and_then(|ext| ext.to_str()) != Some("tri") {
+                        continue;
+                    }
+                    if let Some(ref current) = current_path {
+                        if current == &path {
+                            continue;
+                        }
+                    }
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        if Some(stem) == current_stem.as_deref() {
+                            continue;
+                        }
+                        if explicit_modules.contains(stem) {
+                            continue;
+                        }
+                        if seen.insert(stem.to_string()) {
+                            names.push(stem.to_string());
+                        }
+                    }
+                    continue;
+                }
+
+                if path.is_dir() {
+                    let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) else {
+                        continue;
+                    };
+                    if explicit_modules.contains(dir_name) {
+                        continue;
+                    }
+                    if Some(dir_name) == current_stem.as_deref() {
+                        continue;
+                    }
+
+                    let candidate = path.join(format!("{}.tri", dir_name));
+                    let legacy = path.join("mod.tri");
+                    if candidate.exists() || legacy.exists() {
+                        if seen.insert(dir_name.to_string()) {
+                            names.push(dir_name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    names.sort();
+    names
 }
 
 #[cfg(test)]

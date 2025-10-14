@@ -1,6 +1,7 @@
 # FFI Type Marshalling Utilities
 # Convert between TriCTI and C types
 
+use std::core::string
 use std::ffi
 
 # Convert TriCTI String to C string (null-terminated)

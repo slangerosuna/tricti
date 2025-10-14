@@ -2550,8 +2550,51 @@ fn infer_expression_type(
                         }
                     }
 
-                    // Otherwise treat as static function call
-                    if let Some(signature) = context.get_function_signature(&mangled_name).cloned()
+                    // Inherent impl static dispatch: Type::method(arg, ...)
+                    if segments.len() >= 2 {
+                        let type_name = &segments[0];
+                        let method_name = &segments[1];
+                        let inherent_sig = context
+                            .inherent_impls
+                            .get(type_name)
+                            .and_then(|impl_info| impl_info.methods.get(method_name))
+                            .cloned();
+                        if let Some(sig) = inherent_sig {
+                            if arguments.len() != sig.parameters.len() {
+                                return Err(SemanticError::ArgumentCountMismatch {
+                                    expected: sig.parameters.len(),
+                                    found: arguments.len(),
+                                });
+                            }
+                            for (arg, expected_type) in arguments.iter().zip(&sig.parameters) {
+                                let arg_ty = infer_expression_type(&arg.value, context)?;
+                                if !types_compatible(expected_type, &arg_ty) {
+                                    return Err(SemanticError::TypeMismatch {
+                                        expected: expected_type.clone(),
+                                        found: arg_ty,
+                                    });
+                                }
+                            }
+                            return Ok(sig.return_type.clone());
+                        }
+                    }
+
+                    // Otherwise treat as static function call (with module-qualified fallback)
+                    let fallback_signature = context
+                        .functions
+                        .iter()
+                        .find_map(|(name, sig)| {
+                            if name.ends_with(&format!("::{}", mangled_name)) {
+                                Some(sig.clone())
+                            } else {
+                                None
+                            }
+                        });
+
+                    if let Some(signature) = context
+                        .get_function_signature(&mangled_name)
+                        .cloned()
+                        .or(fallback_signature)
                     {
                         if arguments.len() != signature.parameters.len() {
                             return Err(SemanticError::ArgumentCountMismatch {

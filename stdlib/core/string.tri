@@ -32,7 +32,7 @@ extern tolower :: (c: i32) -> i32
 extern isspace :: (c: i32) -> i32
 
 # Helper to convert pointer offset
-ptr_offset :: unsafe (base: *raw u8, offset: u64) -> *raw u8 => unsafe { base as u64 + offset }
+ptr_offset :: unsafe (base: *raw u8, offset: u64) -> *raw u8 => unsafe { (base as u64 + offset) as *raw u8 }
 
 # String implementation with associated functions
 impl String:
@@ -58,6 +58,22 @@ impl String:
         capacity := len + 1
         data := malloc(capacity)
         strcpy(data, cstr)
+
+        ret String {
+            data: data,
+            len: len,
+            capacity: capacity
+        }
+
+    # Constructor: Create string from raw bytes buffer
+    from_bytes :: (ptr: *raw u8, len: u64) -> String => do
+        if ptr == (0 as *raw u8) or len == 0:
+            ret String::new()
+
+        capacity := len + 1
+        data := malloc(capacity)
+        memcpy(data, ptr, len)
+        ptr_offset(data, len)[0] = 0
 
         ret String {
             data: data,
@@ -140,8 +156,12 @@ impl String:
         ret self.data
 
     # Get raw bytes pointer
-    bytes :: (&self) -> *raw u8 => self.data
+    bytes :: (&self) -> *raw u8 => { self.data }
 
+    # Alias for raw pointer access
+    as_ptr :: (&self) -> *raw u8 => { self.data }
+
+impl String:
     # Push string
     push_str :: (&mut self, other: &String) -> none => do
         if other.len == 0:

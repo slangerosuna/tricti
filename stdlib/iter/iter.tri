@@ -1,0 +1,194 @@
+# Iterator module for TriCTI stdlib
+# Provides iterator utilities and terminal operations
+
+use std::prelude
+use std::core::traits
+
+# =============================================================================
+# ITERATOR UTILITY FUNCTIONS
+# =============================================================================
+
+# Count elements in an iterator
+iter_count :: <T, I: Iterator<T>>(iter: &mut I) -> u64 => {
+    count := 0
+    loop {
+        match Iterator::next(iter) {
+            some _ => { count = count + 1 }
+            none => { break }
+        }
+    }
+    count
+}
+
+# Sum numeric iterator (for u64)
+iter_sum_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => {
+    total := 0
+    loop {
+        match Iterator::next(iter) {
+            some val => { total = total + val }
+            none => { break }
+        }
+    }
+    total
+}
+
+# Sum numeric iterator (for i64)
+iter_sum_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => {
+    total := 0
+    loop {
+        match Iterator::next(iter) {
+            some val => { total = total + val }
+            none => { break }
+        }
+    }
+    total
+}
+
+# Product numeric iterator (for u64)
+iter_product_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => {
+    product := 1
+    loop {
+        match Iterator::next(iter) {
+            some val => { product = product * val }
+            none => { break }
+        }
+    }
+    product
+}
+
+# Product numeric iterator (for i64)
+iter_product_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => {
+    product := 1
+    loop {
+        match Iterator::next(iter) {
+            some val => { product = product * val }
+            none => { break }
+        }
+    }
+    product
+}
+
+# Find first element (returns index, or -1 if not found) - for u64 elements
+iter_find_u64 :: <I: Iterator<u64>>(iter: &mut I, target: u64) -> i64 => {
+    index := 0
+    loop {
+        match Iterator::next(iter) {
+            some val => {
+                if val == target {
+                    ret index
+                }
+                index = index + 1
+            }
+            none => { ret -1 }
+        }
+    }
+    -1
+}
+
+# Check if iterator is exhausted (returns none immediately)
+iter_is_exhausted :: <T, I: Iterator<T>>(iter: &mut I) -> bool => {
+    match Iterator::next(iter) {
+        some _ => { false }
+        none => { true }
+    }
+}
+
+# =============================================================================
+# ITERATOR ADAPTERS (Simple implementations without closures)
+# =============================================================================
+
+# Take adapter - takes first n elements
+Take<I> :: struct
+    iter: I,
+    remaining: u64,
+
+impl<T, I: Iterator<T>> Iterator<T> for Take<I>
+    next :: (&mut self) -> ?T => do
+        if self.remaining == 0: ret none
+        
+        match Iterator::next(&mut self.iter):
+            some val => do
+                self.remaining = self.remaining - 1
+                ret some val
+            none => ret none
+
+# Helper to create Take iterator
+iter_take :: <T, I: Iterator<T>>(iter: I, n: u64) -> Take<I> =>
+    Take { iter: iter, remaining: n }
+
+# Skip adapter - skips first n elements
+Skip<I> :: struct
+    iter: I,
+    to_skip: u64,
+    skipped: bool,
+
+impl<T, I: Iterator<T>> Iterator<T> for Skip<I>:
+    next :: (&mut self) -> ?T => do
+        if not self.skipped:
+            count := 0
+            loop:
+                if count >= self.to_skip: break
+                match self.iter.next():
+                    some _ => count += 1,
+                    none => ret none
+            self.skipped = true
+        ret self.iter.next()
+
+# Helper to create Skip iterator
+iter_skip :: <T, I: Iterator<T>>(iter: I, n: u64) -> Skip<I> =>
+    Skip { iter: iter, to_skip: n, skipped: false }
+
+# Enumerate adapter - adds index to each element
+Enumerate<I> :: struct
+    iter: I,
+    index: u64,
+
+impl<T, I: Iterator<T>> Iterator<(u64, T)> for Enumerate<I>:
+    next :: (self: &mut Enumerate<I>) -> ?(u64, T) => do
+        match Iterator::next(&mut self.iter)
+            some val => do
+                idx := self.index
+                self.index = self.index + 1
+                ret some (idx, val)
+            none => ret none
+
+# Helper to create Enumerate iterator
+iter_enumerate :: <T, I: Iterator<T>>(iter: I) -> Enumerate<I> =>
+    Enumerate { iter: iter, index: 0 }
+
+# Chain adapter - chains two iterators
+Chain<A, B> :: struct
+    first: A,
+    second: B,
+    first_exhausted: bool,
+
+impl<T, A: Iterator<T>, B: Iterator<T>> Iterator<T> for Chain<A, B>:
+    next :: (&mut self) -> ?T => do
+        if not self.first_exhausted {
+            match self.first.next():
+                some val => ret some val
+                none => self.first_exhausted = true
+        self.second.next()
+
+# Helper to create Chain iterator
+iter_chain :: <T, A: Iterator<T>, B: Iterator<T>>(first: A, second: B) -> Chain<A, B> =>
+    Chain { first: first, second: second, first_exhausted: false }
+
+# Fuse adapter - ensures iterator stays exhausted after first none
+Fuse<I> :: struct
+    iter: I,
+    exhausted: bool,
+
+impl<T, I: Iterator<T>> Iterator<T> for Fuse<I>:
+    next :: (&mut self) -> ?T => do
+        if self.exhausted: ret none
+
+        match self.iter.next():
+            some val => ret some val
+            none => do
+                self.exhausted = true
+                ret none
+
+# Helper to create Fuse iterator
+iter_fuse :: <T, I: Iterator<T>>(iter: I) -> Fuse<I> =>
+    Fuse { iter: iter, exhausted: false }
