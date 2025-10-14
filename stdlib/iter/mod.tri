@@ -1,8 +1,8 @@
 # Iterator module for TriCTI stdlib
 # Provides iterator utilities and terminal operations
 
-use prelude
-use core::traits
+use std::prelude
+use std::core::traits
 
 # =============================================================================
 # ITERATOR UTILITY FUNCTIONS

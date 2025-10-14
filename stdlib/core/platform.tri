@@ -1,8 +1,8 @@
 # Platform-specific functions for TriCTI
 # Provides low-level primitives and system interfaces
 
-use prelude
-use core::errors
+use std::prelude
+use std::core::errors
 
 # Global counter for timestamps (since we don't have real time yet)
 global_timestamp_counter: u64 := 0

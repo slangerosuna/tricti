@@ -1,7 +1,7 @@
 # Core error definitions for the TriCTI standard library foundations
 # These types are intended to be shared across stdlib modules and eventually exported through the prelude.
 
-use prelude
+use std::prelude
 
 Error :: trait
     to_string :: (&self) -> String,

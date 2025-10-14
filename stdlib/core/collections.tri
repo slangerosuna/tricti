@@ -1,8 +1,8 @@
 # Collection types for the TriCTI stdlib
 # Provides common data structures for storing and manipulating collections of values
 
-use prelude
-use core::traits
+use std::prelude
+use std::core::traits
 
 Vec<T> :: struct
     data: *raw T,

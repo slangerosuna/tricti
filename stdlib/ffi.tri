@@ -1,8 +1,8 @@
 # FFI (Foreign Function Interface) Module
 # Provides C/C++ interoperability for TriCTI
 
-use core
-use core::traits
+use std::core
+use std::core::traits
 mod marshal;
 
 # C-compatible types

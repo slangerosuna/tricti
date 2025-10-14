@@ -1,8 +1,8 @@
 # HashMap Bug Fix Tests
 # Tests for critical bugs: collision handling, tombstone reuse, hash functions, bounds checking
 
-use prelude
-use collections::hashmap
+use std::prelude
+use std::collections::hashmap
 
 # Note: HashMap currently uses generic hash_value::<K> which returns 0 by default
 # This is a known limitation - users must ensure proper hash functions are used

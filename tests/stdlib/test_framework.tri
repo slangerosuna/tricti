@@ -1,7 +1,7 @@
 # Test framework for TriCTI stdlib
 # Provides simple assertion utilities compatible with parser limitations
 
-use prelude
+use std::prelude
 
 # =============================================================================
 # SIMPLE ASSERTION UTILITIES

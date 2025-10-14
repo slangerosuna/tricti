@@ -1,7 +1,7 @@
 # FFI Type Marshalling Utilities
 # Convert between TriCTI and C types
 
-use ffi
+use std::ffi
 
 # Convert TriCTI String to C string (null-terminated)
 # Caller is responsible for freeing with free_cstr
@@ -35,7 +35,7 @@ free_cstr :: (cstr: *raw u8) => do
 array_to_c :: <T>(arr: &[T]) -> *raw T => do
     if arr.len == 0:
         ret unsafe { 0 as *raw T }
-    size := arr.len * sizeof::<T>()
+    size := arr.len * sizeof<T>()
     ptr := ffi::malloc(size) as *raw T
     ffi::memcpy(ptr as *raw u8, arr.data as *raw u8, size)
     ret ptr
@@ -43,21 +43,21 @@ array_to_c :: <T>(arr: &[T]) -> *raw T => do
 # Convert C array to TriCTI vector
 c_array_to_vec :: <T>(ptr: *raw T, len: u64) -> [T] => do
     vec := new [T; len]
-    size := len * sizeof::<T>()
+    size := len * sizeof<T>()
     ffi::memcpy(vec.data as *raw u8, ptr as *raw u8, size)
     ret vec
 
 # Allocate C-compatible memory
 c_alloc :: <T>() -> *raw T =>
-    ffi::malloc(sizeof::<T>()) as *raw T
+    ffi::malloc(sizeof<T>()) as *raw T
 
 # Allocate array of C-compatible memory
 c_alloc_array<T> :: (count: u64) -> *raw T =>
-    ffi::malloc(count * sizeof::<T>()) as *raw T
+    ffi::malloc(count * sizeof<T>()) as *raw T
 
 # Free C-allocated memory
 c_free<T> :: (ptr: *raw T) => ffi::free(ptr as *raw u8)
 
 # Zero-initialize memory
 c_zero<T> :: (ptr: *raw T) =>
-    ffi::memset(ptr as *raw u8, 0, sizeof::<T>())
+    ffi::memset(ptr as *raw u8, 0, sizeof<T>())

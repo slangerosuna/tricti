@@ -1,8 +1,8 @@
 # IO namespace aggregator for the TriCTI stdlib.
 # Provides convenient aliased access to the POSIX-backed IO surface.
 
-use io::dir
-use io::file
-use io::metadata
-use io::path
-use io::posix
+use std::io::dir
+use std::io::file
+use std::io::metadata
+use std::io::path
+use std::io::posix

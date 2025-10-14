@@ -1,7 +1,7 @@
 # Comprehensive ParVec<T> tests for TriCTI stdlib
 # 80+ tests covering all operations, edge cases, and parallel methods
 
-use prelude
+use std::prelude
 
 is_even :: (x: i64) -> bool => do
     (x % 2) == 0

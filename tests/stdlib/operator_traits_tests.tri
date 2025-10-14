@@ -1,9 +1,9 @@
 # Comprehensive Operator Traits Tests for TriCTI
 # Tests all arithmetic, bitwise, and string operators with algebraic properties
 
-use prelude
-use core::traits
-use stdlib::test::test_framework
+use std::prelude
+use std::core::traits
+use test_framework
 
 # =============================================================================
 # ARITHMETIC OPERATOR TESTS (30 tests)

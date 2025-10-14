@@ -1,8 +1,8 @@
 # Comprehensive HashMap Tests
 # 70+ tests covering all HashMap functionality
 
-use prelude
-use collections::hashmap
+use std::prelude
+use std::collections::hashmap
 
 # Specialize hash functions for i64
 hash_value_i64 :: (value: i64) -> u64 => do

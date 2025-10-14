@@ -1,8 +1,8 @@
 # Simple platform test to verify basic functionality
 # Minimal test that works within parser limitations
 
-use prelude
-use core::platform
+use std::prelude
+use std::core::platform
 
 main :: () => do
     println("=== Simple Platform Test ===")

@@ -210,7 +210,7 @@ fn logical_and_or_short_circuit() {
 
     let src = tri_test_helpers::dedent(
         r#"
-        use prelude
+    use std::prelude
         rhs_and :: () -> bool => do
             println("rhs-and")
             ret true
@@ -250,10 +250,10 @@ fn question_operator_propagates_result() {
 
     let src = tri_test_helpers::dedent(
         r#"
-        use prelude
-    use core::errors
-    use core::errors::StdError
-    use core::errors::StdError_InvalidArgument
+        use std::prelude
+    use std::core::errors
+    use std::core::errors::StdError
+    use std::core::errors::StdError_InvalidArgument
 
         parse_positive :: (value: i64) -> !i64 => do
             if value < 0:

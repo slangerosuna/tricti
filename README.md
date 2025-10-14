@@ -7,8 +7,8 @@ TriCTI (Codd-Church-Curry-Tarski-Iverson)is a high-performance (theoretically, i
 ## At a Glance
 
 ```tri
-use prelude
-use rt
+use std::prelude
+use std::rt
 
 # -------------------------------
 # Generic and utility functions

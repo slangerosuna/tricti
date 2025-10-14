@@ -1,8 +1,8 @@
 # Tests for table runtime with MVCC
 
-use prelude
-use core::table
-use test::test_framework
+use std::prelude
+use std::core::table
+use test_framework
 
 # =============================================================================
 # TABLE SCHEMA TESTS

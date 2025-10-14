@@ -1,8 +1,8 @@
 # Core table runtime for TriCTI
 # Implements the fundamental table abstraction with MVCC support
 
-use prelude
-use core::errors
+use std::prelude
+use std::core::errors
 
 # =============================================================================
 # TABLE SCHEMA AND METADATA

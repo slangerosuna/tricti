@@ -1,11 +1,11 @@
 # Comprehensive Trait Tests for TriCTI stdlib
 # Tests Hash and Eq trait implementations
 
-use prelude
-use core::traits
-use core::string
-use collections::hashmap
-use collections::hashset
+use std::prelude
+use std::core::traits
+use std::core::string
+use std::collections::hashmap
+use std::collections::hashset
 
 # Test Hash trait for i64
 test_hash_i64 :: () -> bool => do

@@ -1,7 +1,7 @@
 # Placeholder logging hooks for stdlib modules.
 # Until the host exposes structured logging, these functions forward to println for visibility.
 
-use prelude
+use std::prelude
 
 LogLevel :: enum
     Trace,

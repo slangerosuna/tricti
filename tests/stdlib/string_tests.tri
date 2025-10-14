@@ -1,7 +1,7 @@
 # Comprehensive String tests for TriCTI stdlib
 # Tests all String methods and edge cases
 
-use stdlib::core::string
+use std::core::string
 
 # Test counter
 test_count := 0

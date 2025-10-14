@@ -2,27 +2,27 @@
 # Provides file system operations, path manipulation, and I/O traits
 
 # POSIX FFI layer (must be first)
-use io::posix
+use std::io::posix
 
 # Core I/O types
-use io::file
-use io::path
-use io::metadata
-use io::dir
-use io::command
+use std::io::file
+use std::io::path
+use std::io::metadata
+use std::io::dir
+use std::io::command
 
 # Re-export main types and functions for convenience
-pub use io::file::File
-pub use io::path::Path
-pub use io::metadata::Metadata
-pub use io::dir::DirEntry
-pub use io::dir::create_dir
-pub use io::dir::remove_dir
-pub use io::dir::remove_file
-pub use io::dir::rename
-pub use io::dir::copy_file
-pub use io::dir::move_file
-pub use io::dir::exists
-pub use io::dir::is_file
-pub use io::dir::is_dir
-pub use io::command::CommandLine
+pub use std::io::file::File
+pub use std::io::path::Path
+pub use std::io::metadata::Metadata
+pub use std::io::dir::DirEntry
+pub use std::io::dir::create_dir
+pub use std::io::dir::remove_dir
+pub use std::io::dir::remove_file
+pub use std::io::dir::rename
+pub use std::io::dir::copy_file
+pub use std::io::dir::move_file
+pub use std::io::dir::exists
+pub use std::io::dir::is_file
+pub use std::io::dir::is_dir
+pub use std::io::command::CommandLine

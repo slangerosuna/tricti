@@ -1,10 +1,10 @@
 # File I/O for TriCTI
 # Provides high-level file operations wrapping POSIX file descriptors
 
-use core::traits
-use core::string
-use io::path::Path
-use io::posix
+use std::core::traits
+use std::core::string
+use std::io::path::Path
+use std::io::posix
 
 # =============================================================================
 # FILE TYPE

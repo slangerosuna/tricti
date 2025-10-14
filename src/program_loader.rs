@@ -17,6 +17,7 @@ pub struct LoadOptions {
     pub skip_std_env: bool,
     pub skip_std_flag: bool,
     pub stdlib_path: PathBuf,
+    pub stdlib_root: PathBuf,
     pub base_dir: PathBuf,
 }
 
@@ -50,11 +51,16 @@ pub fn parse_file_with_std(path: &Path, skip_std_flag: bool) -> std::io::Result<
         .map(Path::to_path_buf)
         .unwrap_or_else(|| cwd.clone());
     let stdlib_path_buf = resolve_stdlib_path(&cwd);
+    let stdlib_root_buf = stdlib_path_buf
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| cwd.join("stdlib"));
 
     let options = LoadOptions {
         skip_std_env: std::env::var("SKIP_STDLIB").unwrap_or_default() == "1",
         skip_std_flag,
         stdlib_path: stdlib_path_buf,
+        stdlib_root: stdlib_root_buf,
         base_dir: base_dir_buf,
     };
 
@@ -84,13 +90,38 @@ pub fn parse_source_with_std(
             }
         }
     };
+    let include_std = !options.skip_std_env && !options.skip_std_flag;
     let has_no_std_attr = has_program_no_std_attribute(&program);
+
+    if include_std && !has_no_std_attr {
+        let default_path = vec!["std".to_string(), "core".to_string()];
+        let has_default = program.statements.iter().any(|stmt| {
+            matches!(
+                stmt,
+                Statement::Use {
+                    path,
+                    ..
+                } if path == &default_path
+            )
+        });
+        if !has_default {
+            program.statements.insert(
+                0,
+                Statement::Use {
+                    is_public: false,
+                    path: default_path,
+                    alias: None,
+                },
+            );
+        }
+    }
 
     program = expand_modules(
         program,
         options.base_dir.as_path(),
         options.base_dir.as_path(),
         None,
+        options.stdlib_root.as_path(),
         &mut visited_modules,
     );
 
@@ -107,14 +138,9 @@ pub fn parse_source_with_std(
     let mut statements = Vec::new();
 
     if matches!(stdlib_status, StdlibStatus::Included) {
-        let std_root = options
-            .stdlib_path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from(""));
         let mut std_program = load_and_expand_stdlib(
             options.stdlib_path.as_path(),
-            std_root.as_path(),
+            options.stdlib_root.as_path(),
             &mut visited_modules,
         );
         statements.append(&mut std_program.statements);
@@ -173,20 +199,11 @@ pub fn resolve_stdlib_root() -> PathBuf {
         .unwrap_or_else(|| cwd.join("stdlib"))
 }
 
-fn resolve_stdlib_path(cwd: &Path) -> PathBuf {
-    if let Some(path) = resolve_stdlib_path_from_env() {
-        return path;
-    }
-
-    if let Some(path) = resolve_stdlib_path_from_executable() {
-        return path;
-    }
-
-    let mut current = cwd.to_path_buf();
+fn search_stdlib_near(mut current: PathBuf) -> Option<PathBuf> {
     loop {
         let direct = current.join("stdlib").join("std.tri");
         if direct.exists() {
-            return direct;
+            return Some(direct);
         }
 
         let compiler_relative = current
@@ -194,7 +211,7 @@ fn resolve_stdlib_path(cwd: &Path) -> PathBuf {
             .join("stdlib")
             .join("std.tri");
         if compiler_relative.exists() {
-            return compiler_relative;
+            return Some(compiler_relative);
         }
 
         if !current.pop() {
@@ -202,13 +219,28 @@ fn resolve_stdlib_path(cwd: &Path) -> PathBuf {
         }
     }
 
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let manifest_candidate = manifest_dir.join("stdlib").join("std.tri");
-    if manifest_candidate.exists() {
-        manifest_candidate
-    } else {
-        cwd.join("stdlib").join("std.tri")
+    None
+}
+
+fn resolve_stdlib_path(cwd: &Path) -> PathBuf {
+    if let Some(path) = resolve_stdlib_path_from_env() {
+        return path;
     }
+
+    if let Some(path) = search_stdlib_near(cwd.to_path_buf()) {
+        return path;
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    if let Some(path) = search_stdlib_near(manifest_dir.clone()) {
+        return path;
+    }
+
+    if let Some(path) = resolve_stdlib_path_from_executable() {
+        return path;
+    }
+
+    manifest_dir.join("stdlib").join("std.tri")
 }
 
 fn has_program_no_std_attribute(program: &Program) -> bool {
@@ -226,7 +258,7 @@ fn has_program_no_std_attribute(program: &Program) -> bool {
 
 fn load_and_expand_stdlib(
     stdlib_path: &Path,
-    root_dir: &Path,
+    stdlib_root: &Path,
     visited_modules: &mut HashSet<PathBuf>,
 ) -> Program {
     if let Ok(canonical) = fs::canonicalize(stdlib_path) {
@@ -261,8 +293,9 @@ fn load_and_expand_stdlib(
     expand_modules(
         std_program,
         &base_dir,
-        root_dir,
+        stdlib_root,
         Some(stdlib_path),
+        stdlib_root,
         visited_modules,
     )
 }
@@ -272,6 +305,7 @@ fn expand_modules(
     base_dir: &Path,
     root_dir: &Path,
     current_file: Option<&Path>,
+    stdlib_root: &Path,
     visited: &mut HashSet<PathBuf>,
 ) -> Program {
     let mut expanded: Vec<Statement> = Vec::new();
@@ -352,7 +386,14 @@ fn expand_modules(
                         .parent()
                         .map(Path::to_path_buf)
                         .unwrap_or_else(|| base_dir.to_path_buf());
-                    sub = expand_modules(sub, &base_for_sub, root_dir, Some(&canonical), visited);
+                    sub = expand_modules(
+                        sub,
+                        &base_for_sub,
+                        root_dir,
+                        Some(&canonical),
+                        stdlib_root,
+                        visited,
+                    );
                     expanded.extend(sub.statements);
                 } else if already_loaded {
                     continue;
@@ -360,18 +401,10 @@ fn expand_modules(
                     eprintln!("warning: module '{}' not found on disk", name);
                 }
             }
-            Statement::Use {
-                path,
-                is_public: _,
-                alias: _,
-            } => {
+            Statement::Use { path, .. } => {
                 if !path.is_empty() {
-                    let joined = path.join("/");
-                    let name = &path[0];
-                    let joined_file = format!("{}.tri", joined);
-                    let module_file = format!("{}.tri", name);
-                    let joined_path = Path::new(&joined);
-
+                    let original_path = path.clone();
+                    let mut path_segments = path.clone();
                     let mut roots: Vec<PathBuf> = vec![
                         base_dir.to_path_buf(),
                         base_dir.join("src"),
@@ -380,21 +413,46 @@ fn expand_modules(
                         root_dir.join("src"),
                         root_dir.join("stdlib"),
                     ];
+                    let mut is_std_import = false;
 
-                    if let Some(parent) = base_dir.parent() {
-                        roots.push(parent.to_path_buf());
-                        roots.push(parent.join("src"));
-                        roots.push(parent.join("stdlib"));
+                    if let Some(first) = path_segments.first() {
+                        if first == "std" {
+                            path_segments = if path_segments.len() > 1 {
+                                path_segments[1..].to_vec()
+                            } else {
+                                vec!["std".to_string()]
+                            };
+                            roots = vec![stdlib_root.to_path_buf()];
+                            is_std_import = true;
+                        }
                     }
 
-                    if let Some(current_path) = current_file {
-                        if let Some(parent) = current_path.parent() {
+                    if path_segments.is_empty() {
+                        continue;
+                    }
+
+                    if !is_std_import {
+                        if let Some(parent) = base_dir.parent() {
                             roots.push(parent.to_path_buf());
-                            if let Some(stem) = current_path.file_stem().and_then(|s| s.to_str()) {
-                                roots.push(parent.join(stem));
+                            roots.push(parent.join("src"));
+                            roots.push(parent.join("stdlib"));
+                        }
+
+                        if let Some(current_path) = current_file {
+                            if let Some(parent) = current_path.parent() {
+                                roots.push(parent.to_path_buf());
+                                if let Some(stem) = current_path.file_stem().and_then(|s| s.to_str()) {
+                                    roots.push(parent.join(stem));
+                                }
                             }
                         }
                     }
+
+                    let joined = path_segments.join("/");
+                    let name = &path_segments[0];
+                    let joined_file = format!("{}.tri", joined);
+                    let module_file = format!("{}.tri", name);
+                    let joined_path = Path::new(&joined);
 
                     let mut tried: Vec<PathBuf> = Vec::new();
                     for root in roots {
@@ -443,13 +501,19 @@ fn expand_modules(
                             .parent()
                             .map(Path::to_path_buf)
                             .unwrap_or_else(|| base_dir.to_path_buf());
-                        sub =
-                            expand_modules(sub, &base_for_sub, root_dir, Some(&canonical), visited);
+                        sub = expand_modules(
+                            sub,
+                            &base_for_sub,
+                            root_dir,
+                            Some(&canonical),
+                            stdlib_root,
+                            visited,
+                        );
                         expanded.extend(sub.statements);
                     } else if already_loaded {
                         continue;
                     } else {
-                        eprintln!("warning: use {:?} not found on disk", path);
+                        eprintln!("warning: use {:?} not found on disk", original_path);
                     }
                 }
             }
@@ -478,10 +542,12 @@ mod tests {
     fn includes_std_by_default() {
         let current_dir = std::env::current_dir().expect("cwd");
         let stdlib_path = current_dir.join("stdlib").join("std.tri");
+        let stdlib_root = current_dir.join("stdlib");
         let options = LoadOptions {
             skip_std_env: false,
             skip_std_flag: false,
             stdlib_path,
+            stdlib_root,
             base_dir: current_dir.clone(),
         };
         let loaded = parse_source_with_std("main :: () => do {}".to_string(), None, options);
@@ -493,10 +559,12 @@ mod tests {
     fn skips_std_with_attribute() {
         let current_dir = std::env::current_dir().expect("cwd");
         let stdlib_path = current_dir.join("stdlib").join("std.tri");
+        let stdlib_root = current_dir.join("stdlib");
         let options = LoadOptions {
             skip_std_env: false,
             skip_std_flag: false,
             stdlib_path,
+            stdlib_root,
             base_dir: current_dir.clone(),
         };
         let loaded = parse_source_with_std("@no_std\nmain :: () => {}".to_string(), None, options);

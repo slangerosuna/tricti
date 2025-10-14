@@ -12,7 +12,18 @@ fn tripm_main_currently_fails_with_impl_resolution() {
         .join("main.tri");
 
     let loaded =
-        program_loader::parse_file_with_std(&tripm_main, false).expect("load tripm main source");
+        {
+            let previous = std::env::var("SKIP_STDLIB").ok();
+            std::env::set_var("SKIP_STDLIB", "1");
+            let loaded = program_loader::parse_file_with_std(&tripm_main, false)
+                .expect("load tripm main source");
+            if let Some(value) = previous {
+                std::env::set_var("SKIP_STDLIB", value);
+            } else {
+                std::env::remove_var("SKIP_STDLIB");
+            }
+            loaded
+        };
 
     match semantic::analyze_program(&loaded.program) {
         Ok(_) => panic!("tripm main should not compile cleanly yet"),

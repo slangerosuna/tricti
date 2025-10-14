@@ -1,9 +1,9 @@
 # Foundation Traits Tests for TriCTI stdlib
 # Comprehensive test suite with 150+ tests for core trait system
 
-use prelude
-use core::traits
-use core::string
+use std::prelude
+use std::core::traits
+use std::core::string
 
 # =============================================================================
 # Test Framework Helpers

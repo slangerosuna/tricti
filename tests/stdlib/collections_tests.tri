@@ -1,8 +1,8 @@
 # Collections tests for TriCTI stdlib
 # Tests for collections.tri module - Vec<T> implementation
 
-use prelude
-use core::collections
+use std::prelude
+use std::core::collections
 
 # =============================================================================
 # VEC<U64> TESTS

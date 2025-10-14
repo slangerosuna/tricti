@@ -1,8 +1,8 @@
 # Platform tests for TriCTI stdlib
 # Tests for platform.tri module - timestamps, memory allocation, etc.
 
-use prelude
-use core::platform
+use std::prelude
+use std::core::platform
 
 # =============================================================================
 # TIMESTAMP TESTS

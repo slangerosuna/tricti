@@ -1,9 +1,9 @@
 # Comprehensive Conversion Traits Tests for TriCTI stdlib
 # Tests From, Into, TryFrom, TryInto conversions with 65+ test cases
 
-use stdlib::core::string
-use stdlib::core::traits
-use stdlib::core::errors
+use std::core::string
+use std::core::traits
+use std::core::errors
 
 # Test counter
 test_count := 0

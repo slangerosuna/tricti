@@ -1,11 +1,11 @@
 # Directory operations for TriCTI
 # Provides directory reading, creation, and manipulation
 
-use core::traits
-use core::string
-use io::posix
-use io::file
-use io::path
+use std::core::traits
+use std::core::string
+use std::io::posix
+use std::io::file
+use std::io::path
 
 # =============================================================================
 # DIRENTRY TYPE

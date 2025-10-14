@@ -1,7 +1,7 @@
 # String type for TriCTI stdlib
 # A production-ready string implementation with comprehensive API
 
-use prelude
+use std::prelude
 
 # Core String struct
 String :: struct

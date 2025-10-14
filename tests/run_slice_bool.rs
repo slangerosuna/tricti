@@ -15,7 +15,7 @@ fn iterate_vec_bool() {
         return;
     }
     let source = r#"
-use core::collections
+use std::core::collections
 
 main :: () => do
     v := new [bool]
@@ -49,7 +49,7 @@ fn vec_bool_helpers() {
         return;
     }
     let source = r#"
-use core::collections
+use std::core::collections
 
 main :: () => do
     v := new [i64]

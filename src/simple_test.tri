@@ -1,7 +1,7 @@
 # Simple test to verify basic functionality
-use prelude
-use core::platform
-use core::collections
+use std::prelude
+use std::core::platform
+use std::core::collections
 
 main :: () => {
     println("=== Simple TriCTI Stdlib Test ===")

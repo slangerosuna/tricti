@@ -1,8 +1,8 @@
 # Trait system for TriCTI
 # Provides polymorphism through traits and implementations
 
-use prelude
-use core::errors
+use std::prelude
+use std::core::errors
 
 # =============================================================================
 # CORE TRAITS
@@ -609,7 +609,7 @@ impl Neg for f64:
 # =============================================================================
 # String implementations
 # =============================================================================
-use core::string
+use std::core::string
 
 impl PartialEq for String:
     eq :: (&self, other: &String) -> bool => String::equals(self, other)

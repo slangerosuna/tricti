@@ -1,10 +1,10 @@
 # Trigger system for reactive composition in TriCTI
 # Implements event-driven system execution with composition DSL
 
-use prelude
-use core::system
-use core::signal
-use core::errors
+use std::prelude
+use std::core::system
+use std::core::signal
+use std::core::errors
 
 # Duration millisecond type alias for optional handling
 DurationMillis :: u64

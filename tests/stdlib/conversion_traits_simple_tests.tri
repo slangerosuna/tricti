@@ -1,10 +1,10 @@
 # Simplified Conversion Traits Tests for TriCTI stdlib
 # Tests From, Into, TryFrom, TryInto conversions
 
-use stdlib::core::string
-use stdlib::core::traits
-use stdlib::core::result
-use stdlib::core::errors
+use std::core::string
+use std::core::traits
+use std::core::result
+use std::core::errors
 
 # Test counter
 test_count := 0

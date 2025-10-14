@@ -1,9 +1,9 @@
 # Metadata operations for TriCTI
 # Provides file and directory metadata queries
 
-use core::traits
-use core::string
-use io::posix
+use std::core::traits
+use std::core::string
+use std::io::posix
 
 # =============================================================================
 # METADATA TYPE

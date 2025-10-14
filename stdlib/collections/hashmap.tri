@@ -1,5 +1,5 @@
-use prelude
-use core::traits
+use std::prelude
+use std::core::traits
 
 # External C functions
 extern malloc :: (size: u64) -> *raw u8

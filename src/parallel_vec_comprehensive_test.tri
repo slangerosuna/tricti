@@ -1,5 +1,5 @@
-use prelude
-use collections::vec::ParVec
+use std::prelude
+use std::collections::vec::ParVec
 
 main :: () -> none => {
     println("=== ParVec TRUE Parallel Operations Test ===")

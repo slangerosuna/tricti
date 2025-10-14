@@ -1,5 +1,5 @@
-# Simple test to verify core::traits parses correctly
-use core::traits
+# Simple test to verify std::core::traits parses correctly
+use std::core::traits
 
 # Test that we can reference the traits
 main :: () -> i64 => {

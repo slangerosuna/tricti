@@ -1,4 +1,4 @@
-use prelude
+use std::prelude
 
 # Test the modern enum-based error and result types
 test_modern_errors :: () => do

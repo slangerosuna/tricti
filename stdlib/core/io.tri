@@ -1,8 +1,8 @@
 # IO and platform abstraction for TriCTI
 # Provides cross-platform file, network, and system operations
 
-use prelude
-use core::errors
+use std::prelude
+use std::core::errors
 
 # =============================================================================
 # FILE SYSTEM

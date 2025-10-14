@@ -1,9 +1,9 @@
 # Path operations for TriCTI
 # Provides high-level path manipulation and queries
 
-use core::traits
-use core::string
-use io::posix
+use std::core::traits
+use std::core::string
+use std::io::posix
 
 # =============================================================================
 # PATH TYPE

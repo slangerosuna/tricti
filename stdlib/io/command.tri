@@ -1,9 +1,9 @@
 # Command-line utilities for TriCTI programs
 # Provides access to process arguments until a richer process module exists
 
-use prelude
-use core::collections
-use core::string
+use std::prelude
+use std::core::collections
+use std::core::string
 
 CommandLine :: struct
     args: [String]

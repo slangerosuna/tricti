@@ -1,4 +1,4 @@
-use prelude
+use std::prelude
 
 extern malloc :: (size: u64) -> *raw u8
 extern free :: (ptr: *raw u8) -> none

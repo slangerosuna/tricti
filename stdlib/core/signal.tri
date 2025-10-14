@@ -1,8 +1,8 @@
 # Signal infrastructure for TriCTI
 # Implements typed channels with topology and buffering semantics
 
-use prelude
-use core::errors
+use std::prelude
+use std::core::errors
 
 # =============================================================================
 # SIGNAL TYPES AND TOPOLOGY

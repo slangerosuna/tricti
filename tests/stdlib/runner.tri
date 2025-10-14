@@ -43,7 +43,7 @@
 #
 # ==============================================================================
 
-use prelude
+use std::prelude
 
 main :: () => do
     println("=== TriCTI Stdlib Test Suite ===")

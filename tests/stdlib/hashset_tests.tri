@@ -1,9 +1,9 @@
 # Comprehensive HashSet Tests
 # 50+ tests covering all HashSet functionality
 
-use prelude
-use collections::hashmap
-use collections::hashset
+use std::prelude
+use std::collections::hashmap
+use std::collections::hashset
 
 # Specialize hash functions for i64
 hash_value_i64 :: (value: i64) -> u64 => do

@@ -1,12 +1,12 @@
 tricti::tri_test_with_prelude!(
     question_mark_propagates_and_unwraps,
     r#"
-    use prelude
-    use collections
-    use collections::vec
+    use std::prelude
+    use std::collections
+    use std::collections::vec
     use std::collections
     use std
-    use core::option
+    use std::core::option
 
         maybe_even :: (value: i64) -> ?i64 => do
             if value % 2 == 0:
@@ -34,8 +34,8 @@ tricti::tri_test_with_prelude!(
 tricti::tri_test_with_prelude!(
     question_else_provides_fallback_value,
     r#"
-    use prelude
-    use core::option
+    use std::prelude
+    use std::core::option
 
         maybe_even :: (value: i64) -> ?i64 => do
             if value % 2 == 0:
