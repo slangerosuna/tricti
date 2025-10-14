@@ -128,19 +128,58 @@ pub fn parse_source_with_std(
     }
 }
 
-fn resolve_stdlib_path(cwd: &Path) -> PathBuf {
+fn resolve_stdlib_path_from_env() -> Option<PathBuf> {
     if let Ok(explicit_file) = std::env::var("TRICTI_STDLIB_PATH") {
-        let path = PathBuf::from(&explicit_file);
+        let path = PathBuf::from(explicit_file);
         if path.exists() {
-            return path;
+            return Some(path);
         }
     }
 
     if let Ok(explicit_dir) = std::env::var("TRICTI_STDLIB_DIR") {
-        let dir_candidate = PathBuf::from(&explicit_dir).join("std.tri");
-        if dir_candidate.exists() {
-            return dir_candidate;
+        let candidate = PathBuf::from(explicit_dir).join("std.tri");
+        if candidate.exists() {
+            return Some(candidate);
         }
+    }
+
+    None
+}
+
+fn resolve_stdlib_path_from_executable() -> Option<PathBuf> {
+    let mut current = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))?;
+
+    loop {
+        let candidate = current.join("stdlib").join("std.tri");
+        if candidate.exists() {
+            return Some(candidate);
+        }
+
+        if !current.pop() {
+            break;
+        }
+    }
+
+    None
+}
+
+pub fn resolve_stdlib_root() -> PathBuf {
+    let cwd = std::env::current_dir().expect("failed to get current dir");
+    resolve_stdlib_path(&cwd)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| cwd.join("stdlib"))
+}
+
+fn resolve_stdlib_path(cwd: &Path) -> PathBuf {
+    if let Some(path) = resolve_stdlib_path_from_env() {
+        return path;
+    }
+
+    if let Some(path) = resolve_stdlib_path_from_executable() {
+        return path;
     }
 
     let mut current = cwd.to_path_buf();

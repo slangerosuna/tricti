@@ -274,11 +274,7 @@ fn question_operator_propagates_result() {
     "#,
     );
 
-    let stdout = compile_and_run(
-        &src,
-        "tests/tmp_question.o",
-        "tests/tmp_question.out",
-    );
+    let stdout = compile_and_run(&src, "tests/tmp_question.o", "tests/tmp_question.out");
     assert_eq!(stdout, ["6\n", "negative value\n"].concat());
 }
 

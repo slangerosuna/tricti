@@ -268,7 +268,7 @@ fn assert_fails_exits_nonzero() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
+    let prelude = tri_test_helpers::read_stdlib_file("prelude.tri");
     let user = tri_test_helpers::dedent(
         r#"
         main :: () => do

@@ -59,7 +59,7 @@ fn stdlib_abs_min_max_i64() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
+    let prelude = tri_test_helpers::read_stdlib_file("prelude.tri");
     let user = tri_test_helpers::dedent(
         r#"
         main :: () => do
@@ -79,7 +79,7 @@ fn mod_operator_i64() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
+    let prelude = tri_test_helpers::read_stdlib_file("prelude.tri");
     let user = tri_test_helpers::dedent(
         r#"
         main :: () => do
@@ -99,7 +99,7 @@ fn small_integer_widths_behave() {
         eprintln!("clang not found; skipping");
         return;
     }
-    let prelude = fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
+    let prelude = tri_test_helpers::read_stdlib_file("prelude.tri");
     let user = tri_test_helpers::dedent(
         r#"
         main :: () => do

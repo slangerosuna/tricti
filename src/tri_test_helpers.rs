@@ -1,10 +1,10 @@
-use crate::{codegen, parser, semantic};
+use crate::{codegen, parser, program_loader, semantic};
 /// Testing utilities for TriCTI code.
 /// This module provides macros and functions to simplify writing tests that compile and run TriCTI code,
 /// asserting on stdout output. It encapsulates the common pattern from run_stdlib_prelude.rs.
 use inkwell::context::Context;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Compiles and runs TriCTI source code, returning the stdout as a String.
@@ -75,6 +75,23 @@ pub fn dedent(input: &str) -> String {
     let mut result = dedented.join("\n");
     result.push('\n');
     result
+}
+
+/// Locate the stdlib directory relative to the running executable or workspace.
+pub fn stdlib_root() -> PathBuf {
+    program_loader::resolve_stdlib_root()
+}
+
+/// Construct a path inside the stdlib directory for the provided relative file.
+pub fn stdlib_file(relative: &str) -> PathBuf {
+    stdlib_root().join(relative)
+}
+
+/// Read a file from the stdlib directory.
+pub fn read_stdlib_file(relative: &str) -> String {
+    let path = stdlib_file(relative);
+    fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("failed to read stdlib file {}: {}", path.display(), err))
 }
 
 /// Macro to define a test that compiles and runs TriCTI code, asserting stdout equals expected.
@@ -159,7 +176,7 @@ macro_rules! tri_test_with_prelude {
                 eprintln!("clang not found; skipping test {}", stringify!($name));
                 return;
             }
-            let prelude = std::fs::read_to_string("stdlib/prelude.tri").expect("read prelude");
+            let prelude = tricti::tri_test_helpers::read_stdlib_file("prelude.tri");
             let user_code = tricti::tri_test_helpers::dedent($user_code);
             let full_code = format!("{}\n{}", prelude, user_code);
             let obj_path = format!("tests/tmp_{}.o", stringify!($name));

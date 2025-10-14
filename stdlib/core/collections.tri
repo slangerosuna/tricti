@@ -4,10 +4,6 @@
 use prelude
 use core::traits
 
-# =============================================================================
-# VEC - Dynamic length array (should have syntax sugar to allow writing Vec<T> as [T])
-# =============================================================================
-
 Vec<T> :: struct
     data: *raw T,
     len: u64,

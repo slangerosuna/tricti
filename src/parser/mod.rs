@@ -295,7 +295,10 @@ mod tests {
 
     #[test]
     fn parses_stdlib_prelude_file() {
-        let src = std::fs::read_to_string("stdlib/prelude.tri").expect("failed to read prelude");
+        let stdlib_root = crate::program_loader::resolve_stdlib_root();
+        let src_path = stdlib_root.join("prelude.tri");
+        let src = std::fs::read_to_string(&src_path)
+            .unwrap_or_else(|err| panic!("failed to read prelude {}: {}", src_path.display(), err));
         let desugared = indentation::desugar_indentation(&src);
         PnParser::parse(Rule::program, &desugared).expect("failed to parse stdlib prelude");
     }

@@ -6507,12 +6507,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 })?;
                 let tag_val = self.context.i64_type().const_int(idx as u64, false);
                 let (struct_ty, field_order) = self.ensure_struct_type_by_name(struct_name)?;
-                let struct_val = self.build_struct_literal_value(
-                    struct_name,
-                    fields,
-                    struct_ty,
-                    &field_order,
-                )?;
+                let struct_val =
+                    self.build_struct_literal_value(struct_name, fields, struct_ty, &field_order)?;
                 let payload_alloca = self.create_entry_block_alloca(
                     &format!("{}_payload", struct_name),
                     struct_ty.into(),
@@ -6535,12 +6531,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .into_struct_value();
                 let with_payload = self
                     .builder
-                    .build_insert_value(
-                        with_tag,
-                        payload_ptr_int,
-                        1,
-                        "enum_payload",
-                    )
+                    .build_insert_value(with_tag, payload_ptr_int, 1, "enum_payload")
                     .map_err(|e| CodegenError::CompilationError(e.to_string()))?
                     .into_struct_value();
                 Ok(Some(with_payload.as_basic_value_enum()))
@@ -8599,29 +8590,33 @@ impl<'ctx> CodeGenerator<'ctx> {
                         "unable to determine LLVM type for function return".to_string(),
                     )
                 })?;
-                let (is_result, payload_target_ast, success_predicate, success_label, failure_label) =
-                    match &ret_ast {
-                        Type::Optional { inner } => (
-                            false,
-                            inner.as_ref().clone(),
-                            IntPredicate::NE,
-                            "question.some",
-                            "question.none",
-                        ),
-                        Type::Result { inner } => (
-                            true,
-                            inner.as_ref().clone(),
-                            IntPredicate::EQ,
-                            "question.ok",
-                            "question.err",
-                        ),
-                        _ => {
-                            return Err(CodegenError::InvalidOperation(
-                                "question operator requires optional or result return type"
-                                    .to_string(),
-                            ))
-                        }
-                    };
+                let (
+                    is_result,
+                    payload_target_ast,
+                    success_predicate,
+                    success_label,
+                    failure_label,
+                ) = match &ret_ast {
+                    Type::Optional { inner } => (
+                        false,
+                        inner.as_ref().clone(),
+                        IntPredicate::NE,
+                        "question.some",
+                        "question.none",
+                    ),
+                    Type::Result { inner } => (
+                        true,
+                        inner.as_ref().clone(),
+                        IntPredicate::EQ,
+                        "question.ok",
+                        "question.err",
+                    ),
+                    _ => {
+                        return Err(CodegenError::InvalidOperation(
+                            "question operator requires optional or result return type".to_string(),
+                        ))
+                    }
+                };
                 let payload_target_ty = self.map_ast_type(&payload_target_ast);
 
                 let zero = self.context.i64_type().const_zero();
@@ -9200,9 +9195,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let bool_ty = self.context.bool_type();
         let left_bool = self.ensure_bool_value(left_val)?;
         let current_fn = self.current_function.ok_or_else(|| {
-            CodegenError::CompilationError(
-                "logical operator requires function context".to_string(),
-            )
+            CodegenError::CompilationError("logical operator requires function context".to_string())
         })?;
 
         match operator {

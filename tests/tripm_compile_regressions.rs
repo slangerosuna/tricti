@@ -11,8 +11,8 @@ fn tripm_main_currently_fails_with_impl_resolution() {
         .join("src")
         .join("main.tri");
 
-    let loaded = program_loader::parse_file_with_std(&tripm_main, false)
-        .expect("load tripm main source");
+    let loaded =
+        program_loader::parse_file_with_std(&tripm_main, false).expect("load tripm main source");
 
     match semantic::analyze_program(&loaded.program) {
         Ok(_) => panic!("tripm main should not compile cleanly yet"),
