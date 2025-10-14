@@ -1,3 +1,0 @@
-# Deprecated compatibility shim.
-# Module discovery now looks for `io/io.tri` directly.
-# This file remains so older builds referring to `io::mod` keep working.

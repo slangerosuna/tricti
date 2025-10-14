@@ -49,10 +49,11 @@ impl Debug for DirEntry:
     debug_string :: (&self) -> String =>
         String::clone(&self.name)
 
-impl Drop for DirEntry:
-    drop :: (*self) => do
-        String::destroy(&mut self.name)
-        String::destroy(&mut self.path)
+# commented out as this should be handled by the borrow checker
+# impl Drop for DirEntry:
+#     drop :: (*self) => do
+#         String::destroy(&mut self.name)
+#         String::destroy(&mut self.path)
 
 # =============================================================================
 # DIRECTORY OPERATIONS
@@ -61,28 +62,28 @@ impl Drop for DirEntry:
 # Create directory with default permissions (0755)
 # Returns true on success, false on error
 create_dir :: (path: String) -> bool =>
-    posix_mkdir(String::as_ptr(&path), 493) == 0
+    posix_mkdir(path.as_ptr(), 493) == 0
 
 # Create directory with custom permissions
 # mode: permission bits (e.g., 0755 = 493)
 # Returns true on success, false on error
 create_dir_with_mode :: (path: String, mode: u32) -> bool =>
-    posix_mkdir(String::as_ptr(&path), mode) == 0
+    posix_mkdir(path.as_ptr(), mode) == 0
 
 # Remove empty directory
 # Returns true on success, false on error
 remove_dir :: (path: String) -> bool =>
-    posix_rmdir(String::as_ptr(&path)) == 0
+    posix_rmdir(path.as_ptr()) == 0
 
 # Remove file
 # Returns true on success, false on error
 remove_file :: (path: String) -> bool =>
-    posix_unlink(String::as_ptr(&path)) == 0
+    posix_unlink(path.as_ptr()) == 0
 
 # Rename/move file or directory
 # Returns true on success, false on error
 rename :: (from: String, to: String) -> bool =>
-    posix_rename(String::as_ptr(&from), String::as_ptr(&to)) == 0
+    posix_rename(from.as_ptr(), to.as_ptr()) == 0
 
 # Copy file from source to destination
 # Returns true on success, false on error
@@ -102,17 +103,17 @@ move_file :: (from: String, to: String) -> bool => do
     ret false
 
 # Check if path exists (file or directory)
-exists :: (path: String) -> bool => posix_access(String::as_ptr(&path), F_OK) == 0
+exists :: (path: String) -> bool => posix_access(path.as_ptr(), F_OK) == 0
 
 # Check if path is a file
 is_file :: (path: String) -> bool => do
     p := Path::new(path)
-    ret Path::is_file(&p)
+    ret p.is_file()
 
 # Check if path is a directory
 is_dir :: (path: String) -> bool => do
     p := Path::new(path)
-    ret Path::is_dir(&p)
+    ret p.is_dir()
 
 # Helper: Read directory entry name from dirent structure
 # dirent structure layout (simplified):
@@ -121,22 +122,22 @@ is_dir :: (path: String) -> bool => do
 #   u16 d_reclen
 #   u8  d_type
 #   char d_name[256]
-read_dirent_name :: (dirent_ptr: *u8) -> String => do
-    name_ptr := dirent_ptr + 19
+read_dirent_name :: unsafe (dirent_ptr: *raw u8) -> String => do
+    unsafe: name_ptr := dirent_ptr + 19
     result := String::new()
     i := 0u64
 
     while i < 256:
-        ch := *(name_ptr + i)
+        unsafe: ch := *(name_ptr + i)
         if ch == 0: break
 
-        String::push_char(&result, ch)
+        result.push_char(ch)
         i += 1
     ret result
 
 # Helper: Get directory entry type from dirent structure
-read_dirent_type :: (dirent_ptr: *u8) -> u8 => do
-    type_ptr := dirent_ptr + 18
+read_dirent_type :: unsafe (dirent_ptr: *raw u8) -> u8 => do
+    unsafe: type_ptr := dirent_ptr + 18
     ret *type_ptr
 
 # Note: Full read_dir implementation would require Vec or dynamic arrays

@@ -1,2 +1,0 @@
-# Deprecated compatibility shim for legacy `experimental::mod` imports.
-# Module contents now live in `experimental/experimental.tri`.

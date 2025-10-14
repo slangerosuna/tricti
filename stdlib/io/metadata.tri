@@ -32,10 +32,10 @@ impl Metadata:
     # Parse stat buffer into Metadata
     # Internal helper function
     parse_stat_buf :: (stat_buf: &[u8; 144]) -> ?Metadata => do
-        mode_ptr := (&stat_buf[24]) as *u32
+        mode_ptr := (&stat_buf[24]) as &u32
         mode := *mode_ptr
 
-        size_ptr := (&stat_buf[48]) as *u64
+        size_ptr := (&stat_buf[48]) as &u64
         size := *size_ptr
 
         file_type := mode and S_IFMT
@@ -44,13 +44,13 @@ impl Metadata:
 
         permissions := mode and 511u32
 
-        atime_ptr := (&stat_buf[72]) as *i64
+        atime_ptr := (&stat_buf[72]) as &i64
         atime := *atime_ptr
 
-        mtime_ptr := (&stat_buf[88]) as *i64
+        mtime_ptr := (&stat_buf[88]) as &i64
         mtime := *mtime_ptr
 
-        ctime_ptr := (&stat_buf[104]) as *i64
+        ctime_ptr := (&stat_buf[104]) as &i64
         ctime := *ctime_ptr
 
         ret some Metadata {
@@ -119,30 +119,28 @@ impl Clone for Metadata:
 impl Display for Metadata:
     to_string :: (&self) -> String => do
         result := String::from_cstr("Metadata { size: " as *u8)
-        String::push_str(&result, &String::from_u64(self.size))
-        String::push_str(&result, &String::from_cstr(", permissions: " as *u8))
-        String::push_str(&result, &String::from_u64(self.permissions as u64))
-        String::push_str(&result, &String::from_cstr(" }" as *u8))
+        String::push_str(&mut result, &String::from_u64(self.size))
+        String::push_str(&mut result, &", permissions: ")
+        String::push_str(&mut result, &String::from_u64(self.permissions as u64))
+        String::push_str(&mut result, &" }")
         ret result
 
 impl Debug for Metadata:
     debug_string :: (&self) -> String => do
-        result := String::from_cstr("Metadata { " as *u8)
-        String::push_str(&result, &String::from_cstr("size: " as *u8))
-        String::push_str(&result, &String::from_u64(self.size))
-        String::push_str(&result, &String::from_cstr(", is_file: " as *u8))
+        result := String::from_cstr("Metadata { ")
+        String::push_str(&mut result, &", is_file: ")
         if self.is_file:
-            String::push_str(&result, &String::from_cstr("true" as *u8))
+            String::push_str(&mut result, &"true")
         else:
-            String::push_str(&result, &String::from_cstr("false" as *u8))
+            String::push_str(&mut result, &"false")
 
-        String::push_str(&result, &String::from_cstr(", is_dir: " as *u8))
+        String::push_str(&mut result, &", is_dir: ")
         if self.is_dir:
-            String::push_str(&result, &String::from_cstr("true" as *u8))
+            String::push_str(&mut result, &"true")
         else:
-            String::push_str(&result, &String::from_cstr("false" as *u8))
+            String::push_str(&mut result, &"false")
 
-        String::push_str(&result, &String::from_cstr(", permissions: " as *u8))
-        String::push_str(&result, &String::from_u64(self.permissions as u64))
-        String::push_str(&result, &String::from_cstr(" }" as *u8))
+        String::push_str(&mut result, &", permissions: ")
+        String::push_str(&mut result, &String::from_u64(self.permissions as u64))
+        String::push_str(&mut result, &" }")
         ret result

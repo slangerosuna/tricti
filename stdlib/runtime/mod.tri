@@ -1,2 +1,0 @@
-# Deprecated compatibility shim for legacy `runtime::mod` imports.
-# Module surface now lives in `runtime/runtime.tri`.

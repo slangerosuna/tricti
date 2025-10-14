@@ -25,14 +25,14 @@ impl CommandLine:
         else:
             some self.args.get(index)?
 
-    slice_from :: (&self, index: u64) -> [String] => do
+    slice_from :: (&self, index: u64) -> ?[String] => do
         if index >= self.args.len:
-            ret new [String]
+            ret none
 
         result := new [String]
         for i in index..self.args.len:
             result.push(self.args.get(i)?)
-        ret result
+        ret some result
 
     # Internal helper: read argv via runtime bridge
     load_args :: () -> [String] => do

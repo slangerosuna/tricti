@@ -9,89 +9,80 @@ use std::core::traits
 # =============================================================================
 
 # Count elements in an iterator
-iter_count :: <T, I: Iterator<T>>(iter: &mut I) -> u64 => {
+iter_count :: <T, I: Iterator<T>>(iter: &mut I) -> u64 => do
     count := 0
-    loop {
-        match Iterator::next(iter) {
-            some _ => { count = count + 1 }
-            none => { break }
-        }
-    }
+    loop:
+        match Iterator::next(iter):
+            some _ => do
+              count = count + 1
+            none =>
+                break    
     count
-}
 
 # Sum numeric iterator (for u64)
-iter_sum_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => {
+iter_sum_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => do
     total := 0
-    loop {
-        match Iterator::next(iter) {
-            some val => { total = total + val }
-            none => { break }
-        }
-    }
+    loop:
+        match Iterator::next(iter):
+            some val => do
+                total = total + val
+            none => do
+                break
     total
-}
 
 # Sum numeric iterator (for i64)
-iter_sum_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => {
+iter_sum_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => do
     total := 0
-    loop {
-        match Iterator::next(iter) {
-            some val => { total = total + val }
-            none => { break }
-        }
-    }
+    loop::
+        match Iterator::next(iter):
+            some val => do
+                total = total + val
+            none => do
+                break
     total
-}
 
 # Product numeric iterator (for u64)
-iter_product_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => {
+iter_product_u64 :: <I: Iterator<u64>>(iter: &mut I) -> u64 => do
     product := 1
-    loop {
+    loop:
         match Iterator::next(iter) {
-            some val => { product = product * val }
-            none => { break }
-        }
-    }
+            some val => do
+                product = product * val
+            none => do
+                break
+
     product
-}
 
 # Product numeric iterator (for i64)
-iter_product_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => {
+iter_product_i64 :: <I: Iterator<i64>>(iter: &mut I) -> i64 => do
     product := 1
-    loop {
-        match Iterator::next(iter) {
-            some val => { product = product * val }
-            none => { break }
-        }
-    }
+    loop:
+        match iter.next():
+            some val => do
+                product = product * val
+            none => do
+                break
     product
-}
 
 # Find first element (returns index, or -1 if not found) - for u64 elements
-iter_find_u64 :: <I: Iterator<u64>>(iter: &mut I, target: u64) -> i64 => {
+iter_find_u64 :: <I: Iterator<u64>>(iter: &mut I, target: u64) -> ?u64 => do
     index := 0
-    loop {
-        match Iterator::next(iter) {
-            some val => {
-                if val == target {
-                    ret index
-                }
+    loop:
+        match iter.next():
+            some val => do
+                if val == target:
+                    ret some index
+
                 index = index + 1
-            }
-            none => { ret -1 }
-        }
-    }
-    -1
-}
+            none => do
+                ret none
+    ret none
 
 # Check if iterator is exhausted (returns none immediately)
-iter_is_exhausted :: <T, I: Iterator<T>>(iter: &mut I) -> bool => {
-    match Iterator::next(iter) {
-        some _ => { false }
-        none => { true }
-    }
-}
+iter_is_exhausted :: <T, I: Iterator<T>>(iter: &mut I) -> bool =>
+    match iter.next():
+        some _ => false
+        none => true
 
 # =============================================================================
 # ITERATOR ADAPTERS (Simple implementations without closures)
@@ -102,7 +93,7 @@ Take<I> :: struct
     iter: I,
     remaining: u64,
 
-impl<T, I: Iterator<T>> Iterator<T> for Take<I>
+impl<T, I: Iterator<T>> Iterator<T> for Take<I>:
     next :: (&mut self) -> ?T => do
         if self.remaining == 0: ret none
         
@@ -145,7 +136,7 @@ Enumerate<I> :: struct
 
 impl<T, I: Iterator<T>> Iterator<(u64, T)> for Enumerate<I>:
     next :: (self: &mut Enumerate<I>) -> ?(u64, T) => do
-        match Iterator::next(&mut self.iter)
+        match Iterator::next(&mut self.iter):
             some val => do
                 idx := self.index
                 self.index = self.index + 1
@@ -164,7 +155,7 @@ Chain<A, B> :: struct
 
 impl<T, A: Iterator<T>, B: Iterator<T>> Iterator<T> for Chain<A, B>:
     next :: (&mut self) -> ?T => do
-        if not self.first_exhausted {
+        if not self.first_exhausted:
             match self.first.next():
                 some val => ret some val
                 none => self.first_exhausted = true

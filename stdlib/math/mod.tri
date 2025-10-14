@@ -1,2 +1,0 @@
-# Deprecated compatibility shim for legacy `math::mod` imports.
-# Module surface now lives in `math/math.tri`.

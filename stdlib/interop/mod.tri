@@ -1,2 +1,0 @@
-# Deprecated compatibility shim for legacy `interop::mod` imports.
-# Module surface now lives in `interop/interop.tri`.

@@ -1,4 +1,0 @@
-# Runtime namespace aggregator for TriCTI stdlib.
-# Exposes the self-hosted runtime surface for consumption via `use runtime` or `use std::runtime`.
-
-use std::runtime::self_hosted
